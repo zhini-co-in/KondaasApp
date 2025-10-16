@@ -7,9 +7,8 @@ import {
   Image,
   StyleSheet,
   SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
+  Platform,
 } from "react-native";
 
 const OtpScreen = ({ navigation }) => {
@@ -33,68 +32,64 @@ const OtpScreen = ({ navigation }) => {
       alert("Please enter the full OTP");
       return;
     }
-    navigation?.navigate("Home");
+    navigation?.navigate("mainScreen");
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.container}
-      >
-        <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-          {/* 🔴 Top Logo Section */}
-          <View style={styles.header}>
-            <Image
-              source={require("../../assets/images/kondass.png")}
-              style={styles.logo}
-              resizeMode="contain"
-            />
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+        {/* 🔴 Top Logo Section */}
+        <View style={styles.header}>
+          <Image
+            source={require("../../assets/images/kondass.png")}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </View>
+
+        {/* ⚪ White Rounded Container */}
+        <View style={styles.bottomContainer}>
+          <View style={styles.indicatorWrapper}>
+            <View style={styles.indicator}></View>
           </View>
 
-          {/* ⚪ White Rounded Container */}
-          <View style={styles.bottomContainer}>
-            <View style={styles.indicatorWrapper}>
-              <View style={styles.indicator}></View>
-            </View>
-
-            {/* 👋 Welcome Section */}
-            <View style={styles.welcomeContainer}>
-              <Text style={styles.welcomeText}>Welcome</Text>
-              <Text style={styles.subText}>
-                Enter the OTP sent to number <Text style={{ fontWeight: "600" }}>+91 98765 12345</Text>
-              </Text>
-            </View>
-
-            {/* 🔢 OTP Input */}
-            <View style={styles.otpContainer}>
-              {otp.map((digit, index) => (
-                <TextInput
-                  key={index}
-                  ref={(ref) => (inputs.current[index] = ref)}
-                  style={styles.otpInput}
-                  value={digit}
-                  onChangeText={(text) => handleChange(text, index)}
-                  keyboardType="number-pad"
-                  maxLength={1}
-                  returnKeyType="next"
-                />
-              ))}
-            </View>
-
-            {/* 🔘 Confirm Button */}
-            <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
-              <Text style={styles.confirmText}>Confirm</Text>
-            </TouchableOpacity>
-
-            {/* 📜 Terms Text */}
-            <Text style={styles.termsText}>
-              By signing up you are accepting to the{" "}
-              <Text style={styles.termsLink}>Terms & Conditions</Text>
+          {/* 👋 Welcome Section */}
+          <View style={styles.welcomeContainer}>
+            <Text style={styles.welcomeText}>Welcome</Text>
+            <Text style={styles.subText}>
+              Enter the OTP sent to number{" "}
+              <Text style={{ fontWeight: "600" }}>+91 98765 12345</Text>
             </Text>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+
+          {/* 🔢 OTP Input */}
+          <View style={styles.otpContainer}>
+            {otp.map((digit, index) => (
+              <TextInput
+                key={index}
+                ref={(ref) => (inputs.current[index] = ref)}
+                style={styles.otpInput}
+                value={digit}
+                onChangeText={(text) => handleChange(text, index)}
+                keyboardType="number-pad"
+                maxLength={1}
+                returnKeyType="next"
+              />
+            ))}
+          </View>
+
+          {/* 🔘 Confirm Button */}
+          <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
+            <Text style={styles.confirmText}>Confirm</Text>
+          </TouchableOpacity>
+
+          {/* 📜 Terms Text */}
+          <Text style={styles.termsText}>
+            By signing up you are accepting to the{" "}
+            <Text style={styles.termsLink}>Terms & Conditions</Text>
+          </Text>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -106,27 +101,23 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fb0404",
   },
-  container: {
-    flex: 1,
-    backgroundColor: "#fb0404",
-  },
   header: {
-    flex: 0.4,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#fb0404",
+    paddingVertical: 40,
   },
   logo: {
     width: 200,
     height: 100,
   },
   bottomContainer: {
-    flex: 0.6,
     backgroundColor: "#fff",
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     paddingHorizontal: 25,
     paddingVertical: 40,
+    flexGrow: 1,
   },
   indicatorWrapper: {
     alignItems: "center",
