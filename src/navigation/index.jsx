@@ -13,6 +13,11 @@ import ProductDetailScreen from '../screens/ProductDetailScreen';
 import ProductsList from '../screens/ProductsList';
 import KondaasAssuredScreen from '../screens/KondaasAssuredScreen';
 import PowerGeneration from '../screens/PowerGeneration';
+import KondaaAboutScreen from '../screens/KondaaAboutScreen';
+import SupportScreen from '../screens/SupportScreen';
+import CreateTicketScreen from '../screens/CreateTicketScreen';
+import ReferAndEarnScreen from '../screens/ReferAndEarnScreen';
+import ReferFriendScreen from '../screens/ReferFriendScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -29,6 +34,11 @@ export default function RootStack() {
           <Stack.Screen name="ProductListScreen" component={ProductsList} />
           <Stack.Screen name="KondaasAssuredScreen" component={KondaasAssuredScreen} />
            <Stack.Screen name="PowerGenerationScreen" component={PowerGeneration} />
+           <Stack.Screen name="KondaaAboutScreen" component={KondaaAboutScreen} />
+            <Stack.Screen name="SupportScreen" component={SupportScreen} />
+             <Stack.Screen name="createticketScreen" component={CreateTicketScreen} />
+             <Stack.Screen name="ReferandEarnScreen" component={ReferAndEarnScreen} />
+              <Stack.Screen name="ReferFriendScreen" component={ReferFriendScreen} />
       <Stack.Screen name="Home" component={DashboardScreen} />
       <Stack.Screen name="Detail" component={PanelDetailScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />

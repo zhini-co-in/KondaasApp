@@ -169,9 +169,13 @@ const MainScreen = ({ navigation }) => {
             <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate("KondaasAssuredScreen")}>
               <Text style={styles.primaryButtonText}>View Insights →</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryButton}>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => navigation.navigate("SupportScreen")}
+            >
               <Text style={styles.secondaryButtonText}>Support</Text>
             </TouchableOpacity>
+
             <TouchableOpacity
               style={styles.grayButton}
               onPress={() => navigation.navigate("ProductsHomeScreen")}

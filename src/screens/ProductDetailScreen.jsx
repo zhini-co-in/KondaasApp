@@ -60,7 +60,7 @@ const ProductDetailScreen = ({ navigation }) => {
           solutions from Kondaas.
         </Text>
         <Text style={styles.detailText}>
-         As more homeowners become aware of rising utility bills and the negative environmental impact of fossil fuels, solar power is beginning to dominate the roost as a sustainable energy source.  Kondaas helps you effectively convert your roof into a solar power station. With a one-time investment and our experienced team, you can expect to significantly reduce your energy costs while playing a key role in reducing the carbon footprint of your environment. Yes, you are right. It lasts over 25 years with no fuel costs and little maintenance.
+          As more homeowners become aware of rising utility bills and the negative environmental impact of fossil fuels, solar power is beginning to dominate the roost as a sustainable energy source.  Kondaas helps you effectively convert your roof into a solar power station. With a one-time investment and our experienced team, you can expect to significantly reduce your energy costs while playing a key role in reducing the carbon footprint of your environment. Yes, you are right. It lasts over 25 years with no fuel costs and little maintenance.
         </Text>
 
         <Text style={styles.subTitle}>
@@ -81,9 +81,13 @@ const ProductDetailScreen = ({ navigation }) => {
           <Text style={styles.enquireText}>Enquire Now</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.referButton}>
+        <TouchableOpacity
+          style={styles.referButton}
+          onPress={() => navigation.navigate("ReferandEarnScreen")}
+        >
           <Text style={styles.referText}>Refer a Friend</Text>
         </TouchableOpacity>
+
       </ScrollView>
 
       {/* ✅ Modal */}
