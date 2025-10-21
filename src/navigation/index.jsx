@@ -18,6 +18,8 @@ import SupportScreen from '../screens/SupportScreen';
 import CreateTicketScreen from '../screens/CreateTicketScreen';
 import ReferAndEarnScreen from '../screens/ReferAndEarnScreen';
 import ReferFriendScreen from '../screens/ReferFriendScreen';
+import TermsConditionsScreen from '../screens/TermsConditionsScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -29,16 +31,18 @@ export default function RootStack() {
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="OtpScreen" component={OtpScreen} />
       <Stack.Screen name="mainScreen" component={MainScreen} />
-       <Stack.Screen name="ProductsHomeScreen" component={ProductsHomeScreen} />
-         <Stack.Screen name="ProductDetailScreen" component={ProductDetailScreen} />
-          <Stack.Screen name="ProductListScreen" component={ProductsList} />
-          <Stack.Screen name="KondaasAssuredScreen" component={KondaasAssuredScreen} />
-           <Stack.Screen name="PowerGenerationScreen" component={PowerGeneration} />
-           <Stack.Screen name="KondaaAboutScreen" component={KondaaAboutScreen} />
-            <Stack.Screen name="SupportScreen" component={SupportScreen} />
-             <Stack.Screen name="createticketScreen" component={CreateTicketScreen} />
-             <Stack.Screen name="ReferandEarnScreen" component={ReferAndEarnScreen} />
-              <Stack.Screen name="ReferFriendScreen" component={ReferFriendScreen} />
+      <Stack.Screen name="ProductsHomeScreen" component={ProductsHomeScreen} />
+      <Stack.Screen name="ProductDetailScreen" component={ProductDetailScreen} />
+      <Stack.Screen name="ProductListScreen" component={ProductsList} />
+      <Stack.Screen name="KondaasAssuredScreen" component={KondaasAssuredScreen} />
+      <Stack.Screen name="PowerGenerationScreen" component={PowerGeneration} />
+      <Stack.Screen name="KondaaAboutScreen" component={KondaaAboutScreen} />
+      <Stack.Screen name="SupportScreen" component={SupportScreen} />
+      <Stack.Screen name="createticketScreen" component={CreateTicketScreen} />
+      <Stack.Screen name="ReferandEarnScreen" component={ReferAndEarnScreen} />
+      <Stack.Screen name="ReferFriendScreen" component={ReferFriendScreen} />
+      <Stack.Screen name="TermsConditionsScreen" component={TermsConditionsScreen} />
+      <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
       <Stack.Screen name="Home" component={DashboardScreen} />
       <Stack.Screen name="Detail" component={PanelDetailScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "833207375451",
+    "project_id": "kondaas-5dfaa",
+    "storage_bucket": "kondaas-5dfaa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:833207375451:android:43c794aac42e429339917e",
+        "android_client_info": {
+          "package_name": "com.trisentrix.kondaas"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBG6yC2grYZxIHAobrZiAK38ZMGaTY-buM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

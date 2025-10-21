@@ -51,7 +51,10 @@ const MainScreen = ({ navigation }) => {
         <View style={styles.headerRow}>
           {/* Left Side: Profile + Text */}
           <View style={styles.leftSection}>
-            <Image source={ProfileImg} style={styles.profileImg} />
+       <TouchableOpacity onPress={() => navigation.navigate("ProfileScreen")}>
+  <Image source={ProfileImg} style={styles.profileImg} />
+</TouchableOpacity>
+
 
             <View style={styles.nameContainer}>
               <Text

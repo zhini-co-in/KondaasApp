@@ -8,10 +8,11 @@ import {
   StyleSheet,
   SafeAreaView,
   ScrollView,
-  Platform,
+  Alert,
 } from "react-native";
 
-const OtpScreen = ({ navigation }) => {
+const OtpScreen = ({ navigation, route }) => {
+  const { confirmation } = route.params; // Get confirmation object from LoginScreen
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const inputs = useRef([]);
 
@@ -26,19 +27,28 @@ const OtpScreen = ({ navigation }) => {
     }
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     const otpCode = otp.join("");
     if (otpCode.length < 6) {
-      alert("Please enter the full OTP");
+      Alert.alert("Error", "Please enter the full OTP");
       return;
     }
-    navigation?.navigate("mainScreen");
+
+    try {
+      await confirmation.confirm(otpCode); // Firebase OTP verification
+      Alert.alert("Success", "Phone authentication successful!");
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "mainScreen" }],
+      });
+    } catch (error) {
+      Alert.alert("Error", "Invalid OTP. Please try again.");
+    }
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        {/* 🔴 Top Logo Section */}
         <View style={styles.header}>
           <Image
             source={require("../../assets/images/kondass.png")}
@@ -47,22 +57,18 @@ const OtpScreen = ({ navigation }) => {
           />
         </View>
 
-        {/* ⚪ White Rounded Container */}
         <View style={styles.bottomContainer}>
           <View style={styles.indicatorWrapper}>
             <View style={styles.indicator}></View>
           </View>
 
-          {/* 👋 Welcome Section */}
           <View style={styles.welcomeContainer}>
             <Text style={styles.welcomeText}>Welcome</Text>
             <Text style={styles.subText}>
-              Enter the OTP sent to number{" "}
-              <Text style={{ fontWeight: "600" }}>+91 98765 12345</Text>
+              Enter the OTP sent to your phone
             </Text>
           </View>
 
-          {/* 🔢 OTP Input */}
           <View style={styles.otpContainer}>
             {otp.map((digit, index) => (
               <TextInput
@@ -78,16 +84,9 @@ const OtpScreen = ({ navigation }) => {
             ))}
           </View>
 
-          {/* 🔘 Confirm Button */}
           <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
             <Text style={styles.confirmText}>Confirm</Text>
           </TouchableOpacity>
-
-          {/* 📜 Terms Text */}
-          <Text style={styles.termsText}>
-            By signing up you are accepting to the{" "}
-            <Text style={styles.termsLink}>Terms & Conditions</Text>
-          </Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -97,90 +96,17 @@ const OtpScreen = ({ navigation }) => {
 export default OtpScreen;
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#fb0404",
-  },
-  header: {
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#fb0404",
-    paddingVertical: 40,
-  },
-  logo: {
-    width: 200,
-    height: 100,
-  },
-  bottomContainer: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    paddingHorizontal: 25,
-    paddingVertical: 40,
-    flexGrow: 1,
-  },
-  indicatorWrapper: {
-    alignItems: "center",
-    marginBottom: 25,
-  },
-  indicator: {
-    width: 40,
-    height: 4,
-    backgroundColor: "#ddd",
-    borderRadius: 2,
-  },
-  welcomeContainer: {
-    alignItems: "flex-start",
-    marginBottom: 25,
-  },
-  welcomeText: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#1A1A1A",
-    marginBottom: 6,
-  },
-  subText: {
-    fontSize: 14,
-    color: "#666",
-  },
-  otpContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 10,
-    marginBottom: 20,
-  },
-  otpInput: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 10,
-    width: 45,
-    height: 50,
-    textAlign: "center",
-    fontSize: 18,
-    color: "#000",
-  },
-  confirmButton: {
-    backgroundColor: "#666",
-    width: "100%",
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: "center",
-    marginTop: 10,
-  },
-  confirmText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  termsText: {
-    color: "#999",
-    fontSize: 12,
-    textAlign: "center",
-    marginTop: 25,
-    lineHeight: 18,
-  },
-  termsLink: {
-    color: "#fb0404",
-    fontWeight: "600",
-  },
+  safeArea: { flex: 1, backgroundColor: "#fb0404" },
+  header: { justifyContent: "center", alignItems: "center", backgroundColor: "#fb0404", paddingVertical: 40 },
+  logo: { width: 200, height: 100 },
+  bottomContainer: { backgroundColor: "#fff", borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 25, paddingVertical: 40, flexGrow: 1 },
+  indicatorWrapper: { alignItems: "center", marginBottom: 25 },
+  indicator: { width: 40, height: 4, backgroundColor: "#ddd", borderRadius: 2 },
+  welcomeContainer: { alignItems: "flex-start", marginBottom: 25 },
+  welcomeText: { fontSize: 22, fontWeight: "700", color: "#1A1A1A", marginBottom: 6 },
+  subText: { fontSize: 14, color: "#666" },
+  otpContainer: { flexDirection: "row", justifyContent: "space-between", marginTop: 10, marginBottom: 20 },
+  otpInput: { borderWidth: 1, borderColor: "#ddd", borderRadius: 10, width: 45, height: 50, textAlign: "center", fontSize: 18, color: "#000" },
+  confirmButton: { backgroundColor: "#666", width: "100%", paddingVertical: 14, borderRadius: 10, alignItems: "center", marginTop: 10 },
+  confirmText: { color: "#fff", fontSize: 16, fontWeight: "600" },
 });
