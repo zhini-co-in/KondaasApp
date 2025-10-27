@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,12 +9,40 @@ import {
   StyleSheet,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
+import firestore from "@react-native-firebase/firestore";
+import Loader from "../components/Loader"; // ✅ your custom loader
 
 const ReferAndEarnScreen = ({ navigation }) => {
+    const [referrals, setReferrals] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchReferrals = async () => {
+      try {
+        setLoading(true);
+
+        const snapshot = await firestore().collection("Referrals").get();
+
+        const referralData = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+
+        setReferrals(referralData);
+      } catch (error) {
+        console.error("Error fetching referrals:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchReferrals();
+  }, []);
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
-
+  {loading && <Loader />}
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -92,34 +120,29 @@ const ReferAndEarnScreen = ({ navigation }) => {
   </View>
 </View>
 
-
         {/* My Referrals */}
-        <Text style={styles.sectionTitle}>My Referrals (4)</Text>
+        <Text style={styles.sectionTitle}>My Referrals</Text>
         <View style={styles.referralList}>
-          {[
-            { name: "Rajaram", status: "Yet to purchase", button: "Remind", color: "#E60000" },
-            { name: "Sivakumar", status: "Purchased on 29th Aug 2025", icon: "checkmark-circle", color: "#4CAF50" },
-            { name: "Jeevanandham", status: "Purchased on 11th Jul 2025", icon: "checkmark-circle", color: "#4CAF50" },
-            { name: "Rajasekar", status: "Purchased on 17th Apr 2025", icon: "checkmark-circle", color: "#4CAF50" },
-          ].map((item, index) => (
-            <View key={index} style={styles.referralCard}>
-              <View style={styles.referralLeft}>
-                <Ionicons name="person-circle-outline" size={32} color="#777" />
-                <View>
-                  <Text style={styles.referralName}>{item.name}</Text>
-                  <Text style={styles.referralStatus}>{item.status}</Text>
-                </View>
-              </View>
-              {item.icon ? (
-                <Ionicons name={item.icon} size={22} color={item.color} />
-              ) : (
-                <TouchableOpacity style={styles.remindBtn}>
-                  <Text style={styles.remindBtnText}>{item.button}</Text>
-                </TouchableOpacity>
-              )}
+      {referrals.map((item, index) => (
+        <View key={index} style={styles.referralCard}>
+          <View style={styles.referralLeft}>
+            <Ionicons name="person-circle-outline" size={32} color="#777" />
+            <View>
+              <Text style={styles.referralName}>{item.friendName}</Text>
+              <Text style={styles.referralStatus}>{item.status}</Text>
             </View>
-          ))}
+          </View>
+
+          {item.purchased ? (
+            <Ionicons name="checkmark-circle" size={22} color="#4CAF50" />
+          ) : (
+            <TouchableOpacity style={styles.remindBtn}>
+              <Text style={styles.remindBtnText}>Remind</Text>
+            </TouchableOpacity>
+          )}
         </View>
+      ))}
+    </View>
       </ScrollView>
     </SafeAreaView>
   );

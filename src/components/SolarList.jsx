@@ -1,53 +1,86 @@
-import React from "react";
-import { View, Text, Image, StyleSheet, ScrollView } from "react-native";
-
-import Solar1 from "../../assets/images/Rectangle_solar.png";
-import Solar2 from "../../assets/images/Rectangle_plate.png";
-import Solar3 from "../../assets/images/Rectangle_solarplate.png";
-
-const products = [
-  {
-    id: 1,
-    name: "Residential Rooftop Solar – OnGrid",
-    image: Solar1,
-    offer: "Flat 10% OFF",
-    color: "#27ae60",
-  },
-  {
-    id: 2,
-    name: "Residential Rooftop Solar – OffGrid",
-    image: Solar2,
-    offer: "Flat 10% OFF",
-    color: "#27ae60",
-  },
-  {
-    id: 3,
-    name: "Solar Pump",
-    image: Solar3,
-    offer: "Upto 20% OFF",
-    color: "#f39c12",
-  },
-];
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  Image,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
+import firestore from "@react-native-firebase/firestore";
 
 const SolarList = () => {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const snapshot = await firestore().collection("productList").where("isArchived", "==", false).get();
+
+        if (snapshot.empty) {
+          setLoading(false);
+          return;
+        }
+        const allProducts = [];
+        snapshot.forEach((doc) => {
+          allProducts.push({ id: doc.id, ...doc.data() });
+        });
+
+        setProducts(allProducts);
+      } catch (error) {
+        console.error("Firestore error:", error);
+        Alert.alert("Error", error.message || "Failed to fetch products");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#27ae60" />
+        <Text style={{ marginTop: 10 }}>Loading products...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.productsSection}>
           <Text style={styles.productsTitle}>Solar Products</Text>
-          {products.map((item) => (
-            <View key={item.id} style={styles.productCard}>
-              <Image source={item.image} style={styles.productImg} />
-              <View style={styles.productInfo}>
-                <Text style={styles.productName}>{item.name}</Text>
-                <View
-                  style={[styles.offerBadge, { backgroundColor: item.color }]}
-                >
-                  <Text style={styles.offerText}>{item.offer}</Text>
+
+          {products.length > 0 ? (
+            products.map((item) => (
+              <View key={item.id} style={styles.productCard}>
+                {item.imageURL ? (
+                  <Image source={{ uri: item.imageURL }} style={styles.productImg} />
+                ) : (
+                  <View style={[styles.productImg, styles.placeholderImg]} />
+                )}
+                <View style={styles.productInfo}>
+                  <Text style={styles.productName}>{item.title}</Text>
+                  {item.offer && (
+                    <View
+                      style={[
+                        styles.offerBadge,
+                        { backgroundColor: item.color || "#27ae60" },
+                      ]}
+                    >
+                      <Text style={styles.offerText}>{item.offer}</Text>
+                    </View>
+                  )}
                 </View>
               </View>
-            </View>
-          ))}
+            ))
+          ) : (
+            <Text style={styles.noDataText}>No products available</Text>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -57,7 +90,6 @@ const SolarList = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   scrollContainer: { paddingBottom: 20 },
-
   productsSection: { marginTop: 30, paddingHorizontal: 15 },
   productsTitle: {
     fontSize: 16,
@@ -74,6 +106,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   productImg: { width: 80, height: 60, borderRadius: 8, marginRight: 10 },
+  placeholderImg: { backgroundColor: "#ddd" },
   productInfo: { flex: 1 },
   productName: { fontSize: 14, fontWeight: "600", color: "#000" },
   offerBadge: {
@@ -84,6 +117,17 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   offerText: { color: "#fff", fontSize: 11, fontWeight: "600" },
+  noDataText: {
+    textAlign: "center",
+    color: "#999",
+    marginTop: 20,
+    fontSize: 14,
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 });
 
 export default SolarList;

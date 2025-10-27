@@ -10,7 +10,7 @@ import {
   TextInput,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import { Picker } from "@react-native-picker/picker"; // Make sure to install: npm install @react-native-picker/picker
+import { Picker } from "@react-native-picker/picker"; 
 
 const CreateTicketScreen = ({ navigation }) => {
   const [selectedDevice, setSelectedDevice] = useState("Rooftop Solar - Ongrid");

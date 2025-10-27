@@ -1,3 +1,4 @@
+import { storeData, USER_DATA } from "../service/localStorage";
 import React, { useState, useRef } from "react";
 import {
   View,
@@ -10,9 +11,11 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
+import DeviceInfo from "react-native-device-info";
+import firestore from "@react-native-firebase/firestore";
 
 const OtpScreen = ({ navigation, route }) => {
-  const { confirmation } = route.params; // Get confirmation object from LoginScreen
+  const { confirmation, phoneNumber } = route.params;
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const inputs = useRef([]);
 
@@ -27,24 +30,64 @@ const OtpScreen = ({ navigation, route }) => {
     }
   };
 
-  const handleConfirm = async () => {
-    const otpCode = otp.join("");
-    if (otpCode.length < 6) {
-      Alert.alert("Error", "Please enter the full OTP");
-      return;
-    }
+const handleConfirm = async () => {
+  const otpCode = otp.join("");
+  if (otpCode.length < 6) {
+    Alert.alert("Error", "Please enter the full OTP");
+    return;
+  }
 
-    try {
-      await confirmation.confirm(otpCode); // Firebase OTP verification
-      Alert.alert("Success", "Phone authentication successful!");
+  try {
+    const result = await confirmation.confirm(otpCode);
+    const cleanPhone = phoneNumber?.replace(/^\+91/, "");
+    if (!cleanPhone) throw new Error("Invalid phone number");
+    const appInfo = {
+      version: "1.0.0",
+      buildNo: "1",
+      lastLogin: new Date().toISOString(),
+    };
+    const platformInfo = {
+      os: DeviceInfo.getSystemName(),
+      version: DeviceInfo.getSystemVersion(),
+    };
+    const userDocRef = firestore().collection("userDetails").doc(cleanPhone);
+    const userDoc = await userDocRef.get();
+
+    if (userDoc.exists) {
+      await userDocRef.update({
+        "AppInfo.lastLogin": appInfo.lastLogin,
+        PlatformInfo: platformInfo,
+      });
+    } else {
+      const userData = {
+        AppInfo: appInfo,
+        PlatformInfo: platformInfo,
+        UserInfo: {
+          phoneNo: cleanPhone,
+          name: "",
+        },
+      };
+
+      await userDocRef.set(userData);
+    }
+    const finalData = {
+      AppInfo: appInfo,
+      PlatformInfo: platformInfo,
+      UserInfo: { phoneNo: cleanPhone, name: "" },
+    };
+    await storeData(USER_DATA, JSON.stringify(finalData));
+    setTimeout(() => {
       navigation.reset({
         index: 0,
         routes: [{ name: "mainScreen" }],
       });
-    } catch (error) {
-      Alert.alert("Error", "Invalid OTP. Please try again.");
-    }
-  };
+    }, 1000);
+  } catch (error) {
+     Alert.alert(" Error", error.message || "Invalid OTP");
+    navigation.navigate("ProductsHomeScreen");
+  }
+};
+
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -64,9 +107,7 @@ const OtpScreen = ({ navigation, route }) => {
 
           <View style={styles.welcomeContainer}>
             <Text style={styles.welcomeText}>Welcome</Text>
-            <Text style={styles.subText}>
-              Enter the OTP sent to your phone
-            </Text>
+            <Text style={styles.subText}>Enter the OTP sent to your phone</Text>
           </View>
 
           <View style={styles.otpContainer}>

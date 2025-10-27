@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,97 +7,114 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useNavigation } from "@react-navigation/native";
+import firestore from "@react-native-firebase/firestore";
 
 import ProfileImg from "../../assets/images/Round.png";
-import Solar1 from "../../assets/images/Rectangle_solar.png";
-import Solar2 from "../../assets/images/Rectangle_plate.png";
-import Solar3 from "../../assets/images/Rectangle_solarplate.png";
 
 const ProductsHomeScreen = () => {
   const navigation = useNavigation();
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const products = [
-    {
-      id: 1,
-      name: "Residential Rooftop Solar – OnGrid",
-      image: Solar1,
-      offer: "Flat 10% OFF",
-      color: "#27ae60",
-    },
-    {
-      id: 2,
-      name: "Residential Rooftop Solar – OffGrid",
-      image: Solar2,
-      offer: "Flat 10% OFF",
-      color: "#27ae60",
-    },
-    {
-      id: 3,
-      name: "Solar Pump",
-      image: Solar3,
-      offer: "Upto 20% OFF",
-      color: "#f39c12",
-    },
-  ];
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const snapshot = await firestore().collection("productList").where("isArchived", "==", false).get();
+        if (snapshot.empty) {
+          setLoading(false);
+          return;
+        }
+        const allProducts = [];
+        snapshot.forEach((doc) => {
+          allProducts.push({ id: doc.id, ...doc.data() });
+        });
+
+        setProducts(allProducts);
+      } catch (error) {
+        console.error("Firestore error:", error);
+        Alert.alert("Error", error.message || "Failed to fetch products");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={styles.loader}>
+        <ActivityIndicator size="large" color="#e60000" />
+        <Text>Loading Products...</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {/* --- Header --- */}
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Header */}
         <View style={styles.header}>
           <View style={styles.profileRow}>
             <Image source={ProfileImg} style={styles.profileImg} />
             <View>
-              <Text style={styles.profileName}>Ram Kumar</Text>
+              <Text style={styles.profileName}>Ram kumar</Text>
               <Text style={styles.liveText}>● Live</Text>
             </View>
           </View>
-
           <View style={styles.iconRow}>
             <TouchableOpacity style={styles.iconBox}>
-              <Ionicons name="shield-checkmark-outline" size={20} color="#000" />
+              <Ionicons name="shield-checkmark-outline" size={22} color="#000" />
             </TouchableOpacity>
             <TouchableOpacity style={styles.iconBox}>
-              <Ionicons name="document-text-outline" size={20} color="#000" />
+              <Ionicons name="document-text-outline" size={22} color="#000" />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* --- No Device Section --- */}
-        <View style={styles.noDeviceSection}>
+        {/* No Device Section */}
+        <View style={styles.noDeviceContainer}>
           <Text style={styles.noDeviceTitle}>No Device Configured</Text>
-          <Text style={styles.noDeviceSub}>Contact Admin</Text>
-          <TouchableOpacity style={styles.contactButton}>
-            <Text style={styles.contactText}>Contact</Text>
+          <Text style={styles.contactAdminText}>Contact Admin</Text>
+          <TouchableOpacity style={styles.contactBtn}>
+            <Text style={styles.contactBtnText}>Contact</Text>
           </TouchableOpacity>
         </View>
 
-        {/* --- Product List --- */}
+        {/* Product Section */}
         <View style={styles.productsSection}>
           <Text style={styles.productsTitle}>Our Products</Text>
 
-          {products.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.productCard}
-              onPress={() =>
-                navigation.navigate("ProductDetailScreen", { product: item })
-              }
-            >
-              <Image source={item.image} style={styles.productImg} />
-              <View style={styles.productInfo}>
-                <Text style={styles.productName}>{item.name}</Text>
-                <View
-                  style={[styles.offerBadge, { backgroundColor: item.color }]}
-                >
-                  <Text style={styles.offerText}>{item.offer}</Text>
+          {products.length === 0 ? (
+            <Text style={{ textAlign: "center", color: "#888" }}>
+              No products available
+            </Text>
+          ) : (
+            products.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.productCard}
+                onPress={() =>
+                  navigation.navigate("ProductDetailScreen", { product: item })
+                }
+              >
+                <Image source={{ uri: item.imageURL }} style={styles.productImg} />
+                <View style={styles.productInfo}>
+                  <Text style={styles.productName}>{item.title}</Text>
+                  {item.offer ? (
+                    <View style={styles.offerBadge}>
+                      <Text style={styles.offerText}>{item.offer}</Text>
+                    </View>
+                  ) : null}
                 </View>
-              </View>
-            </TouchableOpacity>
-          ))}
+              </TouchableOpacity>
+            ))
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -107,39 +124,61 @@ const ProductsHomeScreen = () => {
 export default ProductsHomeScreen;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  scrollContainer: { paddingBottom: 20 },
-
+  container: { flex: 1, backgroundColor: "#f5f5f5" },
+  loader: { flex: 1, justifyContent: "center", alignItems: "center" },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 15,
-    paddingVertical: 12,
+    padding: 15,
+    backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderColor: "#eee",
   },
   profileRow: { flexDirection: "row", alignItems: "center" },
-  profileImg: { width: 40, height: 40, borderRadius: 20, marginRight: 10 },
-  profileName: { fontSize: 16, fontWeight: "600", color: "#000" },
-  liveText: { fontSize: 13, color: "green", marginTop: 2 },
+  profileImg: { width: 35, height: 35, borderRadius: 20, marginRight: 10 },
+  profileName: { fontSize: 15, fontWeight: "600", color: "#000" },
+  liveText: { fontSize: 13, color: "green" },
   iconRow: { flexDirection: "row" },
   iconBox: { marginLeft: 10 },
 
-  noDeviceSection: { alignItems: "center", marginTop: 30 },
-  noDeviceTitle: { fontSize: 18, fontWeight: "700", color: "#000" },
-  noDeviceSub: { color: "#888", marginTop: 4, marginBottom: 20 },
-  contactButton: {
-    backgroundColor: "#e60000",
-    width: "90%",
-    paddingVertical: 10,
-    borderRadius: 10,
+  // No Device Section
+  noDeviceContainer: {
+    backgroundColor: "#fff",
     alignItems: "center",
-    marginTop: 10,
+    justifyContent: "center",
+    paddingVertical: 40,
+    marginBottom: 10,
   },
-  contactText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  noDeviceTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#333",
+  },
+  contactAdminText: {
+    color: "#777",
+    marginTop: 6,
+    marginBottom: 20,
+  },
+  contactBtn: {
+    backgroundColor: "#e60000",
+    paddingVertical: 10,
+    paddingHorizontal: 150,
+    borderRadius: 6,
+  },
+  contactBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 15,
+  },
 
-  productsSection: { marginTop: 30, paddingHorizontal: 15 },
+  // Product Section
+  productsSection: {
+    backgroundColor: "#fff",
+    paddingHorizontal: 15,
+    paddingTop: 15,
+    paddingBottom: 20,
+  },
   productsTitle: {
     fontSize: 16,
     fontWeight: "700",
@@ -154,15 +193,20 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     alignItems: "center",
   },
-  productImg: { width: 80, height: 60, borderRadius: 8, marginRight: 10 },
+  productImg: { width: 85, height: 65, borderRadius: 8, marginRight: 10 },
   productInfo: { flex: 1 },
   productName: { fontSize: 14, fontWeight: "600", color: "#000" },
   offerBadge: {
     alignSelf: "flex-start",
+    backgroundColor: "#ffa500",
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 5,
     marginTop: 5,
   },
-  offerText: { color: "#fff", fontSize: 11, fontWeight: "600" },
+  offerText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "600",
+  },
 });
