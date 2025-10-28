@@ -10,10 +10,10 @@ import {
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import firestore from "@react-native-firebase/firestore";
-import Loader from "../components/Loader"; // ✅ your custom loader
+import Loader from "../components/Loader";
 
 const ReferAndEarnScreen = ({ navigation }) => {
-    const [referrals, setReferrals] = useState([]);
+  const [referrals, setReferrals] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

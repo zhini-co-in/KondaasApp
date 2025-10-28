@@ -1,4 +1,6 @@
-import React from "react";
+import React, { useCallback, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+
 import {
     View,
     Text,
@@ -9,35 +11,63 @@ import {
     StyleSheet,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
-
+import firestore from "@react-native-firebase/firestore";
+import Loader from "../components/Loader";
 const SupportScreen = ({ navigation }) => {
-    const tickets = [
-        {
-            id: "TKT-001",
-            status: "Resolved",
-            statusColor: "#22C55E",
-            daysAgo: "2 days ago",
-            title: "Solar generation below expected",
-            category: "System Performance",
-        },
-        {
-            id: "TKT-002",
-            status: "In progress",
-            statusColor: "#F59E0B",
-            daysAgo: "5 days ago",
-            title: "App sync issues",
-            category: "Technical Support",
-        },
-        {
-            id: "TKT-003",
-            status: "Resolved",
-            statusColor: "#22C55E",
-            daysAgo: "1 week ago",
-            title: "Billing question for July",
-            category: "Billing & Savings",
-        },
-    ];
+     const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
+ 
 
+  const getDaysAgo = (date) => {
+    const diff = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24);
+    if (diff < 1) return "Today";
+    if (diff < 2) return "1 day ago";
+    if (diff < 7) return `${Math.floor(diff)} days ago`;
+    return `${Math.floor(diff / 7)} week${Math.floor(diff / 7) > 1 ? "s" : ""} ago`;
+  };
+   const fetchTickets = async () => {
+    try {
+      setLoading(true);
+      const snapshot = await firestore()
+        .collection("createTicket")
+        .orderBy("createdAt", "desc")
+        .get();
+
+      if (snapshot.empty) {
+        setTickets([]);
+        return;
+      }
+
+      const fetchedTickets = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: data.TicketNo || doc.id,
+          title: data.Description || "No description",
+          category: data.type,
+          status: data.status,
+          statusColor:
+            data.status === "Resolved"
+              ? "#22C55E"
+              : data.status === "In progress"
+              ? "#F59E0B"
+              : "#E11D48",
+          daysAgo: data.createdAt ? getDaysAgo(data.createdAt.toDate()) : "N/A",
+        };
+      });
+
+      setTickets(fetchedTickets);
+    } catch (error) {
+      console.error("Error fetching tickets:", error);
+      Alert.alert("Error", "Failed to load tickets.");
+    } finally {
+      setLoading(false);
+    }
+  };
+ useFocusEffect(
+    useCallback(() => {
+      fetchTickets();
+    }, [])
+  );
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar backgroundColor="#fff" barStyle="dark-content" />
@@ -109,6 +139,8 @@ const SupportScreen = ({ navigation }) => {
                     </View>
                 ))}
             </ScrollView>
+            
+         {loading && <Loader />}
         </SafeAreaView>
     );
 };

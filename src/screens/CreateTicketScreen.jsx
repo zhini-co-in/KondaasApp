@@ -1,21 +1,142 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
   SafeAreaView,
   ScrollView,
-  StatusBar,
   TouchableOpacity,
   StyleSheet,
   TextInput,
+  StatusBar,
+  Alert,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import { Picker } from "@react-native-picker/picker"; 
+import { Picker } from "@react-native-picker/picker";
+import firestore from "@react-native-firebase/firestore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { USER_DATA } from "../service/localStorage";
+import Loader from "../components/Loader";
 
 const CreateTicketScreen = ({ navigation }) => {
-  const [selectedDevice, setSelectedDevice] = useState("Rooftop Solar - Ongrid");
+  const [selectedDevice, setSelectedDevice] = useState("");
   const [selectedIssue, setSelectedIssue] = useState("");
   const [description, setDescription] = useState("");
+  const [deviceList, setDeviceList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [userPhone, setUserPhone] = useState("");
+useEffect(() => {
+  const getUserData = async () => {
+    try {
+      const data = await AsyncStorage.getItem(USER_DATA);
+      if (data) {
+        const parsed = JSON.parse(data);
+
+        const extractedPhone =
+          parsed?.UserInfo?.phoneNo || // Case 1: nested
+          parsed?.phoneNo ||           // Case 2: top-level
+          parsed?.phoneNumber ||       // Case 3: alternate key
+          parsed?.mobile ||            // Case 4: alternate key
+          "Unknown";
+
+        console.log("📱 Extracted phone number:", extractedPhone);
+
+        setUserPhone(extractedPhone);
+      } else {
+        console.warn("⚠️ No USER_DATA found in AsyncStorage");
+        setUserPhone("Unknown");
+      }
+    } catch (error) {
+      console.error(" Error reading user data:", error);
+      setUserPhone("Unknown");
+    }
+  };
+
+  getUserData();
+}, []);
+
+
+  // 🔹 Fetch devices from Firestore
+  useEffect(() => {
+    const fetchDevices = async () => {
+      try {
+        const snapshot = await firestore().collection("deviceId").get();
+
+        if (snapshot.empty) {
+          Alert.alert("No data", "No devices found in Firestore.");
+          setDeviceList([]);
+          return;
+        }
+
+        const devices = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          title: doc.data().title,
+        }));
+
+        setDeviceList(devices);
+      } catch (error) {
+        console.error("Error fetching devices:", error);
+        Alert.alert("Error", "Failed to load devices from Firestore.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDevices();
+  }, []);
+
+  // 🔹 Generate unique TicketNo
+  const generateTicketNo = (phone) => {
+    const timestamp = Date.now().toString().slice(-6); // last 6 digits
+    return `TKT-${phone.slice(-4)}-${timestamp}`;
+  };
+
+  // 🔹 Submit Ticket to Firestore
+  const handleSubmit = async () => {
+    if (!selectedDevice) {
+      Alert.alert("Missing Info", "Please select a device.");
+      return;
+    }
+
+    if (!selectedIssue) {
+      Alert.alert("Missing Info", "Please select an issue type.");
+      return;
+    }
+
+    if (!description.trim()) {
+      Alert.alert("Missing Info", "Please enter a description.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      const ticketNo = generateTicketNo(userPhone);
+
+      await firestore().collection("createTicket").doc(ticketNo).set({
+        PhoneNo: userPhone,
+        TicketNo: ticketNo,
+        Description: description.trim(),
+        deviceId: selectedDevice, // saving title (not doc ID)
+        createdBy: userPhone,
+        createdAt: firestore.FieldValue.serverTimestamp(),
+        status: "Open",
+        assignedTo: "", // empty initially
+        type: selectedIssue,
+      });
+
+      Alert.alert("Success", `Ticket ${ticketNo} has been submitted successfully!`);
+      setSelectedDevice("");
+      setSelectedIssue("");
+      setDescription("");
+      navigation.goBack();
+    } catch (error) {
+      console.error("Error creating ticket:", error);
+      Alert.alert("Error", "Failed to create support ticket.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -37,22 +158,38 @@ const CreateTicketScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
       >
         {/* Device */}
-        <Text style={styles.label}>Device</Text>
+        <Text style={styles.label}>
+          Device <Text style={{ color: "red" }}>*</Text>
+        </Text>
         <View style={styles.dropdownContainer}>
           <Picker
             selectedValue={selectedDevice}
             onValueChange={(itemValue) => setSelectedDevice(itemValue)}
             style={styles.picker}
             dropdownIconColor="#000"
+            enabled={!loading}
           >
-            <Picker.Item label="Rooftop Solar - Ongrid" value="Rooftop Solar - Ongrid" />
-            <Picker.Item label="Rooftop Solar - Hybrid" value="Rooftop Solar - Hybrid" />
-            <Picker.Item label="Rooftop Solar - Offgrid" value="Rooftop Solar - Offgrid" />
+            <Picker.Item label="Select a Device" value="" color="#111010ff" />
+            {loading ? (
+              <Picker.Item label="Loading..." value="" />
+            ) : deviceList.length > 0 ? (
+              deviceList.map((device) => (
+                <Picker.Item
+                  key={device.id}
+                  label={device.title}
+                  value={device.title}
+                />
+              ))
+            ) : (
+              <Picker.Item label="No devices available" value="" />
+            )}
           </Picker>
         </View>
 
         {/* Issue Type */}
-        <Text style={styles.label}>Issue Type</Text>
+        <Text style={styles.label}>
+          Issue Type <Text style={{ color: "red" }}>*</Text>
+        </Text>
         <View style={styles.dropdownContainer}>
           <Picker
             selectedValue={selectedIssue}
@@ -68,7 +205,9 @@ const CreateTicketScreen = ({ navigation }) => {
         </View>
 
         {/* Description */}
-        <Text style={styles.label}>Description</Text>
+        <Text style={styles.label}>
+          Description <Text style={{ color: "red" }}>*</Text>
+        </Text>
         <TextInput
           style={styles.textArea}
           multiline
@@ -80,14 +219,21 @@ const CreateTicketScreen = ({ navigation }) => {
         />
 
         {/* Submit Button */}
-        <TouchableOpacity style={styles.submitButton}>
-          <Text style={styles.submitButtonText}>Submit Ticket</Text>
+        <TouchableOpacity
+          style={styles.submitButton}
+          onPress={handleSubmit}
+          disabled={submitting}
+        >
+          <Text style={styles.submitButtonText}>
+            {submitting ? "Submitting..." : "Submit Ticket"}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {(loading || submitting) && <Loader />}
     </SafeAreaView>
   );
 };
-
 export default CreateTicketScreen;
 
 const styles = StyleSheet.create({

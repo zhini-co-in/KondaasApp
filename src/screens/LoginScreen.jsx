@@ -11,22 +11,21 @@ import {
   Alert,
 } from "react-native";
 import auth from "@react-native-firebase/auth";
-
+import Loader from "../components/Loader";
 const LoginScreen = ({ navigation }) => {
   const [phoneNumber, setPhoneNumber] = useState("");
-
+  const [loading, setLoading] = useState(false);
   const handleSendOTP = async () => {
-    // Phone number 10 digit illana error kaatu
     if (phoneNumber.trim().length < 10) {
       Alert.alert("Error", "Please enter a valid phone number");
       return;
     }
 
     try {
-      const fullNumber = "+91" + phoneNumber; // +91 add pannrom
+      setLoading(true);
+      const fullNumber = "+91" + phoneNumber; 
       const confirmation = await auth().signInWithPhoneNumber(fullNumber);
-
-      // ✅ OTP screen ku phone number pass pannrom
+      setLoading(false);
       navigation.navigate("OtpScreen", { confirmation, phoneNumber: fullNumber });
     } catch (error) {
       console.log("OTP send error:", error);
@@ -82,6 +81,7 @@ const LoginScreen = ({ navigation }) => {
           </Text>
         </View>
       </ScrollView>
+         {loading && <Loader />}
     </SafeAreaView>
   );
 };

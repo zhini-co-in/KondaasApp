@@ -13,7 +13,7 @@ import {
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useNavigation } from "@react-navigation/native";
 import firestore from "@react-native-firebase/firestore";
-
+import Loader from "../components/Loader";
 import ProfileImg from "../../assets/images/Round.png";
 
 const ProductsHomeScreen = () => {
@@ -46,14 +46,6 @@ const ProductsHomeScreen = () => {
     fetchProducts();
   }, []);
 
-  if (loading) {
-    return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" color="#e60000" />
-        <Text>Loading Products...</Text>
-      </View>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -117,6 +109,7 @@ const ProductsHomeScreen = () => {
           )}
         </View>
       </ScrollView>
+         {loading && <Loader />}
     </SafeAreaView>
   );
 };
