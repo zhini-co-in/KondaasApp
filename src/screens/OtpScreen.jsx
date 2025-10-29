@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import DeviceInfo from "react-native-device-info";
 import firestore from "@react-native-firebase/firestore";
+import auth from "@react-native-firebase/auth";
 import Loader from "../components/Loader";
 import { storeData, USER_DATA } from "../service/localStorage";
 
@@ -19,56 +20,83 @@ const OtpScreen = ({ navigation, route }) => {
   const { confirmation, phoneNumber } = route.params;
   const [loading, setLoading] = useState(false);
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [error, setError] = useState(false); // 👈 for incorrect OTP display
+  const [error, setError] = useState(false);
+  const [timer, setTimer] = useState(30);
+  const [canResend, setCanResend] = useState(false);
   const inputs = useRef([]);
+
+  useEffect(() => {
+    if (timer > 0) {
+      const interval = setInterval(() => setTimer((t) => t - 1), 1000);
+      return () => clearInterval(interval);
+    } else {
+      setCanResend(true);
+    }
+  }, [timer]);
 
   const handleChange = (text, index) => {
     if (text.length > 1) text = text.slice(-1);
     const newOtp = [...otp];
     newOtp[index] = text;
     setOtp(newOtp);
-    setError(false); // reset error when typing
-
-    if (text && index < otp.length - 1) {
-      inputs.current[index + 1].focus();
-    }
+    setError(false);
+    if (text && index < otp.length - 1) inputs.current[index + 1].focus();
   };
 
   const handleConfirm = async () => {
+    console.log("=== handleConfirm() called ===");
     const otpCode = otp.join("");
+    console.log("Entered OTP:", otpCode);
+
     if (otpCode.length < 6) {
+      console.log("❌ Incomplete OTP entered:", otpCode);
       Alert.alert("Error", "Please enter the full OTP");
       return;
     }
 
     try {
       setLoading(true);
+      console.log("⏳ Verifying OTP with Firebase...");
+
       const result = await confirmation.confirm(otpCode);
+      console.log("✅ OTP verified successfully:", result);
+
       const cleanPhone = phoneNumber?.replace(/^\+91/, "");
+      console.log("Clean phone number:", cleanPhone);
+
       if (!cleanPhone) throw new Error("Invalid phone number");
 
+      // --- App Info ---
       const appInfo = {
         version: "1.0.0",
         buildNo: "1",
         lastLogin: new Date().toISOString(),
       };
+      console.log("App Info:", appInfo);
 
+      // --- Platform Info ---
       const platformInfo = {
         os: DeviceInfo.getSystemName(),
         version: DeviceInfo.getSystemVersion(),
       };
+      console.log("Platform Info:", platformInfo);
 
+      // --- Firestore User Reference ---
       const userDocRef = firestore().collection("userDetails").doc(cleanPhone);
       const userDoc = await userDocRef.get();
+      console.log("Firestore doc exists?", userDoc.exists);
 
       let userData;
+
       if (userDoc.exists) {
+        console.log("🔁 Existing user found. Updating lastLogin & platform info...");
         userData = userDoc.data();
         await userDocRef.update({
           "AppInfo.lastLogin": appInfo.lastLogin,
           PlatformInfo: platformInfo,
         });
       } else {
+        console.log("🆕 New user detected. Creating Firestore document...");
         userData = {
           AppInfo: appInfo,
           PlatformInfo: platformInfo,
@@ -77,23 +105,51 @@ const OtpScreen = ({ navigation, route }) => {
         await userDocRef.set(userData);
       }
 
-      const finalData = {
-        ...userData,
-        AppInfo: appInfo,
-        PlatformInfo: platformInfo,
-      };
+      const finalData = { ...userData, AppInfo: appInfo, PlatformInfo: platformInfo };
+      console.log("Final data to be stored:", finalData);
 
+      // ✅ Store only on successful OTP confirmation
       await storeData(USER_DATA, JSON.stringify(finalData));
+      console.log("✅ User data successfully stored in local storage");
+
+      // --- Navigation logic ---
       const deviceId = userData?.UserInfo?.deviceId;
+      console.log("Device ID found:", deviceId);
 
       if (deviceId && deviceId.trim() !== "") {
+        console.log("🔄 Navigating to mainScreen...");
         navigation.reset({ index: 0, routes: [{ name: "mainScreen" }] });
       } else {
+        console.log("➡️ Navigating to ProductsHomeScreen...");
         navigation.reset({ index: 0, routes: [{ name: "ProductsHomeScreen" }] });
       }
+
     } catch (error) {
-      console.error("❌ OTP Confirmation Error:", error);
-      setError(true); // 👈 show red border and error text
+      console.error("🚨 OTP Confirmation Error:", error);
+      console.log("❌ No data stored due to OTP failure");
+      setError(true);
+    } finally {
+      console.log("=== handleConfirm() completed ===");
+      setLoading(false);
+    }
+  };
+const handleChangeNumber = async () => {
+  await storeData(USER_DATA, JSON.stringify({ UserInfo: { phoneNo: "" } }));
+  navigation.goBack();
+};
+
+  const handleResendOtp = async () => {
+    try {
+      setLoading(true);
+      setCanResend(false);
+      setTimer(30);
+      const confirmationResult = await auth().signInWithPhoneNumber(phoneNumber);
+      route.params.confirmation = confirmationResult;
+      Alert.alert("OTP Sent", "A new OTP has been sent to your phone number.");
+    } catch (error) {
+      console.error("Resend OTP Error:", error);
+      Alert.alert("Error", "Failed to resend OTP. Please try again later.");
+      setCanResend(true);
     } finally {
       setLoading(false);
     }
@@ -114,10 +170,12 @@ const OtpScreen = ({ navigation, route }) => {
           <View style={styles.indicatorWrapper}>
             <View style={styles.indicator}></View>
           </View>
-   <View style={styles.welcomeContainer}>
+
+          <View style={styles.welcomeContainer}>
             <Text style={styles.welcomeText}>Welcome</Text>
             <Text style={styles.subText}>Enter the OTP sent to your phone</Text>
           </View>
+
           <View style={styles.welcomeContainer}>
             <Text style={styles.welcomeText}>OTP Number</Text>
           </View>
@@ -127,7 +185,7 @@ const OtpScreen = ({ navigation, route }) => {
               <TextInput
                 key={index}
                 ref={(ref) => (inputs.current[index] = ref)}
-                style={[styles.otpInput, error && styles.errorBorder]} // 👈 red border if error
+                style={[styles.otpInput, error && styles.errorBorder]}
                 value={digit}
                 onChangeText={(text) => handleChange(text, index)}
                 keyboardType="number-pad"
@@ -142,6 +200,26 @@ const OtpScreen = ({ navigation, route }) => {
           <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
             <Text style={styles.confirmText}>Confirm</Text>
           </TouchableOpacity>
+
+          <View style={styles.resendContainer}>
+            {canResend ? (
+              <TouchableOpacity onPress={handleResendOtp}>
+                <Text style={styles.resendText}>Resend OTP</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.timerText}>Resend available in {timer}s</Text>
+            )}
+          </View>
+         <TouchableOpacity
+  style={styles.changeNumberContainer}
+  onPress={handleChangeNumber}
+>
+  <Text style={styles.changeNumberText}>
+    Wrong number? <Text style={styles.changeLink}>Change Phone Number</Text>
+  </Text>
+</TouchableOpacity>
+
+
         </View>
       </ScrollView>
       {loading && <Loader />}
@@ -172,6 +250,7 @@ const styles = StyleSheet.create({
   indicator: { width: 40, height: 4, backgroundColor: "#ddd", borderRadius: 2 },
   welcomeContainer: { alignItems: "flex-start", marginBottom: 10 },
   welcomeText: { fontSize: 16, fontWeight: "600", color: "#1A1A1A" },
+  subText: { color: "#555", fontSize: 14 },
   otpContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -188,7 +267,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#000",
   },
-  errorBorder: { borderColor: "red" }, // 👈 red border when error
+  errorBorder: { borderColor: "red" },
   errorText: {
     color: "red",
     fontSize: 13,
@@ -204,5 +283,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 10,
   },
+  changeNumberContainer: {
+    alignItems: "center",
+    marginTop: 15,
+  },
+  changeNumberText: {
+    color: "#555",
+    fontSize: 14,
+  },
+  changeLink: {
+    color: "#fb0404",
+    fontWeight: "600",
+    textDecorationLine: "underline",
+  },
   confirmText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  resendContainer: { alignItems: "center", marginTop: 15 },
+  resendText: { color: "#fb0404", fontSize: 15, fontWeight: "600" },
+  timerText: { color: "#777", fontSize: 14 },
 });

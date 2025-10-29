@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,27 +12,62 @@ import {
 } from "react-native";
 import auth from "@react-native-firebase/auth";
 import Loader from "../components/Loader";
+import { storeData, getData, USER_DATA } from "../service/localStorage";
+import NetInfo from "@react-native-community/netinfo";
+
 const LoginScreen = ({ navigation }) => {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [loading, setLoading] = useState(false);
-  const handleSendOTP = async () => {
-    if (phoneNumber.trim().length < 10) {
-      Alert.alert("Error", "Please enter a valid phone number");
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const savedData = await getData(USER_DATA);
+        if (savedData) {
+          const parsed = JSON.parse(savedData);
+          const savedPhone = parsed?.UserInfo?.phoneNo || "";
+          setPhoneNumber(savedPhone);
+        }
+      } catch (error) {
+        console.log("Error loading saved phone number:", error);
+      }
+    };
+    fetchUserData();
+  }, []);
+const handleSendOTP = async () => {
+  if (phoneNumber.trim().length < 10) {
+    Alert.alert("Error", "Please enter a valid 10-digit phone number.");
+    return;
+  }
+
+  try {
+    const net = await NetInfo.fetch();
+    if (!net.isConnected) {
+      Alert.alert("No Internet", "Please check your network connection and try again.");
       return;
     }
 
-    try {
-      setLoading(true);
-      const fullNumber = "+91" + phoneNumber; 
-      const confirmation = await auth().signInWithPhoneNumber(fullNumber);
-      setLoading(false);
-      navigation.navigate("OtpScreen", { confirmation, phoneNumber: fullNumber });
-    } catch (error) {
-      console.log("OTP send error:", error);
-      Alert.alert("Error", error.message);
-    }
-  };
+    setLoading(true);
 
+    // ✅ Format phone number with country code
+    const fullNumber = "+91" + phoneNumber;
+
+    // ✅ Send OTP using Firebase
+    const confirmation = await auth().signInWithPhoneNumber(fullNumber);
+
+    // ✅ Save phone number in AsyncStorage
+    const userData = { UserInfo: { phoneNo: phoneNumber } };
+    await storeData(USER_DATA, JSON.stringify(userData));
+
+    setLoading(false);
+
+    // ✅ Navigate to OTP screen
+    navigation.navigate("OtpScreen", { confirmation, phoneNumber: fullNumber });
+  } catch (error) {
+    console.log("OTP send error:", error);
+    Alert.alert("Error", error.message || "Something went wrong while sending the OTP.");
+    setLoading(false);
+  }
+};
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
@@ -81,7 +116,7 @@ const LoginScreen = ({ navigation }) => {
           </Text>
         </View>
       </ScrollView>
-         {loading && <Loader />}
+      {loading && <Loader />}
     </SafeAreaView>
   );
 };
