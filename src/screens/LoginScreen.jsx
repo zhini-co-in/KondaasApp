@@ -9,15 +9,45 @@ import {
   SafeAreaView,
   ScrollView,
   Alert,
+  Animated,
 } from "react-native";
 import auth from "@react-native-firebase/auth";
+import NetInfo from "@react-native-community/netinfo";
 import Loader from "../components/Loader";
 import { storeData, getData, USER_DATA } from "../service/localStorage";
-import NetInfo from "@react-native-community/netinfo";
 
 const LoginScreen = ({ navigation }) => {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
+  const slideAnim = useState(new Animated.Value(-60))[0]; // banner animation
+
+  // 🔹 Check network continuously
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      setIsConnected(state.isConnected);
+
+      if (!state.isConnected) {
+        // slide down when offline
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      } else {
+        // slide up when online
+        Animated.timing(slideAnim, {
+          toValue: -60,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      }
+    });
+
+    return () => unsubscribe();
+  }, [slideAnim]);
+
+  // 🔹 Load saved phone number
   useEffect(() => {
     const fetchUserData = async () => {
       try {
@@ -33,43 +63,44 @@ const LoginScreen = ({ navigation }) => {
     };
     fetchUserData();
   }, []);
-const handleSendOTP = async () => {
-  if (phoneNumber.trim().length < 10) {
-    Alert.alert("Error", "Please enter a valid 10-digit phone number.");
-    return;
-  }
 
-  try {
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) {
-      Alert.alert("No Internet", "Please check your network connection and try again.");
+  // 🔹 Handle Send OTP
+  const handleSendOTP = async () => {
+    if (phoneNumber.trim().length < 10) {
+      Alert.alert("Error", "Please enter a valid 10-digit phone number.");
       return;
     }
 
-    setLoading(true);
+    const net = await NetInfo.fetch();
+    if (!net.isConnected) {
+      return; // do nothing when offline
+    }
 
-    // ✅ Format phone number with country code
-    const fullNumber = "+91" + phoneNumber;
+    try {
+      setLoading(true);
+      const fullNumber = "+91" + phoneNumber;
+      const confirmation = await auth().signInWithPhoneNumber(fullNumber);
+      const userData = { UserInfo: { phoneNo: phoneNumber } };
+      await storeData(USER_DATA, JSON.stringify(userData));
 
-    // ✅ Send OTP using Firebase
-    const confirmation = await auth().signInWithPhoneNumber(fullNumber);
+      setLoading(false);
+      navigation.navigate("OtpScreen", { confirmation, phoneNumber: fullNumber });
+    } catch (error) {
+      console.log("OTP send error:", error);
+      Alert.alert("Error", error.message || "Something went wrong while sending the OTP.");
+      setLoading(false);
+    }
+  };
 
-    // ✅ Save phone number in AsyncStorage
-    const userData = { UserInfo: { phoneNo: phoneNumber } };
-    await storeData(USER_DATA, JSON.stringify(userData));
-
-    setLoading(false);
-
-    // ✅ Navigate to OTP screen
-    navigation.navigate("OtpScreen", { confirmation, phoneNumber: fullNumber });
-  } catch (error) {
-    console.log("OTP send error:", error);
-    Alert.alert("Error", error.message || "Something went wrong while sending the OTP.");
-    setLoading(false);
-  }
-};
   return (
     <SafeAreaView style={styles.safeArea}>
+      {/* 🔹 Internet Connection Banner */}
+      <Animated.View
+        style={[styles.netBanner, { transform: [{ translateY: slideAnim }] }]}
+      >
+        <Text style={styles.netBannerText}>No Internet Connection</Text>
+      </Animated.View>
+
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Image
@@ -101,7 +132,14 @@ const handleSendOTP = async () => {
             />
           </View>
 
-          <TouchableOpacity style={styles.otpButton} onPress={handleSendOTP}>
+          <TouchableOpacity
+            style={[
+              styles.otpButton,
+              !isConnected && { backgroundColor: "#aaa" }, // disable color
+            ]}
+            disabled={!isConnected}
+            onPress={handleSendOTP}
+          >
             <Text style={styles.otpButtonText}>Send OTP</Text>
           </TouchableOpacity>
 
@@ -116,6 +154,7 @@ const handleSendOTP = async () => {
           </Text>
         </View>
       </ScrollView>
+
       {loading && <Loader />}
     </SafeAreaView>
   );
@@ -124,20 +163,109 @@ const handleSendOTP = async () => {
 export default LoginScreen;
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#fb0404" },
-  header: { justifyContent: "center", alignItems: "center", backgroundColor: "#fb0404", paddingVertical: 40 },
-  logo: { width: 200, height: 100 },
-  bottomContainer: { backgroundColor: "#fff", borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 25, paddingVertical: 40, flexGrow: 1 },
-  indicatorWrapper: { alignItems: "center", marginBottom: 25 },
-  indicator: { width: 40, height: 4, backgroundColor: "#ddd", borderRadius: 2 },
-  welcomeContainer: { alignItems: "flex-start", marginBottom: 25 },
-  welcomeText: { fontSize: 22, fontWeight: "700", color: "#1A1A1A", marginBottom: 6 },
-  subText: { fontSize: 14, color: "#666" },
-  inputContainer: { width: "100%", marginBottom: 20 },
-  label: { fontSize: 14, color: "#333", marginBottom: 8, fontWeight: "600" },
-  input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 10, paddingVertical: 12, paddingHorizontal: 15, fontSize: 16, color: "#000" },
-  otpButton: { backgroundColor: "#444", width: "100%", paddingVertical: 14, borderRadius: 10, alignItems: "center", marginTop: 5 },
-  otpButtonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  termsText: { color: "#999", fontSize: 12, textAlign: "center", marginTop: 25, lineHeight: 18 },
-  termsLink: { color: "#fb0404", fontWeight: "600" },
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#fb0404",
+  },
+  // 🔹 Banner for no internet
+  netBanner: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "#fb0404",
+    paddingVertical: 10,
+    alignItems: "center",
+    zIndex: 999,
+  },
+  netBannerText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  header: {
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fb0404",
+    paddingVertical: 40,
+  },
+  logo: {
+    width: 200,
+    height: 100,
+  },
+  bottomContainer: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    paddingHorizontal: 25,
+    paddingVertical: 40,
+    flexGrow: 1,
+  },
+  indicatorWrapper: {
+    alignItems: "center",
+    marginBottom: 25,
+  },
+  indicator: {
+    width: 40,
+    height: 4,
+    backgroundColor: "#ddd",
+    borderRadius: 2,
+  },
+  welcomeContainer: {
+    alignItems: "flex-start",
+    marginBottom: 25,
+  },
+  welcomeText: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 6,
+  },
+  subText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  inputContainer: {
+    width: "100%",
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    color: "#333",
+    marginBottom: 8,
+    fontWeight: "600",
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    fontSize: 16,
+    color: "#000",
+  },
+  otpButton: {
+    backgroundColor: "#444",
+    width: "100%",
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 5,
+  },
+  otpButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  termsText: {
+    color: "#999",
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 25,
+    lineHeight: 18,
+  },
+  termsLink: {
+    color: "#fb0404",
+    fontWeight: "600",
+  },
 });
