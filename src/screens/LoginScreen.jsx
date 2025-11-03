@@ -22,20 +22,17 @@ const LoginScreen = ({ navigation }) => {
   const [isConnected, setIsConnected] = useState(true);
   const slideAnim = useState(new Animated.Value(-60))[0]; // banner animation
 
-  // 🔹 Check network continuously
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
       setIsConnected(state.isConnected);
 
       if (!state.isConnected) {
-        // slide down when offline
         Animated.timing(slideAnim, {
           toValue: 0,
           duration: 300,
           useNativeDriver: true,
         }).start();
       } else {
-        // slide up when online
         Animated.timing(slideAnim, {
           toValue: -60,
           duration: 300,
@@ -47,7 +44,6 @@ const LoginScreen = ({ navigation }) => {
     return () => unsubscribe();
   }, [slideAnim]);
 
-  // 🔹 Load saved phone number
   useEffect(() => {
     const fetchUserData = async () => {
       try {
@@ -64,7 +60,6 @@ const LoginScreen = ({ navigation }) => {
     fetchUserData();
   }, []);
 
-  // 🔹 Handle Send OTP
   const handleSendOTP = async () => {
     if (phoneNumber.trim().length < 10) {
       Alert.alert("Error", "Please enter a valid 10-digit phone number.");
@@ -73,7 +68,7 @@ const LoginScreen = ({ navigation }) => {
 
     const net = await NetInfo.fetch();
     if (!net.isConnected) {
-      return; // do nothing when offline
+      return;
     }
 
     try {
@@ -167,7 +162,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fb0404",
   },
-  // 🔹 Banner for no internet
   netBanner: {
     position: "absolute",
     top: 0,
