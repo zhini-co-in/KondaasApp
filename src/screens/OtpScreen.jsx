@@ -15,6 +15,8 @@ import firestore from "@react-native-firebase/firestore";
 import auth from "@react-native-firebase/auth";
 import Loader from "../components/Loader";
 import { storeData, USER_DATA } from "../service/localStorage";
+import { setToken, getSolarmanToken } from "../api/api";
+import { SOLARMAN_CONFIG } from "../api/solarmanAuth";
 
 const OtpScreen = ({ navigation, route }) => {
   const { confirmation, phoneNumber } = route.params;
@@ -43,96 +45,124 @@ const OtpScreen = ({ navigation, route }) => {
     if (text && index < otp.length - 1) inputs.current[index + 1].focus();
   };
 
-  const handleConfirm = async () => {
-    console.log("=== handleConfirm() called ===");
-    const otpCode = otp.join("");
-    console.log("Entered OTP:", otpCode);
+const handleConfirm = async () => {
+  const otpCode = otp.join("");
+  if (otpCode.length < 6) {
+    Alert.alert("Error", "Please enter the full OTP");
+    return;
+  }
 
-    if (otpCode.length < 6) {
-      console.log("❌ Incomplete OTP entered:", otpCode);
-      Alert.alert("Error", "Please enter the full OTP");
-      return;
-    }
+  try {
+    setLoading(true);
+    console.log("⏳ Verifying OTP...");
 
-    try {
-      setLoading(true);
-      console.log("⏳ Verifying OTP with Firebase...");
+    const result = await confirmation.confirm(otpCode);
+    console.log("✅ OTP Verified:", result);
 
-      const result = await confirmation.confirm(otpCode);
-      console.log("✅ OTP verified successfully:", result);
+    const cleanPhone = phoneNumber?.replace(/^\+91/, "");
+    if (!cleanPhone) throw new Error("Invalid phone number");
 
-      const cleanPhone = phoneNumber?.replace(/^\+91/, "");
-      console.log("Clean phone number:", cleanPhone);
+    const appInfo = {
+      version: "1.0.0",
+      buildNo: "1",
+      lastLogin: new Date().toISOString(),
+    };
 
-      if (!cleanPhone) throw new Error("Invalid phone number");
+    const platformInfo = {
+      os: DeviceInfo.getSystemName(),
+      version: DeviceInfo.getSystemVersion(),
+    };
 
-      // --- App Info ---
-      const appInfo = {
-        version: "1.0.0",
-        buildNo: "1",
-        lastLogin: new Date().toISOString(),
-      };
-      console.log("App Info:", appInfo);
+    const userRef = firestore().collection("userDetails").doc(cleanPhone);
+    const docSnap = await userRef.get();
 
-      // --- Platform Info ---
-      const platformInfo = {
-        os: DeviceInfo.getSystemName(),
-        version: DeviceInfo.getSystemVersion(),
-      };
-      console.log("Platform Info:", platformInfo);
+    let userData;
+    if (docSnap.exists) {
+      userData = docSnap.data() || {};
+      const userInfo = userData.UserInfo || {};
 
-      // --- Firestore User Reference ---
-      const userDocRef = firestore().collection("userDetails").doc(cleanPhone);
-      const userDoc = await userDocRef.get();
-      console.log("Firestore doc exists?", userDoc.exists);
-
-      let userData;
-
-      if (userDoc.exists) {
-        console.log("🔁 Existing user found. Updating lastLogin & platform info...");
-        userData = userDoc.data();
-        await userDocRef.update({
-          "AppInfo.lastLogin": appInfo.lastLogin,
-          PlatformInfo: platformInfo,
-        });
-      } else {
-        console.log("🆕 New user detected. Creating Firestore document...");
-        userData = {
-          AppInfo: appInfo,
-          PlatformInfo: platformInfo,
-          UserInfo: { phoneNo: cleanPhone, name: "" },
+      if (Object.keys(userInfo).length === 0) {
+        console.log("🆕 UserInfo empty — adding default values...");
+        userData.UserInfo = {
+          phoneNo: cleanPhone,
+          name: "",
+          deviceId: "",
+          email: "",
+          password: "",
         };
-        await userDocRef.set(userData);
+        await userRef.set({ UserInfo: userData.UserInfo }, { merge: true });
       }
 
-      const finalData = { ...userData, AppInfo: appInfo, PlatformInfo: platformInfo };
-      console.log("Final data to be stored:", finalData);
-
-      // ✅ Store only on successful OTP confirmation
-      await storeData(USER_DATA, JSON.stringify(finalData));
-      console.log("✅ User data successfully stored in local storage");
-
-      // --- Navigation logic ---
-      const deviceId = userData?.UserInfo?.deviceId;
-      console.log("Device ID found:", deviceId);
-
-      if (deviceId && deviceId.trim() !== "") {
-        console.log("🔄 Navigating to mainScreen...");
-        navigation.reset({ index: 0, routes: [{ name: "mainScreen" }] });
-      } else {
-        console.log("➡️ Navigating to ProductsHomeScreen...");
-        navigation.reset({ index: 0, routes: [{ name: "ProductsHomeScreen" }] });
-      }
-
-    } catch (error) {
-      console.error("🚨 OTP Confirmation Error:", error);
-      console.log("❌ No data stored due to OTP failure");
-      setError(true);
-    } finally {
-      console.log("=== handleConfirm() completed ===");
-      setLoading(false);
+      await userRef.set({ AppInfo: appInfo, PlatformInfo: platformInfo }, { merge: true });
+      console.log("🔁 Updated existing user");
+    } else {
+      userData = {
+        AppInfo: appInfo,
+        PlatformInfo: platformInfo,
+        UserInfo: {
+          phoneNo: cleanPhone,
+          name: "",
+          deviceId: "",
+          email: "",
+          password: "",
+        },
+      };
+      await userRef.set(userData);
+      console.log("🆕 Created new user document");
     }
-  };
+
+    const { email, password, deviceId } = userData?.UserInfo || {};
+    let accessToken = null;
+
+    if (email && password) {
+      console.log("🔐 Fetching Solarman Token...");
+      const tokenData = await getSolarmanToken(
+        SOLARMAN_CONFIG.appId,
+        SOLARMAN_CONFIG.appSecret,
+        email,
+        password,
+        SOLARMAN_CONFIG.language
+      );
+
+      console.log("✅ Solarman Token Response:", tokenData);
+
+      if (tokenData?.access_token) {
+        accessToken = tokenData.access_token;
+        console.log("🔑 Access Token:", accessToken);
+      } else {
+        console.warn("⚠️ No access token found in response");
+      }
+    } else {
+      console.warn("⚠️ Email or password missing — skipping token fetch");
+    }
+
+    // ✅ Add accessToken to stored data
+    const finalData = {
+      ...userData,
+      AppInfo: appInfo,
+      PlatformInfo: platformInfo,
+      accessToken: accessToken || null,
+    };
+
+    await storeData(USER_DATA, JSON.stringify(finalData));
+    console.log("✅ User data stored locally with access token:", accessToken);
+
+    // ✅ Navigation
+    if (deviceId && deviceId.trim() !== "") {
+      console.log("➡️ Navigating to mainScreen...");
+      navigation.reset({ index: 0, routes: [{ name: "mainScreen" }] });
+    } else {
+      console.log("➡️ Navigating to ProductsHomeScreen...");
+      navigation.reset({ index: 0, routes: [{ name: "ProductsHomeScreen" }] });
+    }
+  } catch (err) {
+    console.error("🚨 OTP Verification Error:", err);
+    setError(true);
+  } finally {
+    setLoading(false);
+  }
+};
+
 const handleChangeNumber = async () => {
   await storeData(USER_DATA, JSON.stringify({ UserInfo: { phoneNo: "" } }));
   navigation.goBack();

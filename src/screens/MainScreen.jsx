@@ -5,19 +5,23 @@ import {
   ImageBackground,
   StyleSheet,
   Image,
+  Modal,
   SafeAreaView,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
-
+import { fetchStationList } from "../api/api"; 
 import LightBg from "../../assets/images/Lightmode.png";
 import DarkBg from "../../assets/images/Darkmode.png";
 import ProfileImg from "../../assets/images/Round.png";
 const MainScreen = ({ navigation }) => {
   const [isDay, setIsDay] = useState(isDaytime());
   const [currentTime, setCurrentTime] = useState(new Date());
-
+  const [visible, setVisible] = useState(false);
+  const [stations, setStations] = useState([]);
+  const [loadingStations, setLoadingStations] = useState(false);
   function isDaytime() {
     const hour = new Date().getHours();
     return hour >= 6 && hour < 18;
@@ -38,6 +42,12 @@ const MainScreen = ({ navigation }) => {
   });
   const formattedTemp = "32°C";
   const formattedCity = "Madurai";
+    const loadStations = async () => {
+    setLoadingStations(true);
+    const data = await fetchStationList();
+    setStations(data);
+    setLoadingStations(false);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -49,14 +59,14 @@ const MainScreen = ({ navigation }) => {
         {/* Header Row */}
         {/* --- Header Row --- */}
         <View style={styles.headerRow}>
-          {/* Left Side: Profile + Text */}
-          <View style={styles.leftSection}>
-       <TouchableOpacity onPress={() => navigation.navigate("ProfileScreen")}>
-  <Image source={ProfileImg} style={styles.profileImg} />
-</TouchableOpacity>
+        {/* Left Section */}
+        <View style={styles.leftSection}>
+          <TouchableOpacity onPress={() => navigation.navigate("ProfileScreen")}>
+            <Image source={ProfileImg}  style={styles.profileImg} />
+          </TouchableOpacity>
 
-
-            <View style={styles.nameContainer}>
+          <View style={styles.nameContainer}>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
               <Text
                 style={[
                   styles.profileName,
@@ -65,32 +75,27 @@ const MainScreen = ({ navigation }) => {
               >
                 Ram kumar
               </Text>
-              <View style={styles.liveRow}>
-                <View style={styles.liveDot} />
-                <Text style={styles.liveText}>Live</Text>
-              </View>
+               <TouchableOpacity
+                  onPress={() => {
+                    setVisible(true);
+                    loadStations();
+                  }}
+                  style={{ marginLeft: 6 }}
+                >
+                <Ionicons
+                  name="chevron-forward-circle-outline"
+                  size={20}
+                  color={isDay ? "#000" : "#fff"}
+                />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.liveRow}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>Live</Text>
             </View>
           </View>
-
-          {/* Right Side Icons */}
-          <View style={styles.iconRow}>
-            <TouchableOpacity style={styles.iconBox}>
-              <Ionicons
-                name="shield-checkmark-outline"
-                size={18}
-                color={isDay ? "#000" : "#fff"}
-              />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.iconBox}>
-              <Ionicons
-                name="document-text-outline"
-                size={18}
-                color={isDay ? "#000" : "#fff"}
-              />
-            </TouchableOpacity>
-          </View>
         </View>
+      </View>
 
 
         {/* Time, Temp, City */}
@@ -185,8 +190,54 @@ const MainScreen = ({ navigation }) => {
             >
               <Text style={styles.grayButtonText}>View All Our Products</Text>
             </TouchableOpacity>
-
           </View>
+      {/* 🔹 Modal */}
+      <Modal
+        visible={visible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Family List</Text>
+              <TouchableOpacity onPress={() => setVisible(false)}>
+                <Ionicons name="close-outline" size={24} color="#000" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.infoRow}>
+              <Ionicons name="information-circle-outline" size={16} color="#777" />
+              <Text style={styles.infoText}>
+                Click the list to switch to the household you want to view.
+              </Text>
+            </View>
+
+            {loadingStations ? (
+              <ActivityIndicator size="large" color="#007BFF" />
+            ) : (
+              stations.map((item, index) => (
+                <TouchableOpacity key={index} style={styles.familyItem}>
+                  <Image
+                    source={LightBg}
+                    style={styles.familyImg}
+                  />
+                  <View>
+                    <Text style={styles.familyName}>{item.name}</Text>
+                    <Text style={styles.familyAddress}>{item.locationAddress}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
+
+            <TouchableOpacity style={styles.homeButton}>
+              <Ionicons name="settings-outline" size={16} color="#007BFF" />
+              <Text style={styles.homeButtonText}>Home settings</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -357,8 +408,63 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: "#444",
   },
+ modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  modalContainer: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 40,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  modalTitle: { fontSize: 18, fontWeight: "bold", color: "#000" },
+  infoRow: { flexDirection: "row", alignItems: "flex-start", marginBottom: 10 },
+  infoText: {
+    fontSize: 13,
+    color: "#666",
+    flex: 1,
+    marginLeft: 4,
+  },
 
-  // --- Buttons ---
+  familyItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    padding: 10,
+    marginVertical: 5,
+  },
+  activeFamily: { backgroundColor: "#E7F1FF" },
+  familyImg: { width: 50, height: 50, marginRight: 10, borderRadius: 10 },
+  familyName: { fontSize: 15, fontWeight: "600", color: "#000" },
+  familyNameActive: { fontSize: 15, fontWeight: "700", color: "#007BFF" },
+  familyAddress: { fontSize: 12, color: "#555" },
+
+  homeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#007BFF",
+    borderRadius: 8,
+    marginTop: 15,
+    paddingVertical: 10,
+  },
+  homeButtonText: {
+    marginLeft: 6,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#007BFF",
+  },
   buttonContainer: { alignItems: "center", marginTop: 25 },
   primaryButton: {
     backgroundColor: "#e60000",
