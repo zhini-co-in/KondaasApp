@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 import {
     View,
@@ -12,15 +12,74 @@ import {
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
+import { fetchStationList } from "../api/api";
+import Loader from "../components/Loader";
+import { getStorageData, USER_DATA } from "../service/localStorage";
+const ProfileScreen = ({ route, navigation }) => {
+    const { stationId } = route.params || {};
+    const [showLogoutPopup, setShowLogoutPopup] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [userData, setUserData] = useState(null);
+const [stationData, setStationData] = useState(null);
 
-const ProfileScreen = ({ navigation }) => {
-     const [showLogoutPopup, setShowLogoutPopup] = useState(false);
+    useEffect(() => {
+        const loadUserData = async () => {
+            try {
+                const data = await getStorageData(USER_DATA);
+                if (data) {
+                    const parsedData = JSON.parse(data);
+                    setUserData(parsedData);
+                }
+            } catch (error) {
+                console.error("Error loading user data:", error);
+            }
+        };
 
-  // 🔹 Handle logout action
-  const handleLogout = () => {
-    setShowLogoutPopup(false);
-    navigation.replace("Login"); // Redirect to Login screen after logout
-  };
+        loadUserData();
+    }, []);
+    useEffect(() => {
+        loadStations();
+    }, []);
+
+  const loadStations = async () => {
+  try {
+    console.log("Fetching station list...");
+    setLoading(true);
+
+    const response = await fetchStationList();
+    console.log("Full Response:", JSON.stringify(response, null, 2));
+
+    let stationArray = [];
+
+    if (Array.isArray(response)) {
+      stationArray = response;
+    } else if (response && response.stationList) {
+      stationArray = response.stationList;
+    } else {
+      console.log("No valid station list found in response");
+    }
+
+    // ✅ Find the station that matches the stationId
+    const selected = stationArray.find((st) => st.id === stationId);
+
+    if (selected) {
+      console.log("✅ Selected Station:", selected);
+      setStationData(selected); // Store in state
+    } else {
+      console.log("⚠️ No station found for ID:", stationId);
+    }
+
+  } catch (error) {
+    console.log("Error fetching stations:", error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+    const handleLogout = () => {
+        setShowLogoutPopup(false);
+        navigation.replace("Login");
+    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -33,25 +92,31 @@ const ProfileScreen = ({ navigation }) => {
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Profile</Text>
                 </View>
-
-                {/* Profile Card */}
                 <View style={styles.profileCard}>
                     <View>
-                        <Text style={styles.userName}>Ram Kumar</Text>
-                        <Text style={styles.memberSince}>Member since Aug 2023</Text>
+                        <Text style={styles.userName}>
+                            {userData?.UserInfo?.name || "Guest User"}
+                        </Text>
+                        {/* <Text style={styles.memberSince}>Member since Aug 2023</Text> */}
                         <View style={styles.contactRow}>
                             <Ionicons name="call-outline" size={16} color="#555" />
-                            <Text style={styles.contactText}> +91 9514583588</Text>
+                            <Text style={styles.contactText}>
+                                {userData?.UserInfo?.phoneNo
+                                    ? `+91 ${userData.UserInfo.phoneNo}`
+                                    : "Not available"}
+                            </Text>
                         </View>
                         <View style={styles.contactRow}>
                             <Ionicons name="mail-outline" size={16} color="#555" />
-                            <Text style={styles.contactText}> john@gmail.com</Text>
+                            <Text style={styles.contactText}>
+                                {userData?.UserInfo?.email || "Not available"}
+                            </Text>
                         </View>
                     </View>
+
                     <MaterialIcons name="verified-user" size={26} color="#f15b5d" />
                 </View>
 
-                {/* Solar Anniversary */}
                 <View style={styles.card}>
                     <Text style={styles.sectionTitle}>🌞 Solar Anniversary with Kondaas</Text>
                     <Text style={styles.labelText}>Your solar journey started on</Text>
@@ -67,40 +132,51 @@ const ProfileScreen = ({ navigation }) => {
                         </View>
                     </View>
                 </View>
+             <View style={styles.card}>
+  <Text style={styles.sectionTitle}>⚙️ System Details</Text>
 
-                {/* System Details */}
-                <View style={styles.card}>
-                    <Text style={styles.sectionTitle}>⚙️ System Details</Text>
-                    <View style={styles.systemGrid}>
-                        <View style={styles.systemBox}>
-                            <Text style={styles.systemLabel}>⚡ Capacity</Text>
-                            <Text style={styles.systemValue}>5.5 kW</Text>
-                        </View>
-                        <View style={styles.systemBox}>
-                            <Text style={styles.systemLabel}>🔆 Panels</Text>
-                            <Text style={styles.systemValue}>20 Units</Text>
-                        </View>
-                    </View>
-                    <View style={styles.systemGrid}>
-                        <View style={styles.systemBox}>
-                            <Text style={styles.systemLabel}>🟢 Type</Text>
-                            <Text style={styles.systemValue}>On-Grid</Text>
-                        </View>
-                        <View style={styles.systemBox}>
-                            <Text style={styles.systemLabel}>🕒 Warranty</Text>
-                            <Text style={styles.systemValue}>25 Years</Text>
-                        </View>
-                    </View>
-                    <Text style={styles.installationText}>
-                        Installation Date: <Text style={styles.boldText}>Aug 15, 2023</Text>
-                    </Text>
-                    <Text style={styles.installationText}>
-                        Installer: <Text style={styles.boldText}>Kondaas Solar Solutions</Text>
-                    </Text>
-                    <Text style={styles.installationText}>
-                        System ID: <Text style={styles.boldText}>KDS-JR-2023-8975</Text>
-                    </Text>
-                </View>
+  <View style={styles.systemGrid}>
+    <View style={styles.systemBox}>
+      <Text style={styles.systemLabel}>⚡ Capacity</Text>
+      <Text style={styles.systemValue}>
+        {stationData?.installedCapacity
+          ? `${stationData.installedCapacity} kW`
+          : "Not available"}
+      </Text>
+    </View>
+    <View style={styles.systemBox}>
+      <Text style={styles.systemLabel}>🟢 Type</Text>
+      <Text style={styles.systemValue}>
+        {stationData?.type || "Not available"}
+      </Text>
+    </View>
+  </View>
+
+  <Text style={styles.installationText}>
+    Installation Date:{" "}
+    <Text style={styles.boldText}>
+      {stationData?.startOperatingTime
+        ? new Date(stationData.startOperatingTime * 1000).toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })
+        : "Not available"}
+    </Text>
+  </Text>
+
+  <Text style={styles.installationText}>
+    Station ID: <Text style={styles.boldText}>{stationData?.id || "Not available"}</Text>
+  </Text>
+
+  <Text style={styles.installationText}>
+    Address:{" "}
+    <Text style={styles.boldText}>
+      {stationData?.locationAddress || "Not available"}
+    </Text>
+  </Text>
+</View>
+
 
                 {/* Environmental Impact */}
                 <View style={styles.card}>
@@ -144,38 +220,39 @@ const ProfileScreen = ({ navigation }) => {
                 </View>
 
                 {/* Logout Button */}
-               <TouchableOpacity
-          style={styles.logoutButton}
-          onPress={() => setShowLogoutPopup(true)}
-        >
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
+                <TouchableOpacity
+                    style={styles.logoutButton}
+                    onPress={() => setShowLogoutPopup(true)}
+                >
+                    <Text style={styles.logoutText}>Logout</Text>
+                </TouchableOpacity>
 
             </ScrollView>
-             <Modal
-        transparent
-        visible={showLogoutPopup}
-        animationType="fade"
-        onRequestClose={() => setShowLogoutPopup(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.popupBox}>
-            <Ionicons name="log-out-outline" size={45} color="#f15b5d" />
-            <Text style={styles.popupText}>Are you sure want to logout?</Text>
-            <View style={styles.popupButtons}>
-              <TouchableOpacity style={styles.yesButton} onPress={handleLogout}>
-                <Text style={styles.yesText}>Yes</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.noButton}
-                onPress={() => setShowLogoutPopup(false)}
-              >
-                <Text style={styles.noText}>No</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+            <Modal
+                transparent
+                visible={showLogoutPopup}
+                animationType="fade"
+                onRequestClose={() => setShowLogoutPopup(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.popupBox}>
+                        <Ionicons name="log-out-outline" size={45} color="#f15b5d" />
+                        <Text style={styles.popupText}>Are you sure want to logout?</Text>
+                        <View style={styles.popupButtons}>
+                            <TouchableOpacity style={styles.yesButton} onPress={handleLogout}>
+                                <Text style={styles.yesText}>Yes</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.noButton}
+                                onPress={() => setShowLogoutPopup(false)}
+                            >
+                                <Text style={styles.noText}>No</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+            {loading && <Loader />}
         </SafeAreaView>
     );
 };
@@ -281,44 +358,44 @@ const styles = StyleSheet.create({
     },
     logoutText: { color: "#fff", fontWeight: "700", fontSize: 16 },
     // 🔹 Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  popupBox: {
-    width: "80%",
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    paddingVertical: 25,
-    paddingHorizontal: 20,
-    alignItems: "center",
-    elevation: 10,
-  },
-  popupText: {
-    fontSize: 16,
-    color: "#333",
-    marginVertical: 15,
-    textAlign: "center",
-  },
-  popupButtons: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    width: "100%",
-  },
-  yesButton: {
-    backgroundColor: "#f15b5d",
-    paddingVertical: 10,
-    paddingHorizontal: 30,
-    borderRadius: 8,
-  },
-  noButton: {
-    backgroundColor: "#888",
-    paddingVertical: 10,
-    paddingHorizontal: 30,
-    borderRadius: 8,
-  },
-  yesText: { color: "#fff", fontWeight: "700" },
-  noText: { color: "#fff", fontWeight: "700" },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.4)",
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    popupBox: {
+        width: "80%",
+        backgroundColor: "#fff",
+        borderRadius: 12,
+        paddingVertical: 25,
+        paddingHorizontal: 20,
+        alignItems: "center",
+        elevation: 10,
+    },
+    popupText: {
+        fontSize: 16,
+        color: "#333",
+        marginVertical: 15,
+        textAlign: "center",
+    },
+    popupButtons: {
+        flexDirection: "row",
+        justifyContent: "space-around",
+        width: "100%",
+    },
+    yesButton: {
+        backgroundColor: "#f15b5d",
+        paddingVertical: 10,
+        paddingHorizontal: 30,
+        borderRadius: 8,
+    },
+    noButton: {
+        backgroundColor: "#888",
+        paddingVertical: 10,
+        paddingHorizontal: 30,
+        borderRadius: 8,
+    },
+    yesText: { color: "#fff", fontWeight: "700" },
+    noText: { color: "#fff", fontWeight: "700" },
 });

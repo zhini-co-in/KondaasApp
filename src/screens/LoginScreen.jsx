@@ -20,7 +20,7 @@ const LoginScreen = ({ navigation }) => {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [loading, setLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
-  const slideAnim = useState(new Animated.Value(-60))[0]; // banner animation
+  const slideAnim = useState(new Animated.Value(-60))[0];
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {

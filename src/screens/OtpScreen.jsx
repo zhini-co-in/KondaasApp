@@ -45,128 +45,126 @@ const OtpScreen = ({ navigation, route }) => {
     if (text && index < otp.length - 1) inputs.current[index + 1].focus();
   };
 
-const handleConfirm = async () => {
-  const otpCode = otp.join("");
-  if (otpCode.length < 6) {
-    Alert.alert("Error", "Please enter the full OTP");
-    return;
-  }
+  const handleConfirm = async () => {
+    const otpCode = otp.join("");
+    if (otpCode.length < 6) {
+      Alert.alert("Error", "Please enter the full OTP");
+      return;
+    }
 
-  try {
-    setLoading(true);
-    console.log("⏳ Verifying OTP...");
+    try {
+      setLoading(true);
+      console.log("⏳ Verifying OTP...");
 
-    const result = await confirmation.confirm(otpCode);
-    console.log("✅ OTP Verified:", result);
+      const result = await confirmation.confirm(otpCode);
+      console.log("✅ OTP Verified:", result);
 
-    const cleanPhone = phoneNumber?.replace(/^\+91/, "");
-    if (!cleanPhone) throw new Error("Invalid phone number");
+      const cleanPhone = phoneNumber?.replace(/^\+91/, "");
+      if (!cleanPhone) throw new Error("Invalid phone number");
 
-    const appInfo = {
-      version: "1.0.0",
-      buildNo: "1",
-      lastLogin: new Date().toISOString(),
-    };
+      const appInfo = {
+        version: "1.0.0",
+        buildNo: "1",
+        lastLogin: new Date().toISOString(),
+      };
 
-    const platformInfo = {
-      os: DeviceInfo.getSystemName(),
-      version: DeviceInfo.getSystemVersion(),
-    };
+      const platformInfo = {
+        os: DeviceInfo.getSystemName(),
+        version: DeviceInfo.getSystemVersion(),
+      };
 
-    const userRef = firestore().collection("userDetails").doc(cleanPhone);
-    const docSnap = await userRef.get();
+      const userRef = firestore().collection("userDetails").doc(cleanPhone);
+      const docSnap = await userRef.get();
 
-    let userData;
-    if (docSnap.exists) {
-      userData = docSnap.data() || {};
-      const userInfo = userData.UserInfo || {};
+      let userData;
+      if (docSnap.exists) {
+        userData = docSnap.data() || {};
+        const userInfo = userData.UserInfo || {};
 
-      if (Object.keys(userInfo).length === 0) {
-        console.log("🆕 UserInfo empty — adding default values...");
-        userData.UserInfo = {
-          phoneNo: cleanPhone,
-          name: "",
-          deviceId: "",
-          email: "",
-          password: "",
+        if (Object.keys(userInfo).length === 0) {
+          console.log("🆕 UserInfo empty — adding default values...");
+          userData.UserInfo = {
+            phoneNo: cleanPhone,
+            name: "",
+            deviceId: "",
+            email: "",
+            password: "",
+          };
+          await userRef.set({ UserInfo: userData.UserInfo }, { merge: true });
+        }
+
+        await userRef.set({ AppInfo: appInfo, PlatformInfo: platformInfo }, { merge: true });
+        console.log("🔁 Updated existing user");
+      } else {
+        userData = {
+          AppInfo: appInfo,
+          PlatformInfo: platformInfo,
+          UserInfo: {
+            phoneNo: cleanPhone,
+            name: "",
+            deviceId: "",
+            email: "",
+            password: "",
+          },
         };
-        await userRef.set({ UserInfo: userData.UserInfo }, { merge: true });
+        await userRef.set(userData);
+        console.log("🆕 Created new user document");
       }
 
-      await userRef.set({ AppInfo: appInfo, PlatformInfo: platformInfo }, { merge: true });
-      console.log("🔁 Updated existing user");
-    } else {
-      userData = {
+      const { email, password, deviceId } = userData?.UserInfo || {};
+      let accessToken = null;
+
+      if (email && password) {
+        console.log("🔐 Fetching Solarman Token...");
+        const tokenData = await getSolarmanToken(
+          SOLARMAN_CONFIG.appId,
+          SOLARMAN_CONFIG.appSecret,
+          email,
+          password,
+          SOLARMAN_CONFIG.language
+        );
+
+        console.log("✅ Solarman Token Response:", tokenData);
+
+        if (tokenData?.access_token) {
+          accessToken = tokenData.access_token;
+          console.log("🔑 Access Token:", accessToken);
+        } else {
+          console.warn("⚠️ No access token found in response");
+        }
+      } else {
+        console.warn("⚠️ Email or password missing — skipping token fetch");
+      }
+
+      const finalData = {
+        ...userData,
         AppInfo: appInfo,
         PlatformInfo: platformInfo,
-        UserInfo: {
-          phoneNo: cleanPhone,
-          name: "",
-          deviceId: "",
-          email: "",
-          password: "",
-        },
+        accessToken: accessToken || null,
       };
-      await userRef.set(userData);
-      console.log("🆕 Created new user document");
-    }
 
-    const { email, password, deviceId } = userData?.UserInfo || {};
-    let accessToken = null;
-
-    if (email && password) {
-      console.log("🔐 Fetching Solarman Token...");
-      const tokenData = await getSolarmanToken(
-        SOLARMAN_CONFIG.appId,
-        SOLARMAN_CONFIG.appSecret,
-        email,
-        password,
-        SOLARMAN_CONFIG.language
-      );
-
-      console.log("✅ Solarman Token Response:", tokenData);
-
-      if (tokenData?.access_token) {
-        accessToken = tokenData.access_token;
-        console.log("🔑 Access Token:", accessToken);
+      await storeData(USER_DATA, JSON.stringify(finalData));
+      console.log("✅ User data stored locally with access token:", accessToken);
+      console.log("🔹 User Info:", userData);
+      if (deviceId && deviceId.trim() !== "") {
+        console.log("➡️ Navigating to mainScreen...");
+        navigation.reset({ index: 0, routes: [{ name: "mainScreen" }] });
       } else {
-        console.warn("⚠️ No access token found in response");
+        console.log("➡️ Navigating to ProductsHomeScreen...");
+        navigation.reset({ index: 0, routes: [{ name: "ProductsHomeScreen" }] });
       }
-    } else {
-      console.warn("⚠️ Email or password missing — skipping token fetch");
+    } catch (err) {
+      console.error("🚨 OTP Verification Error:", err);
+      setError(true);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    // ✅ Add accessToken to stored data
-    const finalData = {
-      ...userData,
-      AppInfo: appInfo,
-      PlatformInfo: platformInfo,
-      accessToken: accessToken || null,
-    };
-
-    await storeData(USER_DATA, JSON.stringify(finalData));
-    console.log("✅ User data stored locally with access token:", accessToken);
-
-    // ✅ Navigation
-    if (deviceId && deviceId.trim() !== "") {
-      console.log("➡️ Navigating to mainScreen...");
-      navigation.reset({ index: 0, routes: [{ name: "mainScreen" }] });
-    } else {
-      console.log("➡️ Navigating to ProductsHomeScreen...");
-      navigation.reset({ index: 0, routes: [{ name: "ProductsHomeScreen" }] });
-    }
-  } catch (err) {
-    console.error("🚨 OTP Verification Error:", err);
-    setError(true);
-  } finally {
-    setLoading(false);
-  }
-};
-
-const handleChangeNumber = async () => {
-  await storeData(USER_DATA, JSON.stringify({ UserInfo: { phoneNo: "" } }));
-  navigation.goBack();
-};
+  const handleChangeNumber = async () => {
+    await storeData(USER_DATA, JSON.stringify({ UserInfo: { phoneNo: "" } }));
+    navigation.goBack();
+  };
 
   const handleResendOtp = async () => {
     try {
@@ -240,14 +238,14 @@ const handleChangeNumber = async () => {
               <Text style={styles.timerText}>Resend available in {timer}s</Text>
             )}
           </View>
-         <TouchableOpacity
-  style={styles.changeNumberContainer}
-  onPress={handleChangeNumber}
->
-  <Text style={styles.changeNumberText}>
-    Wrong number? <Text style={styles.changeLink}>Change Phone Number</Text>
-  </Text>
-</TouchableOpacity>
+          <TouchableOpacity
+            style={styles.changeNumberContainer}
+            onPress={handleChangeNumber}
+          >
+            <Text style={styles.changeNumberText}>
+              Wrong number? <Text style={styles.changeLink}>Change Phone Number</Text>
+            </Text>
+          </TouchableOpacity>
 
 
         </View>

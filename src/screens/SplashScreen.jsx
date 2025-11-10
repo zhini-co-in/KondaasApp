@@ -29,7 +29,7 @@ const SplashScreen = () => {
           return;
         }
 
-        console.log("✅ USER_DATA found:", storedData);
+        console.log(" USER_DATA found:", storedData);
 
         const userData = JSON.parse(storedData);
         const lastLogin = userData?.AppInfo?.lastLogin;

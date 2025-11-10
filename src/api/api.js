@@ -1,4 +1,3 @@
-// api.js
 import axios from "axios";
 import { getData, getStorageData, USER_DATA } from "../service/localStorage";
 
@@ -16,10 +15,8 @@ export const setToken = (token) => {
 };
 export const setAuthToken = async () => {
   try {
-    const userData = await getStorageData(USER_DATA); // ✅ your correct function name
+    const userData = await getStorageData(USER_DATA);
     const parsed = userData ? JSON.parse(userData) : {};
-
-    // ✅ Try all possible token keys
     const token =
       parsed?.accessToken || parsed?.access_token || parsed?.solarmanToken;
 
@@ -64,6 +61,50 @@ export const fetchStationList = async () => {
     return [];
   }
 };
+
+export const fetchStationDevices = async (stationId) => {
+  try {
+    await setAuthToken();
+
+    const body = {
+      page: 1,
+      size: 10,
+      stationId: stationId,
+    };
+
+    const response = await api.post(
+      "https://globalapi.solarmanpv.com/station/v1.0/device?language=en",
+      body
+    );
+
+    console.log("✅ Station Devices Response:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("🚨 Error fetching station devices:", error);
+    return null;
+  }
+};
+export const fetchHistoricalData = async (body) => {
+  try {
+    const res = await api.post("station/v1.0/history?language=en", body);
+    return res.data;
+  } catch (err) {
+    console.error("🚨 API fetch error:", err.response?.data || err.message);
+    throw err;
+  }
+};
+export const fetchRealTimeData = async (body) => {
+  try {
+    await setAuthToken(); // attach token to header
+    const res = await api.post("station/v1.0/realTime?language=en", body);
+    return res.data;
+  } catch (err) {
+    console.error("🚨 Real-time API error:", err.response?.data || err.message);
+    throw err;
+  }
+};
+
+
 export default api;
 
 

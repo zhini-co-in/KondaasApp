@@ -12,41 +12,66 @@ import {
 import Ionicons from "react-native-vector-icons/Ionicons";
 import MultiLineChart from "../components/MultiLineChart";
 import { fetchHistoricalData } from "../api/api";
-import Loader from '../components/Loader';
-const KondaasAssuredScreen = ({ navigation }) => {
+import Loader from "../components/Loader";
+
+const KondaasAssuredScreen = ({ navigation, route }) => {
+  const { stationId } = route.params || {};
+  console.log(" Received Station ID:", stationId);
   const [chartData, setChartData] = useState([]);
   const [labels, setLabels] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const token = "817f88303a0f82f933ee6497a33c2ae44223d98a82aee035";
+  const [totals, setTotals] = useState({ generated: 0, committed: 0 });
 
   const loadData = async () => {
     try {
+
       setLoading(true);
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, "0");
+      const day = String(today.getDate()).padStart(2, "0");
+      const startTime = `${year}-${month}-01`;
+      const endTime = `${year}-${month}-${day}`;
       const body = {
-        deviceId: 200203179,
-        deviceSn: "dev1800078101",
-        timeType: 4,
-        startTime: "2019-01-01",
-        endTime: "2019-05-05",
+        stationId,
+        timeType: 2,
+        startTime,
+        endTime,
       };
+      console.log(" Request Body:", JSON.stringify(body, null, 2));
+      const data = await fetchHistoricalData(body);
+      console.log(" Full API Response:", data);
 
-      const data = await fetchHistoricalData(body, token);
+      if (data?.success && Array.isArray(data.stationDataItems)) {
+        const values = data.stationDataItems.map((item) =>
+          parseFloat(item.generationValue || 0)
+        );
 
-      if (data?.success && data?.dataList) {
-        const values = data.dataList.map((item) => parseFloat(item.value));
-        const dates = data.dataList.map((item) => item.time);
+        const labels = data.stationDataItems.map((item) =>
+          item.day?.toString() || ""
+        );
 
+        const committedValues = values.map((v) => v * 0.9);
+        const totalGenerated = values.reduce((sum, v) => sum + v, 0);
+        const totalCommitted = committedValues.reduce((sum, v) => sum + v, 0);
+        setTotals({
+          generated: totalGenerated.toFixed(0),
+          committed: totalCommitted.toFixed(0),
+        });
         setChartData([
-          { label: "Generated", values: values, color: "#EF4444" },
-          { label: "Committed", values: values.map((v) => v * 0.9), color: "#FECACA" },
+          { label: "Generated (kWh)", values, color: "#EF4444" },
+          { label: "Committed (kWh)", values: committedValues, color: "#FECACA" },
         ]);
-        setLabels(dates);
+
+        setLabels(labels);
+
+        console.log(" Labels (Days):", labels);
+        console.log(" Generated Values:", values);
       } else {
-        console.log("API returned unexpected data:", data);
+        console.log(" Unexpected API format:", data);
       }
     } catch (err) {
-      console.error("Failed to fetch historical data:", err);
+      console.error(" Failed to fetch historical data:", err);
     } finally {
       setLoading(false);
     }
@@ -54,11 +79,19 @@ const KondaasAssuredScreen = ({ navigation }) => {
 
   useEffect(() => {
     loadData();
+    const interval = setInterval(() => {
+      const currentDate = new Date().getDate();
+      if (currentDate !== new Date().getDate()) {
+        loadData();
+      }
+    }, 3600000); 
+    return () => clearInterval(interval);
   }, []);
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
+
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back-outline" size={24} color="#000" />
@@ -66,140 +99,145 @@ const KondaasAssuredScreen = ({ navigation }) => {
         <Text style={styles.headerTitle}>Kondaas Assured</Text>
       </View>
 
-    
-        <ScrollView contentContainerStyle={styles.scroll}>
-          <Text style={styles.subtitle}>Showing for generation until Nov 2025</Text>
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <Text style={styles.subtitle}>
+          Showing generation until{" "}
+          {new Date().toLocaleString("en-US", { month: "short", year: "numeric" })}
+        </Text>
 
-          <View style={styles.unitsRow}>
-            <View style={styles.unitBox}>
-              <Text style={styles.unitLabel}>GENERATED</Text>
-              <Text style={styles.unitValue}>3170 Units</Text>
-            </View>
-
-            <View style={styles.unitBox}>
-              <Text style={styles.unitLabel}>COMMITTED</Text>
-              <Text style={styles.unitValue}>3000 Units</Text>
-            </View>
+        <View style={styles.unitsRow}>
+          <View style={styles.unitBox}>
+            <Text style={styles.unitLabel}>GENERATED</Text>
+            <Text style={styles.unitValue}>{totals.generated} Units</Text>
           </View>
 
-          <View style={styles.chartContainer}>
-            {chartData.length > 0 ? (
-              <MultiLineChart datasets={chartData} labels={labels} />
-            ) : (
-              <Text style={{ textAlign: "center", color: "#888" }}>No data available</Text>
-            )}
+          <View style={styles.unitBox}>
+            <Text style={styles.unitLabel}>COMMITTED</Text>
+            <Text style={styles.unitValue}>{totals.committed} Units</Text>
           </View>
+        </View>
 
-          <View style={[styles.infoCard, { backgroundColor: "#E6F9EF" }]}>
-            <View style={styles.iconCircleGreen}>
-              <Ionicons name="arrow-up-outline" size={18} color="#22C55E" />
-            </View>
-            <Text style={styles.infoText}>
-              Your Solar home has generated{" "}
-              <Text style={{ fontWeight: "700" }}>5.4%</Text> above{" "}
-              <Text style={{ fontWeight: "700" }}>Kondaas Assured™</Text> target!
-            </Text>
+        <View style={styles.chartContainer}>
+          {chartData.length > 0 ? (
+            <MultiLineChart datasets={chartData} labels={labels} />
+          ) : (
+            <Text style={{ textAlign: "center", color: "#888" }}>No data available</Text>
+          )}
+        </View>
+
+        <View style={[styles.infoCard, { backgroundColor: "#E6F9EF" }]}>
+          <View style={styles.iconCircleGreen}>
+            <Ionicons name="arrow-up-outline" size={18} color="#22C55E" />
           </View>
+          <Text style={styles.infoText}>
+            Your Solar home has generated{" "}
+            <Text style={{ fontWeight: "700" }}>5.4%</Text> above{" "}
+            <Text style={{ fontWeight: "700" }}>Kondaas Assured™</Text> target!
+          </Text>
+        </View>
 
-          <View style={[styles.infoCard, { backgroundColor: "#FFF4F4" }]}>
-            <View style={styles.iconCircleRed}>
-              <Ionicons name="wallet-outline" size={18} color="#E60000" />
-            </View>
-            <Text style={styles.infoText}>
-              Your Solar home has saved{" "}
-              <Text style={{ fontWeight: "700" }}>₹34,125</Text> until Aug 2025
-            </Text>
+        <View style={[styles.infoCard, { backgroundColor: "#FFF4F4" }]}>
+          <View style={styles.iconCircleRed}>
+            <Ionicons name="wallet-outline" size={18} color="#E60000" />
           </View>
+          <Text style={styles.infoText}>
+            Your Solar home has saved{" "}
+            <Text style={{ fontWeight: "700" }}>₹34,125</Text> until{" "}
+            {new Date().toLocaleString("en-US", { month: "short", year: "numeric" })}
+          </Text>
+        </View>
 
-          <TouchableOpacity onPress={() => navigation.navigate("PowerGenerationScreen")}>
-            <Text style={styles.footerLink}>
-              Know more about <Text style={{ fontWeight: "700" }}>Kondaas Assured™ →</Text>
-            </Text>
-          </TouchableOpacity>
-          
-        </ScrollView>
-         {loading && <Loader />}
+        <TouchableOpacity
+          onPress={() => navigation.navigate("PowerGenerationScreen", { stationId })}
+        >
+          <Text style={styles.footerLink}>
+            Know more about <Text style={{ fontWeight: "700" }}>Kondaas Assured™ →</Text>
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
+
+      {loading && <Loader />}
     </SafeAreaView>
-    
   );
 };
 
 export default KondaasAssuredScreen;
 
+
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: "#fff" },
+  container: { flex: 1, backgroundColor: "#fff" },
 
-    header: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: 15,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderColor: "#eee",
-    },
-    backButton: { marginRight: 10 },
-    headerTitle: { fontSize: 18, fontWeight: "700", color: "#000" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderColor: "#eee",
+  },
+  backButton: { marginRight: 10 },
+  headerTitle: { fontSize: 18, fontWeight: "700", color: "#000" },
 
-    scroll: { padding: 16, paddingBottom: 40 },
+  scroll: { padding: 16, paddingBottom: 40 },
 
-    subtitle: {
-        textAlign: "center",
-        color: "#666",
-        fontSize: 13,
-        marginTop: 8,
-        marginBottom: 20,
-    },
-    unitsRow: {
-        flexDirection: "row",
-        justifyContent: "space-between", // one left, one right
-        alignItems: "center",
-        marginTop: 8,
-        paddingHorizontal: 10,
-    },
-    unitBox: {
-        alignItems: "center",
-    },
-    unitLabel: {
-        fontSize: 10,
-        fontWeight: "600",
-        color: "#555",
-    },
-    unitValue: {
-        fontSize: 16,
-        fontWeight: "700",
-        color: "#111",
-    },
+  subtitle: {
+    textAlign: "center",
+    color: "#666",
+    fontSize: 13,
+    marginTop: 8,
+    marginBottom: 20,
+  },
+  unitsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+    paddingHorizontal: 10,
+  },
+  unitBox: {
+    alignItems: "center",
+  },
+  unitLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#555",
+  },
+  unitValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111",
+  },
 
-    chartContainer: {
-        alignItems: "center",
-        marginBottom: 15,
-    },
+  chartContainer: {
+    alignItems: "center",
+    marginBottom: 15,
+  },
 
-    infoCard: {
-        flexDirection: "row",
-        alignItems: "center",
-        padding: 12,
-        borderRadius: 10,
-        marginTop: 12,
-    },
-    iconCircleGreen: {
-        backgroundColor: "#C8F3D8",
-        borderRadius: 20,
-        padding: 6,
-        marginRight: 10,
-    },
-    iconCircleRed: {
-        backgroundColor: "#FFD6D6",
-        borderRadius: 20,
-        padding: 6,
-        marginRight: 10,
-    },
-    infoText: { flex: 1, fontSize: 13, color: "#333" },
+  infoCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 12,
+  },
+  iconCircleGreen: {
+    backgroundColor: "#C8F3D8",
+    borderRadius: 20,
+    padding: 6,
+    marginRight: 10,
+  },
+  iconCircleRed: {
+    backgroundColor: "#FFD6D6",
+    borderRadius: 20,
+    padding: 6,
+    marginRight: 10,
+  },
+  infoText: { flex: 1, fontSize: 13, color: "#333" },
 
-    footerLink: {
-        color: "#E60000",
-        marginTop: 10,
-        fontSize: 13,
-        width: "100%",
-    },
+  footerLink: {
+    color: "#E60000",
+    marginTop: 10,
+    fontSize: 13,
+    width: "100%",
+  },
 });

@@ -1,53 +1,149 @@
 import React, { useEffect, useState } from "react";
 import {
+  SafeAreaView,
   View,
   Text,
-  ImageBackground,
-  StyleSheet,
   Image,
-  Modal,
-  SafeAreaView,
+  StyleSheet,
+  ImageBackground,
   TouchableOpacity,
+  Modal,
   ScrollView,
-  ActivityIndicator,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import { fetchStationList } from "../api/api"; 
 import LightBg from "../../assets/images/Lightmode.png";
 import DarkBg from "../../assets/images/Darkmode.png";
 import ProfileImg from "../../assets/images/Round.png";
+import Loader from "../components/Loader";
+import { fetchHistoricalData, fetchRealTimeData, fetchStationList } from "../api/api";
+
 const MainScreen = ({ navigation }) => {
   const [isDay, setIsDay] = useState(isDaytime());
   const [currentTime, setCurrentTime] = useState(new Date());
   const [visible, setVisible] = useState(false);
   const [stations, setStations] = useState([]);
-  const [loadingStations, setLoadingStations] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [selectedStation, setSelectedStation] = useState(0);
+  const [selectedStationId, setSelectedStationId] = useState(null);
+  const [todayGeneration, setTodayGeneration] = useState(0);
+  const [lifetimeGeneration, setLifetimeGeneration] = useState(0);
+
+
   function isDaytime() {
     const hour = new Date().getHours();
     return hour >= 6 && hour < 18;
   }
+  useEffect(() => {
+    if (selectedStationId) {
+      loadTodayGeneration(selectedStationId);
+      getRealTimeGeneration(selectedStationId);
+
+    }
+  }, [selectedStationId]);
+  const loadTodayGeneration = async (stationId) => {
+    try {
+      const today = new Date();
+      const dateString = today.toISOString().split("T")[0]; // ex: "2025-11-10"
+
+      const payload = {
+        stationId: stationId,
+        timeType: 2,      // 2 = daily
+        startTime: dateString,
+        endTime: dateString,
+      };
+
+      console.log("📡 Today Gen Payload:", payload);
+
+      const response = await fetchHistoricalData(payload);
+      console.log("🌞 Response:", response);
+
+      if (
+        response &&
+        response.stationDataItems &&
+        response.stationDataItems.length > 0
+      ) {
+        const generationValue = response.stationDataItems[0].generationValue || 0;
+        setTodayGeneration(generationValue.toFixed(1));
+      } else {
+        setTodayGeneration(0);
+      }
+    } catch (error) {
+      console.error("Error fetching today's generation:", error);
+    }
+  };
+  const getRealTimeGeneration = async (stationId) => {
+    try {
+      console.log("⚡ Fetching real-time data for station:", stationId);
+      const response = await fetchRealTimeData({ stationId });
+      console.log("📦 Real-time response:", response);
+
+      if (response?.generationTotal !== undefined) {
+        setLifetimeGeneration(response.generationTotal);
+      } else {
+        console.warn("⚠️ No generationTotal in response");
+      }
+    } catch (error) {
+      console.error("🚨 Error fetching real-time data:", error);
+    }
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
-      const now = new Date();
-      setCurrentTime(now);
+      setCurrentTime(new Date());
       setIsDay(isDaytime());
     }, 60000);
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    loadStations();
+  }, []);
+
+  const loadStations = async () => {
+    try {
+      console.log(" Fetching station list...");
+      setLoading(true);
+
+      const response = await fetchStationList();
+      console.log(" Full API Response:", JSON.stringify(response, null, 2));
+
+      let stationArray = [];
+
+      if (Array.isArray(response)) {
+        stationArray = response;
+        console.log(" Response is an array. Stations:", stationArray.length);
+      }
+      else if (response && response.stationList) {
+        stationArray = response.stationList;
+        console.log(" Response has stationList. Stations:", stationArray.length);
+      }
+      else {
+        console.log(" No valid station list found in response");
+      }
+
+      setStations(stationArray);
+      if (stationArray.length > 0) {
+        const firstStation = stationArray[0];
+        console.log("🎯 Default Station ID:", firstStation.id);
+        console.log("🏠 Default Station Name:", firstStation.name);
+        setSelectedStation(0);
+        setSelectedStationId(firstStation.id);
+      }
+    } catch (error) {
+      console.log(" Error fetching stations:", error);
+    } finally {
+      setLoading(false);
+      console.log(" Station loading complete.");
+    }
+  };
+
   const formattedTime = currentTime.toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
   });
-  const formattedTemp = "32°C";
-  const formattedCity = "Madurai";
-    const loadStations = async () => {
-    setLoadingStations(true);
-    const data = await fetchStationList();
-    setStations(data);
-    setLoadingStations(false);
-  };
+
+  const formattedTemp = "";
+  const formattedCity = "";
 
   return (
     <SafeAreaView style={styles.container}>
@@ -56,115 +152,117 @@ const MainScreen = ({ navigation }) => {
         style={styles.topBackground}
         resizeMode="cover"
       >
-        {/* Header Row */}
-        {/* --- Header Row --- */}
+        {/* 🔹 Header */}
         <View style={styles.headerRow}>
-        {/* Left Section */}
-        <View style={styles.leftSection}>
-          <TouchableOpacity onPress={() => navigation.navigate("ProfileScreen")}>
-            <Image source={ProfileImg}  style={styles.profileImg} />
-          </TouchableOpacity>
+          <View style={styles.leftSection}>
+            <TouchableOpacity
+              onPress={() =>
+                navigation.navigate("ProfileScreen", {
+                  stationId: selectedStationId,
+                })
+              }
+            >
+              <Image source={ProfileImg} style={styles.profileImg} />
+            </TouchableOpacity>
+            <View style={styles.nameContainer}>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Text
+                  style={[
+                    styles.profileName,
+                    { color: isDay ? "#000" : "#fff" },
+                  ]}
+                >
+                  {stations.length > 0
+                    ? stations[selectedStation]?.name
+                    : ""}
+                </Text>
 
-          <View style={styles.nameContainer}>
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <Text
-                style={[
-                  styles.profileName,
-                  { color: isDay ? "#000" : "#fff" },
-                ]}
-              >
-                Ram kumar
-              </Text>
-               <TouchableOpacity
-                  onPress={() => {
-                    setVisible(true);
-                    loadStations();
-                  }}
+                <TouchableOpacity
+                  onPress={() =>
+
+                    setVisible(true)}
                   style={{ marginLeft: 6 }}
                 >
-                <Ionicons
-                  name="chevron-forward-circle-outline"
-                  size={20}
-                  color={isDay ? "#000" : "#fff"}
-                />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.liveRow}>
-              <View style={styles.liveDot} />
-              <Text style={styles.liveText}>Live</Text>
+                  <Ionicons
+                    name="chevron-forward-circle-outline"
+                    size={20}
+                    color={isDay ? "#000" : "#fff"}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.liveRow}>
+                <View style={styles.liveDot} />
+                <Text style={styles.liveText}>Live</Text>
+              </View>
             </View>
           </View>
         </View>
-      </View>
-
-
-        {/* Time, Temp, City */}
         <View style={styles.locationRow}>
-          <Ionicons
-            name="time-outline"
-            size={14}
-            color={isDay ? "#444" : "#fff"}
-          />
-          <Text
-            style={[
-              styles.locationText,
-              { color: isDay ? "#444" : "#fff" },
-            ]}
-          >
+          <Ionicons name="time-outline" size={14} color={isDay ? "#444" : "#fff"} />
+          <Text style={[styles.locationText, { color: isDay ? "#444" : "#fff" }]}>
             {` ${formattedTime} · ${formattedTemp} · ${formattedCity}`}
           </Text>
         </View>
 
-        {/* Weather Info */}
+        {/* 🔹 Weather Info */}
         <View style={styles.weatherRow}>
           <Ionicons
             name="warning-outline"
             size={16}
             color={isDay ? "#e67e22" : "#f6b93b"}
           />
-          <Text
-            style={[
-              styles.weatherText,
-              { color: isDay ? "#333" : "#fff" },
-            ]}
-          >
+          <Text style={[styles.weatherText, { color: isDay ? "#333" : "#fff" }]}>
             Rainy weather might not give optimum generation
           </Text>
         </View>
       </ImageBackground>
 
+      {/* 🔹 Scrollable Content */}
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <View style={styles.bottomContainer}>
           {/* Units Row */}
           <View style={styles.unitsRow}>
+            {/* <View style={styles.unitBlock}>
+              <Text style={styles.unitValue}>
+                {todayGeneration} kWh
+              </Text>
+              <Text style={styles.unitLabel}>TODAY</Text>
+            </View> */}
             <View style={styles.unitBlock}>
-              <Text style={styles.unitValue}>15 Units</Text>
+              <Text style={styles.unitValue}>
+                {todayGeneration ? Math.round(todayGeneration) : 0} kWh
+              </Text>
               <Text style={styles.unitLabel}>TODAY</Text>
             </View>
+
             <View style={styles.unitBlock}>
-              <Text style={styles.unitValue}>3170 Units</Text>
+              <Text style={styles.unitValue}>
+                {lifetimeGeneration
+                  ? (lifetimeGeneration / 1000).toFixed(2)
+                  : 0}{" "}
+                Units
+              </Text>
               <Text style={styles.unitLabel}>LIFETIME</Text>
             </View>
+
+
           </View>
-
           <Text style={styles.updateText}>Updated 15 mins ago</Text>
-
+          {/* Card */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>
               Your Solar home is{" "}
               <Text style={styles.brandText}>kondaas</Text> Assured™
             </Text>
-
             <View style={styles.progressBar}>
               <View style={styles.progressFill} />
             </View>
-
             <View style={styles.progressMarkers}>
               <Text style={styles.markerText}>Invested</Text>
               <Text style={styles.markerText}>Break-even</Text>
               <Text style={styles.markerText}>ROI Achieved</Text>
             </View>
-
             <Text style={styles.profitText}>₹ 34,124.56</Text>
             <Text style={styles.descText}>
               Billings: from ₹7,000 → to just ₹500 last month.{"\n"}That’s Solar
@@ -174,7 +272,15 @@ const MainScreen = ({ navigation }) => {
 
           {/* Buttons */}
           <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate("KondaasAssuredScreen")}>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={() => {
+                console.log(" Selected Station ID:", selectedStationId);
+                navigation.navigate("KondaasAssuredScreen", {
+                  stationId: selectedStationId,
+                });
+              }}
+            >
               <Text style={styles.primaryButtonText}>View Insights →</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -186,63 +292,82 @@ const MainScreen = ({ navigation }) => {
 
             <TouchableOpacity
               style={styles.grayButton}
-              onPress={() => navigation.navigate("ProductsHomeScreen")}
+              onPress={() =>
+                navigation.navigate("ProductsHomeScreen", {
+                  // stationId: selectedStationId, 
+                })
+              }
             >
               <Text style={styles.grayButtonText}>View All Our Products</Text>
             </TouchableOpacity>
           </View>
-      {/* 🔹 Modal */}
-      <Modal
-        visible={visible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Family List</Text>
-              <TouchableOpacity onPress={() => setVisible(false)}>
-                <Ionicons name="close-outline" size={24} color="#000" />
-              </TouchableOpacity>
-            </View>
 
-            <View style={styles.infoRow}>
-              <Ionicons name="information-circle-outline" size={16} color="#777" />
-              <Text style={styles.infoText}>
-                Click the list to switch to the household you want to view.
-              </Text>
-            </View>
+          {/* 🔹 Modal */}
+          <Modal
+            visible={visible}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setVisible(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContainer}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Family List</Text>
+                  <TouchableOpacity onPress={() => setVisible(false)}>
+                    <Ionicons name="close-outline" size={24} color="#000" />
+                  </TouchableOpacity>
+                </View>
 
-            {loadingStations ? (
-              <ActivityIndicator size="large" color="#007BFF" />
-            ) : (
-              stations.map((item, index) => (
-                <TouchableOpacity key={index} style={styles.familyItem}>
-                  <Image
-                    source={LightBg}
-                    style={styles.familyImg}
+                <View style={styles.infoRow}>
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={16}
+                    color="#777"
                   />
-                  <View>
-                    <Text style={styles.familyName}>{item.name}</Text>
-                    <Text style={styles.familyAddress}>{item.locationAddress}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))
-            )}
+                  <Text style={styles.infoText}>
+                    Click a name to switch to that household.
+                  </Text>
+                </View>
 
-            <TouchableOpacity style={styles.homeButton}>
-              <Ionicons name="settings-outline" size={16} color="#007BFF" />
-              <Text style={styles.homeButtonText}>Home settings</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+                {stations.map((item, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.familyItem,
+                      selectedStation === index && { backgroundColor: "#e6f0ff" },
+                    ]}
+                    onPress={() => {
+                      setSelectedStation(index);
+                      setSelectedStationId(item.id);
+                      setVisible(false);
+                      console.log("🟢 Station clicked:");
+                      console.log("➡️ Index:", index);
+                      console.log("🏠 Name:", item.name);
+                      console.log("🆔 ID:", item.id);
+                    }}
+                  >
+                    <Image source={LightBg} style={styles.familyImg} />
+                    <View>
+                      <Text style={styles.familyName}>{item.name}</Text>
+                      <Text style={styles.familyAddress}>{item.locationAddress}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity style={styles.homeButton}>
+                  <Ionicons name="settings-outline" size={16} color="#007BFF" />
+                  <Text style={styles.homeButtonText}>Home settings</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
         </View>
       </ScrollView>
+
+      {loading && <Loader />}
     </SafeAreaView>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
@@ -408,7 +533,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: "#444",
   },
- modalOverlay: {
+  modalOverlay: {
     flex: 1,
     justifyContent: "flex-end",
     backgroundColor: "rgba(0,0,0,0.4)",
