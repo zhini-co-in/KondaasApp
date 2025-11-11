@@ -15,6 +15,8 @@ import LightBg from "../../assets/images/Lightmode.png";
 import DarkBg from "../../assets/images/Darkmode.png";
 import ProfileImg from "../../assets/images/Round.png";
 import Loader from "../components/Loader";
+import { getStorageData, USER_DATA } from "../service/localStorage";
+
 import { fetchHistoricalData, fetchRealTimeData, fetchStationList } from "../api/api";
 
 const MainScreen = ({ navigation }) => {
@@ -27,6 +29,28 @@ const MainScreen = ({ navigation }) => {
   const [selectedStationId, setSelectedStationId] = useState(null);
   const [todayGeneration, setTodayGeneration] = useState(0);
   const [lifetimeGeneration, setLifetimeGeneration] = useState(0);
+  const [userInfo, setUserInfo] = useState(null);
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      try {
+        const data = await getStorageData(USER_DATA);
+        if (data) {
+          const parsed = JSON.parse(data);
+          setUserInfo(parsed);
+          console.log(" Loaded User Info:", parsed);
+        } else {
+          console.warn(" No User Info found in storage");
+        }
+      } catch (err) {
+        console.error(" Error loading user info:", err);
+      }
+    };
+
+    fetchUserInfo();
+  }, []);
+  const unitRate = parseFloat(userInfo?.UserInfo?.unitsrupees || 0);
+const totalSavings = (todayGeneration * unitRate).toFixed(2);
+
 
 
   function isDaytime() {
@@ -43,11 +67,11 @@ const MainScreen = ({ navigation }) => {
   const loadTodayGeneration = async (stationId) => {
     try {
       const today = new Date();
-      const dateString = today.toISOString().split("T")[0]; // ex: "2025-11-10"
+      const dateString = today.toISOString().split("T")[0];
 
       const payload = {
         stationId: stationId,
-        timeType: 2,      // 2 = daily
+        timeType: 2,
         startTime: dateString,
         endTime: dateString,
       };
@@ -263,7 +287,8 @@ const MainScreen = ({ navigation }) => {
               <Text style={styles.markerText}>Break-even</Text>
               <Text style={styles.markerText}>ROI Achieved</Text>
             </View>
-            <Text style={styles.profitText}>₹ 34,124.56</Text>
+            <Text style={styles.profitText}>₹ {totalSavings}
+            </Text>
             <Text style={styles.descText}>
               Billings: from ₹7,000 → to just ₹500 last month.{"\n"}That’s Solar
               Freedom!

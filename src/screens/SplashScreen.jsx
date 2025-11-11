@@ -34,9 +34,10 @@ const SplashScreen = () => {
         const userData = JSON.parse(storedData);
         const lastLogin = userData?.AppInfo?.lastLogin;
         const deviceId = userData?.UserInfo?.deviceId;
-
+        const unitsrupees = userData?.UserInfo?.unitsrupees;
         console.log("📆 lastLogin:", lastLogin);
         console.log("🔧 deviceId:", deviceId);
+          console.log("unitId:", unitsrupees);
 
         if (!lastLogin) {
           console.log("⚠️ lastLogin missing → Navigating to Intro");
@@ -52,7 +53,6 @@ const SplashScreen = () => {
         console.log("🕓 Last Login Date:", lastLoginDate.toISOString());
         console.log(`📅 Difference: ${diffInDays.toFixed(2)} days`);
 
-        // If last login > 30 days → clear storage and go to Intro
         if (diffInDays > 30) {
           console.log("🚫 Last login older than 30 days → Clearing storage & going to Intro");
           await AsyncStorage.removeItem(USER_DATA);

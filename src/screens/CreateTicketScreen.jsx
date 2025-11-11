@@ -25,35 +25,35 @@ const CreateTicketScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [userPhone, setUserPhone] = useState("");
-useEffect(() => {
-  const getUserData = async () => {
-    try {
-      const data = await AsyncStorage.getItem(USER_DATA);
-      if (data) {
-        const parsed = JSON.parse(data);
+  useEffect(() => {
+    const getUserData = async () => {
+      try {
+        const data = await AsyncStorage.getItem(USER_DATA);
+        if (data) {
+          const parsed = JSON.parse(data);
 
-        const extractedPhone =
-          parsed?.UserInfo?.phoneNo || // Case 1: nested
-          parsed?.phoneNo ||           // Case 2: top-level
-          parsed?.phoneNumber ||       // Case 3: alternate key
-          parsed?.mobile ||            // Case 4: alternate key
-          "Unknown";
+          const extractedPhone =
+            parsed?.UserInfo?.phoneNo || // Case 1: nested
+            parsed?.phoneNo ||           // Case 2: top-level
+            parsed?.phoneNumber ||       // Case 3: alternate key
+            parsed?.mobile ||            // Case 4: alternate key
+            "Unknown";
 
-        console.log("📱 Extracted phone number:", extractedPhone);
+          console.log("📱 Extracted phone number:", extractedPhone);
 
-        setUserPhone(extractedPhone);
-      } else {
-        console.warn("⚠️ No USER_DATA found in AsyncStorage");
+          setUserPhone(extractedPhone);
+        } else {
+          console.warn("⚠️ No USER_DATA found in AsyncStorage");
+          setUserPhone("Unknown");
+        }
+      } catch (error) {
+        console.error(" Error reading user data:", error);
         setUserPhone("Unknown");
       }
-    } catch (error) {
-      console.error(" Error reading user data:", error);
-      setUserPhone("Unknown");
-    }
-  };
+    };
 
-  getUserData();
-}, []);
+    getUserData();
+  }, []);
 
 
   // 🔹 Fetch devices from Firestore
@@ -91,7 +91,8 @@ useEffect(() => {
     return `TKT-${phone.slice(-4)}-${timestamp}`;
   };
 
-  // 🔹 Submit Ticket to Firestore
+
+
   const handleSubmit = async () => {
     if (!selectedDevice) {
       Alert.alert("Missing Info", "Please select a device.");
@@ -110,26 +111,36 @@ useEffect(() => {
 
     try {
       setSubmitting(true);
+      const storedData = await AsyncStorage.getItem(USER_DATA);
+      const parsedData = storedData ? JSON.parse(storedData) : null;
+      const phoneNumber = parsedData?.UserInfo?.phoneNo;
 
-      const ticketNo = generateTicketNo(userPhone);
+      if (!phoneNumber) {
+        Alert.alert("Missing Info", "User phone number not found in storage.");
+        setSubmitting(false);
+        return;
+      }
+
+      const ticketNo = generateTicketNo(phoneNumber);
 
       await firestore().collection("createTicket").doc(ticketNo).set({
-        PhoneNo: userPhone,
+        PhoneNo: phoneNumber,
         TicketNo: ticketNo,
         Description: description.trim(),
-        deviceId: selectedDevice, // saving title (not doc ID)
-        createdBy: userPhone,
+        deviceId: selectedDevice,
+        createdBy: phoneNumber,
         createdAt: firestore.FieldValue.serverTimestamp(),
         status: "Open",
-        assignedTo: "", // empty initially
+        assignedTo: "",
         type: selectedIssue,
       });
 
-      Alert.alert("Success", `Ticket ${ticketNo} has been submitted successfully!`);
+      Alert.alert(" Success", `Ticket ${ticketNo} has been submitted successfully!`);
       setSelectedDevice("");
       setSelectedIssue("");
       setDescription("");
       navigation.goBack();
+
     } catch (error) {
       console.error("Error creating ticket:", error);
       Alert.alert("Error", "Failed to create support ticket.");
@@ -137,6 +148,8 @@ useEffect(() => {
       setSubmitting(false);
     }
   };
+
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -273,19 +286,19 @@ const styles = StyleSheet.create({
     width: "100%",
   },
 
- 
+
   textArea: {
-  borderWidth: 1,
-  borderColor: "#ddd",
-  borderRadius: 8,
-  padding: 12,
-  textAlignVertical: "top",
-  fontSize: 14,
-  color: "#000",
-  backgroundColor: "#fff",
-  marginBottom: 20,
-  height: 160,
-},
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    padding: 12,
+    textAlignVertical: "top",
+    fontSize: 14,
+    color: "#000",
+    backgroundColor: "#fff",
+    marginBottom: 20,
+    height: 160,
+  },
 
 
   submitButton: {

@@ -13,6 +13,7 @@ import { Dimensions } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import api, { fetchHistoricalData } from "../api/api";
 import { setAuthToken } from "../api/api";
+import { USER_DATA, getStorageData } from "../service/localStorage";
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -23,6 +24,36 @@ const PowerGenerationScreen = ({ navigation, route }) => {
   const [loading, setLoading] = useState(false);
   const [chartData, setChartData] = useState(null);
   const [totalGenerated, setTotalGenerated] = useState(0);
+  const [weekStart, setWeekStart] = useState("");
+  const [weekEnd, setWeekEnd] = useState("");
+  const [userData, setUserData] = useState(null);
+
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const data = await getStorageData(USER_DATA);
+        if (data) {
+          const parsed = JSON.parse(data);
+          console.log("✅ Loaded User Data:", parsed);
+          // handle structure like { UserInfo: {...} }
+          setUserData(parsed.UserInfo || parsed);
+        } else {
+          console.warn("⚠️ No user data found in storage");
+        }
+      } catch (err) {
+        console.error("❌ Error loading user data:", err);
+      }
+    };
+
+    fetchUserData();
+  }, []);
+  const unitsRupees = parseFloat(userData?.unitsrupees || 0);
+  const totalSaved = (totalGenerated * unitsRupees).toFixed(0);
+
+  console.log("⚡ Units:", totalGenerated);
+  console.log("💰 Per Unit Rate:", unitsRupees);
+  console.log("🏦 Total Saved:", totalSaved);
 
   const formatDate = (date) => {
     const y = date.getFullYear();
@@ -37,15 +68,29 @@ const PowerGenerationScreen = ({ navigation, route }) => {
       start = formatDate(today);
       end = formatDate(today);
     }
+    // else if (tab === "Week") {
+    //   const day = today.getDay();
+    //   const diffToSunday = today.getDate() - day;
+    //   const sunday = new Date(today.setDate(diffToSunday));
+    //   const monday = new Date(sunday);
+    //   monday.setDate(sunday.getDate() + 6);
+    //   start = formatDate(sunday);
+    //   end = formatDate(monday);
+    // }
     else if (tab === "Week") {
+      const today = new Date();
       const day = today.getDay();
-      const diffToSunday = today.getDate() - day;
-      const sunday = new Date(today.setDate(diffToSunday));
-      const monday = new Date(sunday);
-      monday.setDate(sunday.getDate() + 6);
-      start = formatDate(sunday);
-      end = formatDate(monday);
-    } else if (tab === "Month") {
+      const diffToMonday = (day + 6) % 7;
+      const monday = new Date(today);
+      monday.setDate(today.getDate() - diffToMonday);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+
+      start = formatDate(monday);
+      end = formatDate(sunday);
+    }
+
+    else if (tab === "Month") {
 
       const y = today.getFullYear();
       const m = String(today.getMonth() + 1).padStart(2, "0");
@@ -67,6 +112,8 @@ const PowerGenerationScreen = ({ navigation, route }) => {
       await setAuthToken();
 
       const { start, end } = getDateRange(tab);
+      setWeekStart(start);
+      setWeekEnd(end);
       const timeType =
         tab === "Day" ? 2 :
           tab === "Week" ? 2 :
@@ -157,8 +204,16 @@ const PowerGenerationScreen = ({ navigation, route }) => {
           ))}
         </View>
         <View style={styles.dateSelector}>
-          <Text style={styles.dateText}>{selectedDate}</Text>
+          {selectedTab === "Week" ? (
+            <Text style={styles.dateText}>
+              {weekStart} - {weekEnd}
+            </Text>
+          ) : (
+            <Text style={styles.dateText}>{selectedDate}</Text>
+          )}
         </View>
+
+
         {loading && (
           <ActivityIndicator
             size="large"
@@ -171,10 +226,10 @@ const PowerGenerationScreen = ({ navigation, route }) => {
           <BarChart
             data={chartData}
             width={screenWidth - 30}
-            height={240} 
+            height={240}
             yAxisSuffix=" kWh"
-             
-  withVerticalLabels={false}   
+
+            withVerticalLabels={false}
             fromZero
             chartConfig={{
               backgroundColor: "#fff",
@@ -229,7 +284,7 @@ const PowerGenerationScreen = ({ navigation, route }) => {
 
           <View style={styles.summaryItem}>
             <Text style={styles.summaryValue}>
-              ₹{(totalGenerated * 10).toFixed(0)}
+              ₹{totalSaved}
             </Text>
             <Text style={styles.summaryLabel}>Money Saved</Text>
           </View>

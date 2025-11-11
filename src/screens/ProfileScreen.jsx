@@ -15,12 +15,13 @@ import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import { fetchStationList } from "../api/api";
 import Loader from "../components/Loader";
 import { getStorageData, USER_DATA } from "../service/localStorage";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 const ProfileScreen = ({ route, navigation }) => {
     const { stationId } = route.params || {};
     const [showLogoutPopup, setShowLogoutPopup] = useState(false);
     const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState(null);
-const [stationData, setStationData] = useState(null);
+    const [stationData, setStationData] = useState(null);
 
     useEffect(() => {
         const loadUserData = async () => {
@@ -41,44 +42,51 @@ const [stationData, setStationData] = useState(null);
         loadStations();
     }, []);
 
-  const loadStations = async () => {
-  try {
-    console.log("Fetching station list...");
-    setLoading(true);
+    const loadStations = async () => {
+        try {
+            console.log("Fetching station list...");
+            setLoading(true);
 
-    const response = await fetchStationList();
-    console.log("Full Response:", JSON.stringify(response, null, 2));
+            const response = await fetchStationList();
+            console.log("Full Response:", JSON.stringify(response, null, 2));
 
-    let stationArray = [];
+            let stationArray = [];
 
-    if (Array.isArray(response)) {
-      stationArray = response;
-    } else if (response && response.stationList) {
-      stationArray = response.stationList;
-    } else {
-      console.log("No valid station list found in response");
-    }
+            if (Array.isArray(response)) {
+                stationArray = response;
+            } else if (response && response.stationList) {
+                stationArray = response.stationList;
+            } else {
+                console.log("No valid station list found in response");
+            }
+            const selected = stationArray.find((st) => st.id === stationId);
 
-    // ✅ Find the station that matches the stationId
-    const selected = stationArray.find((st) => st.id === stationId);
+            if (selected) {
+                console.log("✅ Selected Station:", selected);
+                setStationData(selected); // Store in state
+            } else {
+                console.log("⚠️ No station found for ID:", stationId);
+            }
 
-    if (selected) {
-      console.log("✅ Selected Station:", selected);
-      setStationData(selected); // Store in state
-    } else {
-      console.log("⚠️ No station found for ID:", stationId);
-    }
+        } catch (error) {
+            console.log("Error fetching stations:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
-  } catch (error) {
-    console.log("Error fetching stations:", error);
-  } finally {
-    setLoading(false);
-  }
-};
-
-    const handleLogout = () => {
-        setShowLogoutPopup(false);
-        navigation.replace("Login");
+    const handleLogout = async () => {
+        try {
+            await AsyncStorage.removeItem(USER_DATA);
+            console.log(" USER_DATA cleared successfully.");
+            setShowLogoutPopup(false);
+            navigation.reset({
+                index: 0,
+                routes: [{ name: "Login" }],
+            });
+        } catch (error) {
+            console.error(" Error during logout:", error);
+        }
     };
 
     return (
@@ -132,50 +140,50 @@ const [stationData, setStationData] = useState(null);
                         </View>
                     </View>
                 </View>
-             <View style={styles.card}>
-  <Text style={styles.sectionTitle}>⚙️ System Details</Text>
+                <View style={styles.card}>
+                    <Text style={styles.sectionTitle}>⚙️ System Details</Text>
 
-  <View style={styles.systemGrid}>
-    <View style={styles.systemBox}>
-      <Text style={styles.systemLabel}>⚡ Capacity</Text>
-      <Text style={styles.systemValue}>
-        {stationData?.installedCapacity
-          ? `${stationData.installedCapacity} kW`
-          : "Not available"}
-      </Text>
-    </View>
-    <View style={styles.systemBox}>
-      <Text style={styles.systemLabel}>🟢 Type</Text>
-      <Text style={styles.systemValue}>
-        {stationData?.type || "Not available"}
-      </Text>
-    </View>
-  </View>
+                    <View style={styles.systemGrid}>
+                        <View style={styles.systemBox}>
+                            <Text style={styles.systemLabel}>⚡ Capacity</Text>
+                            <Text style={styles.systemValue}>
+                                {stationData?.installedCapacity
+                                    ? `${stationData.installedCapacity} kW`
+                                    : "Not available"}
+                            </Text>
+                        </View>
+                        <View style={styles.systemBox}>
+                            <Text style={styles.systemLabel}>🟢 Type</Text>
+                            <Text style={styles.systemValue}>
+                                {stationData?.type || "Not available"}
+                            </Text>
+                        </View>
+                    </View>
 
-  <Text style={styles.installationText}>
-    Installation Date:{" "}
-    <Text style={styles.boldText}>
-      {stationData?.startOperatingTime
-        ? new Date(stationData.startOperatingTime * 1000).toLocaleDateString("en-IN", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          })
-        : "Not available"}
-    </Text>
-  </Text>
+                    <Text style={styles.installationText}>
+                        Installation Date:{" "}
+                        <Text style={styles.boldText}>
+                            {stationData?.startOperatingTime
+                                ? new Date(stationData.startOperatingTime * 1000).toLocaleDateString("en-IN", {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric",
+                                })
+                                : "Not available"}
+                        </Text>
+                    </Text>
 
-  <Text style={styles.installationText}>
-    Station ID: <Text style={styles.boldText}>{stationData?.id || "Not available"}</Text>
-  </Text>
+                    <Text style={styles.installationText}>
+                        Station ID: <Text style={styles.boldText}>{stationData?.id || "Not available"}</Text>
+                    </Text>
 
-  <Text style={styles.installationText}>
-    Address:{" "}
-    <Text style={styles.boldText}>
-      {stationData?.locationAddress || "Not available"}
-    </Text>
-  </Text>
-</View>
+                    <Text style={styles.installationText}>
+                        Address:{" "}
+                        <Text style={styles.boldText}>
+                            {stationData?.locationAddress || "Not available"}
+                        </Text>
+                    </Text>
+                </View>
 
 
                 {/* Environmental Impact */}

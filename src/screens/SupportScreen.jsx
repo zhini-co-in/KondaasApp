@@ -9,10 +9,14 @@ import {
     StatusBar,
     TouchableOpacity,
     StyleSheet,
+    Alert,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import firestore from "@react-native-firebase/firestore";
 import Loader from "../components/Loader";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { USER_DATA } from "../service/localStorage";
+
 const SupportScreen = ({ navigation }) => {
      const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,44 +29,58 @@ const SupportScreen = ({ navigation }) => {
     if (diff < 7) return `${Math.floor(diff)} days ago`;
     return `${Math.floor(diff / 7)} week${Math.floor(diff / 7) > 1 ? "s" : ""} ago`;
   };
-   const fetchTickets = async () => {
-    try {
-      setLoading(true);
-      const snapshot = await firestore()
-        .collection("createTicket")
-        .orderBy("createdAt", "desc")
-        .get();
 
-      if (snapshot.empty) {
-        setTickets([]);
-        return;
-      }
 
-      const fetchedTickets = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          id: data.TicketNo || doc.id,
-          title: data.Description || "No description",
-          category: data.type,
-          status: data.status,
-          statusColor:
-            data.status === "Resolved"
-              ? "#22C55E"
-              : data.status === "In progress"
-              ? "#F59E0B"
-              : "#E11D48",
-          daysAgo: data.createdAt ? getDaysAgo(data.createdAt.toDate()) : "N/A",
-        };
-      });
+const fetchTickets = async () => {
+  try {
+    setLoading(true);
+    const storedData = await AsyncStorage.getItem(USER_DATA);
+    const parsedData = storedData ? JSON.parse(storedData) : null;
+    const phoneNo = parsedData?.UserInfo?.phoneNo;
 
-      setTickets(fetchedTickets);
-    } catch (error) {
-      console.error("Error fetching tickets:", error);
-      Alert.alert("Error", "Failed to load tickets.");
-    } finally {
+    if (!phoneNo) {
+      Alert.alert("Missing Info", "User phone number not found in storage.");
       setLoading(false);
+      return;
     }
-  };
+
+  const snapshot = await firestore()
+  .collection("createTicket")
+  .where("PhoneNo", "==", phoneNo)
+  .get();
+
+
+    if (snapshot.empty) {
+      setTickets([]);
+      return;
+    }
+
+    const fetchedTickets = snapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: data.TicketNo || doc.id,
+        title: data.Description || "No description",
+        category: data.type,
+        status: data.status,
+        statusColor:
+          data.status === "Resolved"
+            ? "#22C55E"
+            : data.status === "In progress"
+            ? "#F59E0B"
+            : "#E11D48",
+        daysAgo: data.createdAt ? getDaysAgo(data.createdAt.toDate()) : "N/A",
+      };
+    });
+
+    setTickets(fetchedTickets);
+  } catch (error) {
+    console.error("Error fetching tickets:", error);
+    Alert.alert("Error", "Failed to load tickets.");
+  } finally {
+    setLoading(false);
+  }
+};
+
  useFocusEffect(
     useCallback(() => {
       fetchTickets();

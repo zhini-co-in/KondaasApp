@@ -15,12 +15,30 @@ import { useNavigation } from "@react-navigation/native";
 import firestore from "@react-native-firebase/firestore";
 import Loader from "../components/Loader";
 import ProfileImg from "../../assets/images/Round.png";
-
+import { getStorageData, USER_DATA } from "../service/localStorage";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 const ProductsHomeScreen = () => {
   const navigation = useNavigation();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+    const [userData, setUserData] = useState(null);
 
+
+    useEffect(() => {
+        const loadUserData = async () => {
+            try {
+                const data = await getStorageData(USER_DATA);
+                if (data) {
+                    const parsedData = JSON.parse(data);
+                    setUserData(parsedData);
+                }
+            } catch (error) {
+                console.error("Error loading user data:", error);
+            }
+        };
+
+        loadUserData();
+    }, []);
   useEffect(() => {
     const fetchProducts = async () => {
       try {
@@ -55,7 +73,10 @@ const ProductsHomeScreen = () => {
           <View style={styles.profileRow}>
             <Image source={ProfileImg} style={styles.profileImg} />
             <View>
-              <Text style={styles.profileName}>Ram kumar</Text>
+              <Text style={styles.profileName}>
+                {/* Ram kumar */}
+  {userData?.UserInfo?.name || "Guest User"}
+              </Text>
               <Text style={styles.liveText}>● Live</Text>
             </View>
           </View>

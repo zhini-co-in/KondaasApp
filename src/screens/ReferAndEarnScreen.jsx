@@ -11,33 +11,64 @@ import {
 import Ionicons from "react-native-vector-icons/Ionicons";
 import firestore from "@react-native-firebase/firestore";
 import Loader from "../components/Loader";
-
+ import AsyncStorage from "@react-native-async-storage/async-storage";
+import { USER_DATA } from "../service/localStorage"; // make sure correct path
 const ReferAndEarnScreen = ({ navigation }) => {
   const [referrals, setReferrals] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchReferrals = async () => {
-      try {
-        setLoading(true);
 
-        const snapshot = await firestore().collection("Referrals").get();
 
-        const referralData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+useEffect(() => {
+  const fetchReferrals = async () => {
+    try {
+      setLoading(true);
 
-        setReferrals(referralData);
-      } catch (error) {
-        console.error("Error fetching referrals:", error);
-      } finally {
+      // 🔹 Get phone number from USER_DATA
+      const userDataJson = await AsyncStorage.getItem(USER_DATA);
+      const userData = userDataJson ? JSON.parse(userDataJson) : null;
+
+      const phoneNo =
+        userData?.UserInfo?.phoneNo ||
+        userData?.phoneNumber ||
+        userData?.mobile ||
+        "";
+
+      if (!phoneNo) {
+        console.warn("⚠️ No phone number found in USER_DATA.");
+        setReferrals([]);
         setLoading(false);
+        return;
       }
-    };
 
-    fetchReferrals();
-  }, []);
+      console.log("📱 Fetching referrals for phone:", phoneNo);
+const snapshot = await firestore()
+  .collection("Referrals")
+  .where("refererPhNo", "==", phoneNo)
+  .get();
+
+
+      if (snapshot.empty) {
+        console.log("No referrals found for this user.");
+        setReferrals([]);
+        return;
+      }
+
+      const referralData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      setReferrals(referralData);
+    } catch (error) {
+      console.error("❌ Error fetching referrals:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchReferrals();
+}, []);
 
   return (
     <SafeAreaView style={styles.container}>

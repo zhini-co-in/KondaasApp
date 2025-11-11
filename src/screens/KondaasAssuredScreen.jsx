@@ -13,6 +13,7 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import MultiLineChart from "../components/MultiLineChart";
 import { fetchHistoricalData } from "../api/api";
 import Loader from "../components/Loader";
+import { getStorageData, USER_DATA } from "../service/localStorage";
 
 const KondaasAssuredScreen = ({ navigation, route }) => {
   const { stationId } = route.params || {};
@@ -21,6 +22,7 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
   const [labels, setLabels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [totals, setTotals] = useState({ generated: 0, committed: 0 });
+const [UserInfo, setUserInfo] = useState(null);
 
   const loadData = async () => {
     try {
@@ -76,6 +78,39 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
       setLoading(false);
     }
   };
+useEffect(() => {
+  const fetchUserInfo = async () => {
+    try {
+      const data = await getStorageData(USER_DATA);
+      if (data) {
+        const parsed = JSON.parse(data);
+        console.log("✅ Loaded User Info Raw:", parsed);
+        setUserInfo(parsed.UserInfo || parsed);
+      } else {
+        console.warn("⚠️ No User Info found in storage");
+      }
+    } catch (err) {
+      console.error("❌ Error loading user info:", err);
+    }
+  };
+
+  fetchUserInfo();
+  loadData();
+}, []);
+
+const unitsRupees = parseFloat(UserInfo?.unitsrupees || 0);
+console.log("⚡ Units Rupees:", unitsRupees);
+
+const totalGenerated = parseFloat(totals.generated || 0);
+const totalSavings = (totalGenerated * unitsRupees).toFixed(0);
+
+// Debug logs
+console.log("🔹 UserInfo:", UserInfo);
+console.log("🔹 Units Rupees:", unitsRupees);
+console.log("🔹 Total Generated:", totalGenerated);
+console.log("💰 Total Savings (₹):", totalSavings);
+
+
 
   useEffect(() => {
     loadData();
@@ -142,7 +177,9 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
           </View>
           <Text style={styles.infoText}>
             Your Solar home has saved{" "}
-            <Text style={{ fontWeight: "700" }}>₹34,125</Text> until{" "}
+            {/* <Text style={{ fontWeight: "700" }}>₹34,125</Text> until{" "} */}
+                      <Text style={{ fontWeight: "700" }}>₹{totalSavings}</Text> until{" "}
+
             {new Date().toLocaleString("en-US", { month: "short", year: "numeric" })}
           </Text>
         </View>
