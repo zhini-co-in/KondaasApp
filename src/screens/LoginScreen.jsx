@@ -89,7 +89,6 @@ const LoginScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* 🔹 Internet Connection Banner */}
       <Animated.View
         style={[styles.netBanner, { transform: [{ translateY: slideAnim }] }]}
       >
@@ -123,14 +122,17 @@ const LoginScreen = ({ navigation }) => {
               placeholderTextColor="#999"
               keyboardType="phone-pad"
               value={phoneNumber}
-              onChangeText={setPhoneNumber}
+              maxLength={10}
+              onChangeText={(text) => {
+                const cleaned = text.replace(/[^0-9]/g, "");
+                setPhoneNumber(cleaned);
+              }}
             />
           </View>
-
           <TouchableOpacity
             style={[
               styles.otpButton,
-              !isConnected && { backgroundColor: "#aaa" }, // disable color
+              !isConnected && { backgroundColor: "#aaa" }, 
             ]}
             disabled={!isConnected}
             onPress={handleSendOTP}

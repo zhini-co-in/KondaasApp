@@ -10,6 +10,7 @@ import {
     TouchableOpacity,
     StyleSheet,
     Alert,
+    Linking,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import firestore from "@react-native-firebase/firestore";
@@ -18,74 +19,78 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { USER_DATA } from "../service/localStorage";
 
 const SupportScreen = ({ navigation }) => {
-     const [tickets, setTickets] = useState([]);
-  const [loading, setLoading] = useState(true);
- 
+    const [tickets, setTickets] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-  const getDaysAgo = (date) => {
-    const diff = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24);
-    if (diff < 1) return "Today";
-    if (diff < 2) return "1 day ago";
-    if (diff < 7) return `${Math.floor(diff)} days ago`;
-    return `${Math.floor(diff / 7)} week${Math.floor(diff / 7) > 1 ? "s" : ""} ago`;
-  };
+    const handleCall = () => {
+        const phoneNumber = "tel:9244414441";
+        Linking.openURL(phoneNumber);
+    };
 
-
-const fetchTickets = async () => {
-  try {
-    setLoading(true);
-    const storedData = await AsyncStorage.getItem(USER_DATA);
-    const parsedData = storedData ? JSON.parse(storedData) : null;
-    const phoneNo = parsedData?.UserInfo?.phoneNo;
-
-    if (!phoneNo) {
-      Alert.alert("Missing Info", "User phone number not found in storage.");
-      setLoading(false);
-      return;
-    }
-
-  const snapshot = await firestore()
-  .collection("createTicket")
-  .where("PhoneNo", "==", phoneNo)
-  .get();
+    const getDaysAgo = (date) => {
+        const diff = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24);
+        if (diff < 1) return "Today";
+        if (diff < 2) return "1 day ago";
+        if (diff < 7) return `${Math.floor(diff)} days ago`;
+        return `${Math.floor(diff / 7)} week${Math.floor(diff / 7) > 1 ? "s" : ""} ago`;
+    };
 
 
-    if (snapshot.empty) {
-      setTickets([]);
-      return;
-    }
+    const fetchTickets = async () => {
+        try {
+            setLoading(true);
+            const storedData = await AsyncStorage.getItem(USER_DATA);
+            const parsedData = storedData ? JSON.parse(storedData) : null;
+            const phoneNo = parsedData?.UserInfo?.phoneNo;
 
-    const fetchedTickets = snapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: data.TicketNo || doc.id,
-        title: data.Description || "No description",
-        category: data.type,
-        status: data.status,
-        statusColor:
-          data.status === "Resolved"
-            ? "#22C55E"
-            : data.status === "In progress"
-            ? "#F59E0B"
-            : "#E11D48",
-        daysAgo: data.createdAt ? getDaysAgo(data.createdAt.toDate()) : "N/A",
-      };
-    });
+            if (!phoneNo) {
+                Alert.alert("Missing Info", "User phone number not found in storage.");
+                setLoading(false);
+                return;
+            }
 
-    setTickets(fetchedTickets);
-  } catch (error) {
-    console.error("Error fetching tickets:", error);
-    Alert.alert("Error", "Failed to load tickets.");
-  } finally {
-    setLoading(false);
-  }
-};
+            const snapshot = await firestore()
+                .collection("createTicket")
+                .where("PhoneNo", "==", phoneNo)
+                .get();
 
- useFocusEffect(
-    useCallback(() => {
-      fetchTickets();
-    }, [])
-  );
+
+            if (snapshot.empty) {
+                setTickets([]);
+                return;
+            }
+
+            const fetchedTickets = snapshot.docs.map((doc) => {
+                const data = doc.data();
+                return {
+                    id: data.TicketNo || doc.id,
+                    title: data.Description || "No description",
+                    category: data.type,
+                    status: data.status,
+                    statusColor:
+                        data.status === "Resolved"
+                            ? "#22C55E"
+                            : data.status === "In progress"
+                                ? "#F59E0B"
+                                : "#E11D48",
+                    daysAgo: data.createdAt ? getDaysAgo(data.createdAt.toDate()) : "N/A",
+                };
+            });
+
+            setTickets(fetchedTickets);
+        } catch (error) {
+            console.error("Error fetching tickets:", error);
+            Alert.alert("Error", "Failed to load tickets.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchTickets();
+        }, [])
+    );
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar backgroundColor="#fff" barStyle="dark-content" />
@@ -113,7 +118,7 @@ const fetchTickets = async () => {
                         any issues with your system.
                     </Text>
 
-                    <TouchableOpacity style={styles.callButton}>
+                    <TouchableOpacity style={styles.callButton} onPress={handleCall}>
                         <Text style={styles.callButtonText}>Call Our Support Expert</Text>
                     </TouchableOpacity>
 
@@ -157,8 +162,8 @@ const fetchTickets = async () => {
                     </View>
                 ))}
             </ScrollView>
-            
-         {loading && <Loader />}
+
+            {loading && <Loader />}
         </SafeAreaView>
     );
 };

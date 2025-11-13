@@ -54,10 +54,10 @@ const OtpScreen = ({ navigation, route }) => {
 
     try {
       setLoading(true);
-      console.log("⏳ Verifying OTP...");
+      console.log(" Verifying OTP...");
 
       const result = await confirmation.confirm(otpCode);
-      console.log("✅ OTP Verified:", result);
+      console.log(" OTP Verified:", result);
 
       const cleanPhone = phoneNumber?.replace(/^\+91/, "");
       if (!cleanPhone) throw new Error("Invalid phone number");
@@ -115,7 +115,7 @@ const OtpScreen = ({ navigation, route }) => {
       let accessToken = null;
 
       if (email && password) {
-        console.log("🔐 Fetching Solarman Token...");
+        console.log(" Fetching Solarman Token...");
         const tokenData = await getSolarmanToken(
           SOLARMAN_CONFIG.appId,
           SOLARMAN_CONFIG.appSecret,
@@ -124,16 +124,16 @@ const OtpScreen = ({ navigation, route }) => {
           SOLARMAN_CONFIG.language
         );
 
-        console.log("✅ Solarman Token Response:", tokenData);
+        console.log(" Solarman Token Response:", tokenData);
 
         if (tokenData?.access_token) {
           accessToken = tokenData.access_token;
-          console.log("🔑 Access Token:", accessToken);
+          console.log(" Access Token:", accessToken);
         } else {
-          console.warn("⚠️ No access token found in response");
+          console.warn(" No access token found in response");
         }
       } else {
-        console.warn("⚠️ Email or password missing — skipping token fetch");
+        console.warn(" Email or password missing — skipping token fetch");
       }
 
       const finalData = {
@@ -144,17 +144,23 @@ const OtpScreen = ({ navigation, route }) => {
       };
 
       await storeData(USER_DATA, JSON.stringify(finalData));
-      console.log("✅ User data stored locally with access token:", accessToken);
-      console.log("🔹 User Info:", userData);
-      if (deviceId && deviceId.trim() !== "") {
-        console.log("➡️ Navigating to mainScreen...");
-        navigation.reset({ index: 0, routes: [{ name: "mainScreen" }] });
+      console.log(" User data stored locally with access token:", accessToken);
+      console.log(" User Info:", userData);
+      if (email && email.trim() !== "" && password && password.trim() !== "") {
+        console.log("Navigating to mainScreen...");
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "mainScreen" }],
+        });
       } else {
-        console.log("➡️ Navigating to ProductsHomeScreen...");
-        navigation.reset({ index: 0, routes: [{ name: "ProductsHomeScreen" }] });
+        console.log("Navigating to ProductsHomeScreen...");
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "ProductsHomeScreen" }],
+        });
       }
     } catch (err) {
-      console.error("🚨 OTP Verification Error:", err);
+      console.error(" OTP Verification Error:", err);
       setError(true);
     } finally {
       setLoading(false);

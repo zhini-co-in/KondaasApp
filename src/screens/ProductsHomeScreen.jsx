@@ -9,6 +9,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Linking,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useNavigation } from "@react-navigation/native";
@@ -21,24 +22,40 @@ const ProductsHomeScreen = () => {
   const navigation = useNavigation();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-    const [userData, setUserData] = useState(null);
+  const [userData, setUserData] = useState(null);
 
+  const handleCall = () => {
+    const phoneNumber = "tel:9244414441";
+    Linking.openURL(phoneNumber);
+  };
+  const handleLogout = async () => {
+    try {
+      await AsyncStorage.removeItem(USER_DATA);
+      console.log(" USER_DATA cleared successfully.");
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "Login" }],
+      });
+    } catch (error) {
+      console.error(" Error during logout:", error);
+    }
+  };
 
-    useEffect(() => {
-        const loadUserData = async () => {
-            try {
-                const data = await getStorageData(USER_DATA);
-                if (data) {
-                    const parsedData = JSON.parse(data);
-                    setUserData(parsedData);
-                }
-            } catch (error) {
-                console.error("Error loading user data:", error);
-            }
-        };
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const data = await getStorageData(USER_DATA);
+        if (data) {
+          const parsedData = JSON.parse(data);
+          setUserData(parsedData);
+        }
+      } catch (error) {
+        console.error("Error loading user data:", error);
+      }
+    };
 
-        loadUserData();
-    }, []);
+    loadUserData();
+  }, []);
   useEffect(() => {
     const fetchProducts = async () => {
       try {
@@ -75,18 +92,18 @@ const ProductsHomeScreen = () => {
             <View>
               <Text style={styles.profileName}>
                 {/* Ram kumar */}
-  {userData?.UserInfo?.name || "Guest User"}
+                {userData?.UserInfo?.name || "Guest User"}
               </Text>
               <Text style={styles.liveText}>● Live</Text>
             </View>
           </View>
           <View style={styles.iconRow}>
-            <TouchableOpacity style={styles.iconBox}>
-              <Ionicons name="shield-checkmark-outline" size={22} color="#000" />
+            <TouchableOpacity style={styles.iconBox} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={22} color="#000" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconBox}>
+            {/* <TouchableOpacity style={styles.iconBox}>
               <Ionicons name="document-text-outline" size={22} color="#000" />
-            </TouchableOpacity>
+            </TouchableOpacity> */}
           </View>
         </View>
 
@@ -94,7 +111,7 @@ const ProductsHomeScreen = () => {
         <View style={styles.noDeviceContainer}>
           <Text style={styles.noDeviceTitle}>No Device Configured</Text>
           <Text style={styles.contactAdminText}>Contact Admin</Text>
-          <TouchableOpacity style={styles.contactBtn}>
+          <TouchableOpacity style={styles.contactBtn} onPress={handleCall}>
             <Text style={styles.contactBtnText}>Contact</Text>
           </TouchableOpacity>
         </View>
@@ -130,7 +147,7 @@ const ProductsHomeScreen = () => {
           )}
         </View>
       </ScrollView>
-         {loading && <Loader />}
+      {loading && <Loader />}
     </SafeAreaView>
   );
 };

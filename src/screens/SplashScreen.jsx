@@ -11,7 +11,7 @@ import { Kondaas } from '../constants/ImageConstant';
 import FontStyles from '../constants/fonts';
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { USER_DATA } from "../service/localStorage"; 
+import { USER_DATA } from "../service/localStorage";
 
 const SplashScreen = () => {
   const navigation = useNavigation();
@@ -34,10 +34,12 @@ const SplashScreen = () => {
         const userData = JSON.parse(storedData);
         const lastLogin = userData?.AppInfo?.lastLogin;
         const deviceId = userData?.UserInfo?.deviceId;
+        const email = userData?.UserInfo?.email;
+        const password = userData?.UserInfo?.password;
         const unitsrupees = userData?.UserInfo?.unitsrupees;
         console.log("📆 lastLogin:", lastLogin);
         console.log("🔧 deviceId:", deviceId);
-          console.log("unitId:", unitsrupees);
+        console.log("unitId:", unitsrupees);
 
         if (!lastLogin) {
           console.log("⚠️ lastLogin missing → Navigating to Intro");
@@ -60,8 +62,7 @@ const SplashScreen = () => {
           return;
         }
 
-        // ✅ Check for deviceId presence
-        if (deviceId && deviceId.trim() !== "") {
+        if (email && email.trim() !== "" && password && password.trim() !== "") {
           console.log("✅ Device ID found → Navigating to mainScreen");
           navigation.reset({
             index: 0,

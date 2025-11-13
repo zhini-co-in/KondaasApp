@@ -16,7 +16,6 @@ import DarkBg from "../../assets/images/Darkmode.png";
 import ProfileImg from "../../assets/images/Round.png";
 import Loader from "../components/Loader";
 import { getStorageData, USER_DATA } from "../service/localStorage";
-
 import { fetchHistoricalData, fetchRealTimeData, fetchStationList } from "../api/api";
 
 const MainScreen = ({ navigation }) => {
@@ -48,10 +47,9 @@ const MainScreen = ({ navigation }) => {
 
     fetchUserInfo();
   }, []);
+
   const unitRate = parseFloat(userInfo?.UserInfo?.unitsrupees || 0);
-const totalSavings = (todayGeneration * unitRate).toFixed(2);
-
-
+  const totalSavings = (lifetimeGeneration * unitRate).toFixed(2);
 
   function isDaytime() {
     const hour = new Date().getHours();
@@ -76,7 +74,7 @@ const totalSavings = (todayGeneration * unitRate).toFixed(2);
         endTime: dateString,
       };
 
-      console.log("📡 Today Gen Payload:", payload);
+      console.log("Today Gen Payload:", payload);
 
       const response = await fetchHistoricalData(payload);
       console.log("🌞 Response:", response);
@@ -148,8 +146,8 @@ const totalSavings = (todayGeneration * unitRate).toFixed(2);
       setStations(stationArray);
       if (stationArray.length > 0) {
         const firstStation = stationArray[0];
-        console.log("🎯 Default Station ID:", firstStation.id);
-        console.log("🏠 Default Station Name:", firstStation.name);
+        console.log("Default Station ID:", firstStation.id);
+        console.log("Default Station Name:", firstStation.name);
         setSelectedStation(0);
         setSelectedStationId(firstStation.id);
       }
@@ -230,7 +228,7 @@ const totalSavings = (todayGeneration * unitRate).toFixed(2);
         </View>
 
         {/* 🔹 Weather Info */}
-        <View style={styles.weatherRow}>
+        {/* <View style={styles.weatherRow}>
           <Ionicons
             name="warning-outline"
             size={16}
@@ -239,7 +237,7 @@ const totalSavings = (todayGeneration * unitRate).toFixed(2);
           <Text style={[styles.weatherText, { color: isDay ? "#333" : "#fff" }]}>
             Rainy weather might not give optimum generation
           </Text>
-        </View>
+        </View> */}
       </ImageBackground>
 
       {/* 🔹 Scrollable Content */}
@@ -289,10 +287,10 @@ const totalSavings = (todayGeneration * unitRate).toFixed(2);
             </View>
             <Text style={styles.profitText}>₹ {totalSavings}
             </Text>
-            <Text style={styles.descText}>
+            {/* <Text style={styles.descText}>
               Billings: from ₹7,000 → to just ₹500 last month.{"\n"}That’s Solar
               Freedom!
-            </Text>
+            </Text> */}
           </View>
 
           {/* Buttons */}
@@ -318,12 +316,12 @@ const totalSavings = (todayGeneration * unitRate).toFixed(2);
             <TouchableOpacity
               style={styles.grayButton}
               onPress={() =>
-                navigation.navigate("ProductsHomeScreen", {
+                navigation.navigate("ReferandEarnScreen", {
                   // stationId: selectedStationId, 
                 })
               }
             >
-              <Text style={styles.grayButtonText}>View All Our Products</Text>
+              <Text style={styles.grayButtonText}>Refer & Earn</Text>
             </TouchableOpacity>
           </View>
 
@@ -393,7 +391,6 @@ const totalSavings = (todayGeneration * unitRate).toFixed(2);
   );
 };
 
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
 
@@ -403,7 +400,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 15,
     justifyContent: "flex-start",
-
   },
 
   headerRow: {
