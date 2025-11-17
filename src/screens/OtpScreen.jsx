@@ -17,7 +17,7 @@ import Loader from "../components/Loader";
 import { storeData, USER_DATA } from "../service/localStorage";
 import { setToken, getSolarmanToken } from "../api/api";
 import { SOLARMAN_CONFIG } from "../api/solarmanAuth";
-
+import messaging from "@react-native-firebase/messaging"; 
 const OtpScreen = ({ navigation, route }) => {
   const { confirmation, phoneNumber } = route.params;
   const [loading, setLoading] = useState(false);
@@ -94,7 +94,7 @@ const OtpScreen = ({ navigation, route }) => {
         }
 
         await userRef.set({ AppInfo: appInfo, PlatformInfo: platformInfo }, { merge: true });
-        console.log("🔁 Updated existing user");
+        console.log(" Updated existing user");
       } else {
         userData = {
           AppInfo: appInfo,
@@ -111,7 +111,21 @@ const OtpScreen = ({ navigation, route }) => {
         console.log("🆕 Created new user document");
       }
 
-      const { email, password, deviceId } = userData?.UserInfo || {};
+      console.log("Fetching FCM Token...");
+      let fcmToken = await messaging().getToken();
+      console.log("FCM TOKEN:", fcmToken);
+
+      await userRef.set(
+        {
+          UserInfo: {
+            ...userData.UserInfo,
+            fcmToken: fcmToken,
+          },
+        },
+        { merge: true }
+      );
+      console.log("🔥 FCM Token saved in Firestore");
+      const { email, password } = userData?.UserInfo || {};
       let accessToken = null;
 
       if (email && password) {
@@ -141,11 +155,15 @@ const OtpScreen = ({ navigation, route }) => {
         AppInfo: appInfo,
         PlatformInfo: platformInfo,
         accessToken: accessToken || null,
+        UserInfo: {
+          ...userData.UserInfo,
+          fcmToken: fcmToken, 
+        },
       };
 
       await storeData(USER_DATA, JSON.stringify(finalData));
-      console.log(" User data stored locally with access token:", accessToken);
-      console.log(" User Info:", userData);
+      console.log(" User data stored locally");
+
       if (email && email.trim() !== "" && password && password.trim() !== "") {
         console.log("Navigating to mainScreen...");
         navigation.reset({
@@ -171,6 +189,7 @@ const OtpScreen = ({ navigation, route }) => {
     await storeData(USER_DATA, JSON.stringify({ UserInfo: { phoneNo: "" } }));
     navigation.goBack();
   };
+
 
   const handleResendOtp = async () => {
     try {

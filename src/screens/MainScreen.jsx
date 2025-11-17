@@ -17,7 +17,9 @@ import ProfileImg from "../../assets/images/Round.png";
 import Loader from "../components/Loader";
 import { getStorageData, USER_DATA } from "../service/localStorage";
 import { fetchHistoricalData, fetchRealTimeData, fetchStationList } from "../api/api";
-
+  import messaging from '@react-native-firebase/messaging';
+import { PermissionsAndroid, Platform } from "react-native";
+import notifee from '@notifee/react-native';
 const MainScreen = ({ navigation }) => {
   const [isDay, setIsDay] = useState(isDaytime());
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -29,6 +31,48 @@ const MainScreen = ({ navigation }) => {
   const [todayGeneration, setTodayGeneration] = useState(0);
   const [lifetimeGeneration, setLifetimeGeneration] = useState(0);
   const [userInfo, setUserInfo] = useState(null);
+
+
+
+
+async function requestPermission() {
+  const authStatus = await messaging().requestPermission();
+  const enabled =
+    authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+    authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+
+  if (enabled) {
+    console.log("Push Permission Granted");
+  }
+}
+useEffect(() => {
+  requestPermission();
+}, []);
+
+
+async function sendLocalNotification() {
+  await notifee.requestPermission();
+
+  await notifee.displayNotification({
+    title: 'Hi',
+    body: 'Welcome back to Kondaas App!',
+    android: {
+      channelId: 'default',
+      smallIcon: 'ic_launcher',
+    },
+  });
+}
+useEffect(() => {
+  sendLocalNotification();
+}, []);
+useEffect(() => {
+  notifee.createChannel({
+    id: 'default',
+    name: 'Default Notifications',
+  });
+}, []);
+
+
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
