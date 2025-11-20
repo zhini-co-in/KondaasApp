@@ -73,17 +73,18 @@ export const fetchStationDevices = async (stationId) => {
     };
 
     const response = await api.post(
-      "https://globalapi.solarmanpv.com/station/v1.0/device?language=en",
+      "station/v1.0/device?language=en",
       body
     );
 
-    console.log("✅ Station Devices Response:", response.data);
+    console.log(" Station Devices Response:", response.data);
     return response.data;
   } catch (error) {
     console.error("🚨 Error fetching station devices:", error);
     return null;
   }
 };
+
 export const fetchHistoricalData = async (body) => {
   try {
     const res = await api.post("station/v1.0/history?language=en", body);

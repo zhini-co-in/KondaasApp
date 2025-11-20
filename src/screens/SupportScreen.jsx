@@ -18,7 +18,10 @@ import Loader from "../components/Loader";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { USER_DATA } from "../service/localStorage";
 
-const SupportScreen = ({ navigation }) => {
+const SupportScreen = ({ route, navigation }) => {
+    const { stationId } = route.params;
+
+    console.log("SupportScreen ID:", stationId);
     const [tickets, setTickets] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -124,7 +127,11 @@ const SupportScreen = ({ navigation }) => {
 
                     <TouchableOpacity
                         style={styles.createButton}
-                        onPress={() => navigation.navigate("createticketScreen")}
+                        onPress={() =>
+                            navigation.navigate("createticketScreen", {
+                                stationId: stationId,
+                            })
+                        }
                     >
                         <Text style={styles.createButtonText}>Create Ticket</Text>
                     </TouchableOpacity>

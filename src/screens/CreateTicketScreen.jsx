@@ -16,8 +16,11 @@ import firestore from "@react-native-firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { USER_DATA } from "../service/localStorage";
 import Loader from "../components/Loader";
+import { fetchStationDevices } from "../api/api";
 
-const CreateTicketScreen = ({ navigation }) => {
+const CreateTicketScreen = ({ route, navigation }) => {
+  const { stationId } = route.params;
+  console.log("CreateTicketScreen Station ID:", stationId);
   const [selectedDevice, setSelectedDevice] = useState("");
   const [selectedIssue, setSelectedIssue] = useState("");
   const [description, setDescription] = useState("");
@@ -33,10 +36,10 @@ const CreateTicketScreen = ({ navigation }) => {
           const parsed = JSON.parse(data);
 
           const extractedPhone =
-            parsed?.UserInfo?.phoneNo || // Case 1: nested
-            parsed?.phoneNo ||           // Case 2: top-level
-            parsed?.phoneNumber ||       // Case 3: alternate key
-            parsed?.mobile ||            // Case 4: alternate key
+            parsed?.UserInfo?.phoneNo ||
+            parsed?.phoneNo ||
+            parsed?.phoneNumber ||
+            parsed?.mobile ||
             "Unknown";
 
           console.log("📱 Extracted phone number:", extractedPhone);
@@ -54,6 +57,22 @@ const CreateTicketScreen = ({ navigation }) => {
 
     getUserData();
   }, []);
+
+
+  useEffect(() => {
+    const loadDevices = async () => {
+      setLoading(true);
+      const res = await fetchStationDevices(stationId);
+
+      if (res && res.deviceListItems) {
+        setDeviceList(res.deviceListItems);
+      }
+
+      setLoading(false);
+    };
+
+    loadDevices();
+  }, [stationId]);
 
 
   // 🔹 Fetch devices from Firestore
@@ -183,20 +202,22 @@ const CreateTicketScreen = ({ navigation }) => {
             enabled={!loading}
           >
             <Picker.Item label="Select a Device" value="" color="#111010ff" />
+
             {loading ? (
               <Picker.Item label="Loading..." value="" />
             ) : deviceList.length > 0 ? (
               deviceList.map((device) => (
                 <Picker.Item
-                  key={device.id}
-                  label={device.title}
-                  value={device.title}
+                  key={device.deviceId}
+                  label={`${device.deviceType} - ${device.deviceId}`}
+                  value={device.deviceId}
                 />
               ))
             ) : (
               <Picker.Item label="No devices available" value="" />
             )}
           </Picker>
+
         </View>
 
         {/* Issue Type */}

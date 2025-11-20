@@ -35,14 +35,13 @@ const PowerGenerationScreen = ({ navigation, route }) => {
         const data = await getStorageData(USER_DATA);
         if (data) {
           const parsed = JSON.parse(data);
-          console.log("✅ Loaded User Data:", parsed);
-          // handle structure like { UserInfo: {...} }
+          console.log(" Loaded User Data:", parsed);
           setUserData(parsed.UserInfo || parsed);
         } else {
-          console.warn("⚠️ No user data found in storage");
+          console.warn(" No user data found in storage");
         }
       } catch (err) {
-        console.error("❌ Error loading user data:", err);
+        console.error(" Error loading user data:", err);
       }
     };
 
@@ -51,9 +50,9 @@ const PowerGenerationScreen = ({ navigation, route }) => {
   const unitsRupees = parseFloat(userData?.unitsrupees || 0);
   const totalSaved = (totalGenerated * unitsRupees).toFixed(0);
 
-  console.log("⚡ Units:", totalGenerated);
-  console.log("💰 Per Unit Rate:", unitsRupees);
-  console.log("🏦 Total Saved:", totalSaved);
+  console.log(" Units:", totalGenerated);
+  console.log(" Per Unit Rate:", unitsRupees);
+  console.log(" Total Saved:", totalSaved);
 
   const formatDate = (date) => {
     const y = date.getFullYear();

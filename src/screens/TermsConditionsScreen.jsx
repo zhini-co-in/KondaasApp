@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from "react-native";
+import LinearGradient from "react-native-linear-gradient";
 import Ionicons from "react-native-vector-icons/Ionicons";
 
 const TermsConditionsScreen = ({ navigation }) => {
@@ -26,17 +27,22 @@ const TermsConditionsScreen = ({ navigation }) => {
         <Text style={styles.headerTitle}>Terms & Conditions</Text>
       </View>
 
-     
-        {/* Red Highlight Section */}
-        <View style={styles.highlightBox}>
-          <Text style={styles.highlightTitle}>Terms & Conditions</Text>
-          <Text style={styles.highlightSub}>Kondaas Solar Solutions</Text>
 
-          <View style={styles.updateBox}>
-            <Text style={styles.updateText}>Last Updated: August 15, 2025</Text>
-          </View>
+      <LinearGradient
+        colors={["#D60000", "#EF4949", "#FFB3B3"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.highlightBox}
+      >
+        <Text style={styles.highlightTitle}>Terms & Conditions</Text>
+        <Text style={styles.highlightSub}>Kondaas Solar Solutions</Text>
+
+        <View style={styles.updateBox}>
+          <Text style={styles.updateText}>Last Updated: August 15, 2025</Text>
         </View>
- <ScrollView
+      </LinearGradient>
+
+      <ScrollView
         style={styles.scrollContainer}
         contentContainerStyle={{ paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
@@ -130,9 +136,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   highlightBox: {
-    backgroundColor: "#E53935",
     paddingVertical: 20,
     alignItems: "center",
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
   },
   highlightTitle: {
     color: "#fff",

@@ -12,6 +12,7 @@ import FontStyles from '../constants/fonts';
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { USER_DATA } from "../service/localStorage";
+import LinearGradient from 'react-native-linear-gradient';
 
 const SplashScreen = () => {
   const navigation = useNavigation();
@@ -89,9 +90,14 @@ const SplashScreen = () => {
   }, [navigation]);
 
 
-  return (
-    <View style={styles.container}>
-      <StatusBar backgroundColor="#fb0404" barStyle="light-content" />
+   return (
+    <LinearGradient
+      colors={['#D60000', '#EF4949', '#FFB3B3']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 0 }}
+      style={styles.container}
+    >
+      {/* <StatusBar backgroundColor="#D60000" barStyle="light-content" /> */}
 
       <View style={styles.imageContainer}>
         <Image
@@ -102,9 +108,10 @@ const SplashScreen = () => {
       </View>
 
       <Text style={styles.bottomText}>Powered by Trisentrix | Version 1.0</Text>
-    </View>
+    </LinearGradient>
   );
 };
+
 
 export default SplashScreen;
 
@@ -113,7 +120,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     alignItems: 'center',
-    backgroundColor: '#fb0404',
+  
   },
   imageContainer: {
     flex: 1,

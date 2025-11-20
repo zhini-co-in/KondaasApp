@@ -108,12 +108,21 @@ const OtpScreen = ({ navigation, route }) => {
           },
         };
         await userRef.set(userData);
-        console.log("🆕 Created new user document");
+        console.log("Created new user document");
       }
 
-      console.log("Fetching FCM Token...");
-      let fcmToken = await messaging().getToken();
-      console.log("FCM TOKEN:", fcmToken);
+     console.log("Fetching FCM Token...");
+
+let fcmToken = null;
+
+try {
+  await new Promise((resolve) => setTimeout(resolve, 1500)); 
+  fcmToken = await messaging().getToken();
+  console.log("FCM TOKEN:", fcmToken);
+} catch (tokenErr) {
+  console.warn("⚠ FCM Token Error:", tokenErr);
+}
+
 
       await userRef.set(
         {

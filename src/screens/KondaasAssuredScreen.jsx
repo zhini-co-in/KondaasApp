@@ -84,13 +84,13 @@ useEffect(() => {
       const data = await getStorageData(USER_DATA);
       if (data) {
         const parsed = JSON.parse(data);
-        console.log("✅ Loaded User Info Raw:", parsed);
+        console.log("Loaded User Info Raw:", parsed);
         setUserInfo(parsed.UserInfo || parsed);
       } else {
-        console.warn("⚠️ No User Info found in storage");
+        console.warn(" No User Info found in storage");
       }
     } catch (err) {
-      console.error("❌ Error loading user info:", err);
+      console.error(" Error loading user info:", err);
     }
   };
 
@@ -136,7 +136,7 @@ console.log("💰 Total Savings (₹):", totalSavings);
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.subtitle}>
-          Showing generation until{" "}
+          Showing generation for{" "}
           {new Date().toLocaleString("en-US", { month: "short", year: "numeric" })}
         </Text>
 

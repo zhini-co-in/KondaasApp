@@ -17,7 +17,7 @@ import ProfileImg from "../../assets/images/Round.png";
 import Loader from "../components/Loader";
 import { getStorageData, USER_DATA } from "../service/localStorage";
 import { fetchHistoricalData, fetchRealTimeData, fetchStationList } from "../api/api";
-  import messaging from '@react-native-firebase/messaging';
+import messaging from '@react-native-firebase/messaging';
 import { PermissionsAndroid, Platform } from "react-native";
 import notifee from '@notifee/react-native';
 const MainScreen = ({ navigation }) => {
@@ -29,48 +29,46 @@ const MainScreen = ({ navigation }) => {
   const [selectedStation, setSelectedStation] = useState(0);
   const [selectedStationId, setSelectedStationId] = useState(null);
   const [todayGeneration, setTodayGeneration] = useState(0);
-  const [lifetimeGeneration, setLifetimeGeneration] = useState(0);
+  const [lifeTimeGeneration, setLifeTimeGeneration] = useState(0);
   const [userInfo, setUserInfo] = useState(null);
 
 
+  async function requestPermission() {
+    const authStatus = await messaging().requestPermission();
+    const enabled =
+      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
-
-async function requestPermission() {
-  const authStatus = await messaging().requestPermission();
-  const enabled =
-    authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-    authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-
-  if (enabled) {
-    console.log("Push Permission Granted");
+    if (enabled) {
+      console.log("Push Permission Granted");
+    }
   }
-}
-useEffect(() => {
-  requestPermission();
-}, []);
+  useEffect(() => {
+    requestPermission();
+  }, []);
 
 
-async function sendLocalNotification() {
-  await notifee.requestPermission();
+  async function sendLocalNotification() {
+    await notifee.requestPermission();
 
-  await notifee.displayNotification({
-    title: 'Hi',
-    body: 'Welcome back to Kondaas App!',
-    android: {
-      channelId: 'default',
-      smallIcon: 'ic_launcher',
-    },
-  });
-}
-useEffect(() => {
-  sendLocalNotification();
-}, []);
-useEffect(() => {
-  notifee.createChannel({
-    id: 'default',
-    name: 'Default Notifications',
-  });
-}, []);
+    await notifee.displayNotification({
+      title: 'Hi',
+      body: 'Welcome back to Kondaas App!',
+      android: {
+        channelId: 'default',
+        smallIcon: 'ic_launcher',
+      },
+    });
+  }
+  useEffect(() => {
+    sendLocalNotification();
+  }, []);
+  useEffect(() => {
+    notifee.createChannel({
+      id: 'default',
+      name: 'Default Notifications',
+    });
+  }, []);
 
 
   useEffect(() => {
@@ -93,7 +91,7 @@ useEffect(() => {
   }, []);
 
   const unitRate = parseFloat(userInfo?.UserInfo?.unitsrupees || 0);
-  const totalSavings = (lifetimeGeneration * unitRate).toFixed(2);
+  const totalSavings = (lifeTimeGeneration * unitRate).toFixed(2);
 
   function isDaytime() {
     const hour = new Date().getHours();
@@ -102,8 +100,7 @@ useEffect(() => {
   useEffect(() => {
     if (selectedStationId) {
       loadTodayGeneration(selectedStationId);
-      getRealTimeGeneration(selectedStationId);
-
+      loadLifeTimeGeneration(selectedStationId);
     }
   }, [selectedStationId]);
   const loadTodayGeneration = async (stationId) => {
@@ -137,19 +134,37 @@ useEffect(() => {
       console.error("Error fetching today's generation:", error);
     }
   };
-  const getRealTimeGeneration = async (stationId) => {
-    try {
-      console.log("⚡ Fetching real-time data for station:", stationId);
-      const response = await fetchRealTimeData({ stationId });
-      console.log("📦 Real-time response:", response);
 
-      if (response?.generationTotal !== undefined) {
-        setLifetimeGeneration(response.generationTotal);
+  const loadLifeTimeGeneration = async (stationId) => {
+    try {
+      const currentYear = new Date().getFullYear().toString(); // 👉 dynamic year
+
+      const payload = {
+        stationId: stationId,
+        timeType: 4,
+        startTime: currentYear,
+        endTime: currentYear,
+      };
+
+      console.log("Lifetime Payload:", payload);
+
+      const response = await fetchHistoricalData(payload);
+      console.log("🌍 Lifetime Response:", response);
+
+      if (
+        response &&
+        response.stationDataItems &&
+        response.stationDataItems.length > 0
+      ) {
+        const generationValue =
+          response.stationDataItems[0].generationValue || 0;
+
+        setLifeTimeGeneration(generationValue.toFixed(1));
       } else {
-        console.warn("⚠️ No generationTotal in response");
+        setLifeTimeGeneration(0);
       }
     } catch (error) {
-      console.error("🚨 Error fetching real-time data:", error);
+      console.error("Lifetime Error:", error);
     }
   };
 
@@ -303,18 +318,14 @@ useEffect(() => {
             </View>
 
             <View style={styles.unitBlock}>
-              <Text style={styles.unitValue}>
-                {lifetimeGeneration
-                  ? (lifetimeGeneration / 1000).toFixed(2)
-                  : 0}{" "}
-                Units
-              </Text>
+              <Text style={styles.unitValue}>{lifeTimeGeneration} kWh</Text>
               <Text style={styles.unitLabel}>LIFETIME</Text>
             </View>
 
 
+
           </View>
-          <Text style={styles.updateText}>Updated 15 mins ago</Text>
+          <Text style={styles.updateText}></Text>
           {/* Card */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>
@@ -325,7 +336,7 @@ useEffect(() => {
               <View style={styles.progressFill} />
             </View>
             <View style={styles.progressMarkers}>
-              <Text style={styles.markerText}>Invested</Text>
+              {/* <Text style={styles.markerText}>Invested</Text> */}
               <Text style={styles.markerText}>Break-even</Text>
               <Text style={styles.markerText}>ROI Achieved</Text>
             </View>
@@ -352,10 +363,15 @@ useEffect(() => {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.secondaryButton}
-              onPress={() => navigation.navigate("SupportScreen")}
+              onPress={() =>
+                navigation.navigate("SupportScreen", {
+                  stationId: selectedStationId,
+                })
+              }
             >
               <Text style={styles.secondaryButtonText}>Support</Text>
             </TouchableOpacity>
+
 
             <TouchableOpacity
               style={styles.grayButton}
@@ -551,7 +567,6 @@ const styles = StyleSheet.create({
     color: "#6c757d",
   },
 
-
   card: {
     borderRadius: 14,
     padding: 16,
@@ -569,7 +584,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: "#333",
   },
-  brandText: { color: "#e60000", fontWeight: "700" },
+  brandText: { color: "#EF4949", fontWeight: "700" },
   progressBar: {
     marginTop: 16,
     height: 5,
@@ -577,7 +592,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     overflow: "hidden",
   },
-  progressFill: { height: "100%", width: "80%", backgroundColor: "#e60000" },
+  progressFill: { height: "100%", width: "80%", backgroundColor: "#EF4949" },
   progressMarkers: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -657,7 +672,7 @@ const styles = StyleSheet.create({
   },
   buttonContainer: { alignItems: "center", marginTop: 25 },
   primaryButton: {
-    backgroundColor: "#e60000",
+    backgroundColor: "#EF4949",
     paddingVertical: 12,
     borderRadius: 8,
     width: "85%",
@@ -667,14 +682,14 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   secondaryButton: {
     borderWidth: 1,
-    borderColor: "#e60000",
+    borderColor: "#EF4949",
     borderRadius: 8,
     width: "85%",
     alignItems: "center",
     paddingVertical: 12,
     marginBottom: 10,
   },
-  secondaryButtonText: { color: "#e60000", fontWeight: "700", fontSize: 15 },
+  secondaryButtonText: { color: "#EF4949", fontWeight: "700", fontSize: 15 },
   grayButton: {
     backgroundColor: "#eee",
     borderRadius: 8,

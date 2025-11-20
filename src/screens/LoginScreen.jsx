@@ -15,6 +15,7 @@ import auth from "@react-native-firebase/auth";
 import NetInfo from "@react-native-community/netinfo";
 import Loader from "../components/Loader";
 import { storeData, getData, USER_DATA } from "../service/localStorage";
+import LinearGradient from "react-native-linear-gradient";
 
 const LoginScreen = ({ navigation }) => {
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -87,73 +88,86 @@ const LoginScreen = ({ navigation }) => {
     }
   };
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <Animated.View
-        style={[styles.netBanner, { transform: [{ translateY: slideAnim }] }]}
-      >
-        <Text style={styles.netBannerText}>No Internet Connection</Text>
-      </Animated.View>
+ return (
+    <LinearGradient
+      colors={["#D60000", "#EF4949", "#FFB3B3"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 0 }}
+      style={styles.safeArea}
+    >
+      <SafeAreaView style={{ flex: 1 }}>
+        <Animated.View
+          style={[styles.netBanner, { transform: [{ translateY: slideAnim }] }]}
+        >
+          <Text style={styles.netBannerText}>No Internet Connection</Text>
+        </Animated.View>
 
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
-          <Image
-            source={require("../../assets/images/kondass.png")}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-        </View>
-
-        <View style={styles.bottomContainer}>
-          <View style={styles.indicatorWrapper}>
-            <View style={styles.indicator}></View>
-          </View>
-
-          <View style={styles.welcomeContainer}>
-            <Text style={styles.welcomeText}>Welcome</Text>
-            <Text style={styles.subText}>Enter your phone number to continue</Text>
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Phone number</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter the Phone Number"
-              placeholderTextColor="#999"
-              keyboardType="phone-pad"
-              value={phoneNumber}
-              maxLength={10}
-              onChangeText={(text) => {
-                const cleaned = text.replace(/[^0-9]/g, "");
-                setPhoneNumber(cleaned);
-              }}
-            />
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.otpButton,
-              !isConnected && { backgroundColor: "#aaa" }, 
-            ]}
-            disabled={!isConnected}
-            onPress={handleSendOTP}
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+          
+          {/* HEADER WITH GRADIENT */}
+          <LinearGradient
+            colors={["#D60000", "#EF4949", "#FFB3B3"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.header}
           >
-            <Text style={styles.otpButtonText}>Send OTP</Text>
-          </TouchableOpacity>
+            <Image
+              source={require("../../assets/images/kondass.png")}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </LinearGradient>
 
-          <Text style={styles.termsText}>
-            By signing up you are accepting the{" "}
-            <Text
-              style={styles.termsLink}
-              onPress={() => navigation.navigate("TermsConditionsScreen")}
+          {/* WHITE CONTAINER */}
+          <View style={styles.bottomContainer}>
+            <View style={styles.indicatorWrapper}>
+              <View style={styles.indicator}></View>
+            </View>
+
+            <View style={styles.welcomeContainer}>
+              <Text style={styles.welcomeText}>Welcome</Text>
+              <Text style={styles.subText}>Enter your phone number to continue</Text>
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Phone number</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter the Phone Number"
+                placeholderTextColor="#999"
+                keyboardType="phone-pad"
+                value={phoneNumber}
+                maxLength={10}
+                onChangeText={(text) => {
+                  const cleaned = text.replace(/[^0-9]/g, "");
+                  setPhoneNumber(cleaned);
+                }}
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.otpButton, !isConnected && { backgroundColor: "#aaa" }]}
+              disabled={!isConnected}
+              onPress={handleSendOTP}
             >
-              Terms & Conditions
-            </Text>
-          </Text>
-        </View>
-      </ScrollView>
+              <Text style={styles.otpButtonText}>Send OTP</Text>
+            </TouchableOpacity>
 
-      {loading && <Loader />}
-    </SafeAreaView>
+            <Text style={styles.termsText}>
+              By signing up you are accepting the{" "}
+              <Text
+                style={styles.termsLink}
+                onPress={() => navigation.navigate("TermsConditionsScreen")}
+              >
+                Terms & Conditions
+              </Text>
+            </Text>
+          </View>
+        </ScrollView>
+
+        {loading && <Loader />}
+      </SafeAreaView>
+    </LinearGradient>
   );
 };
 
@@ -162,14 +176,13 @@ export default LoginScreen;
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#fb0404",
   },
   netBanner: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    backgroundColor: "#fb0404",
+    backgroundColor: "#D60000",
     paddingVertical: 10,
     alignItems: "center",
     zIndex: 999,
@@ -182,7 +195,7 @@ const styles = StyleSheet.create({
   header: {
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fb0404",
+
     paddingVertical: 40,
   },
   logo: {
