@@ -96,7 +96,7 @@ export const fetchHistoricalData = async (body) => {
 };
 export const fetchRealTimeData = async (body) => {
   try {
-    await setAuthToken(); // attach token to header
+    await setAuthToken();
     const res = await api.post("station/v1.0/realTime?language=en", body);
     return res.data;
   } catch (err) {

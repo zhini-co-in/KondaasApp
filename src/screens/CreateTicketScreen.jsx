@@ -16,8 +16,8 @@ import firestore from "@react-native-firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { USER_DATA } from "../service/localStorage";
 import Loader from "../components/Loader";
-import { fetchStationDevices } from "../api/api";
-
+import { fetchStationDevices, fetchStationList } from "../api/api";
+import NetInfo from '@react-native-community/netinfo';
 const CreateTicketScreen = ({ route, navigation }) => {
   const { stationId } = route.params;
   console.log("CreateTicketScreen Station ID:", stationId);
@@ -28,6 +28,8 @@ const CreateTicketScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [userPhone, setUserPhone] = useState("");
+  const [stationList, setStationList] = useState([]);
+
   useEffect(() => {
     const getUserData = async () => {
       try {
@@ -58,14 +60,20 @@ const CreateTicketScreen = ({ route, navigation }) => {
     getUserData();
   }, []);
 
-
   useEffect(() => {
     const loadDevices = async () => {
       setLoading(true);
+
       const res = await fetchStationDevices(stationId);
 
       if (res && res.deviceListItems) {
-        setDeviceList(res.deviceListItems);
+        const inverterDevices = res.deviceListItems.filter(
+          (item) =>
+            item.deviceType?.toLowerCase() === "inverter" ||
+            item.deviceName?.toLowerCase().includes("inverter")
+        );
+
+        setDeviceList(inverterDevices);
       }
 
       setLoading(false);
@@ -74,45 +82,36 @@ const CreateTicketScreen = ({ route, navigation }) => {
     loadDevices();
   }, [stationId]);
 
-
-  // 🔹 Fetch devices from Firestore
   useEffect(() => {
-    const fetchDevices = async () => {
-      try {
-        const snapshot = await firestore().collection("deviceId").get();
-
-        if (snapshot.empty) {
-          Alert.alert("No data", "No devices found in Firestore.");
-          setDeviceList([]);
-          return;
-        }
-
-        const devices = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          title: doc.data().title,
-        }));
-
-        setDeviceList(devices);
-      } catch (error) {
-        console.error("Error fetching devices:", error);
-        Alert.alert("Error", "Failed to load devices from Firestore.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDevices();
+    loadStations();
   }, []);
 
-  // 🔹 Generate unique TicketNo
+  const loadStations = async () => {
+    setLoading(true);
+    const list = await fetchStationList();
+    setStationList(list);
+    setLoading(false);
+  };
+  const matchedStation = stationList.find(
+    (s) => s.id === stationId
+  );
+
+  console.log(" Incoming stationId:", stationId);
+  console.log(" StationList:", stationList);
+  console.log("Matched Station:", matchedStation);
+  console.log(" Station Name:", matchedStation?.name);
+  const stationName = matchedStation?.name || "";
+
   const generateTicketNo = (phone) => {
-    const timestamp = Date.now().toString().slice(-6); // last 6 digits
+    const timestamp = Date.now().toString().slice(-6);
     return `TKT-${phone.slice(-4)}-${timestamp}`;
   };
-
-
-
   const handleSubmit = async () => {
+    const net = await NetInfo.fetch();
+    if (!net.isConnected) {
+      alert("No network connection available");
+      return;
+    }
     if (!selectedDevice) {
       Alert.alert("Missing Info", "Please select a device.");
       return;
@@ -184,7 +183,6 @@ const CreateTicketScreen = ({ route, navigation }) => {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Create Support Ticket</Text>
       </View>
-
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -202,15 +200,15 @@ const CreateTicketScreen = ({ route, navigation }) => {
             enabled={!loading}
           >
             <Picker.Item label="Select a Device" value="" color="#111010ff" />
-
             {loading ? (
-              <Picker.Item label="Loading..." value="" />
+              <Picker.Item />
             ) : deviceList.length > 0 ? (
               deviceList.map((device) => (
                 <Picker.Item
                   key={device.deviceId}
-                  label={`${device.deviceType} - ${device.deviceId}`}
-                  value={device.deviceId}
+                  label={`${device.deviceType} - ${device.deviceId}- ${stationName}`}
+                  value={`${device.deviceId}-${stationName}`}
+
                 />
               ))
             ) : (
@@ -323,7 +321,7 @@ const styles = StyleSheet.create({
 
 
   submitButton: {
-    backgroundColor: "#E60000",
+    backgroundColor: "#EF4949",
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: "center",

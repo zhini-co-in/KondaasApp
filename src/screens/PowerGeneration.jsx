@@ -13,6 +13,7 @@ import { Dimensions } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import api, { fetchHistoricalData } from "../api/api";
 import { setAuthToken } from "../api/api";
+import NetInfo from '@react-native-community/netinfo';
 import { USER_DATA, getStorageData } from "../service/localStorage";
 
 const screenWidth = Dimensions.get("window").width;
@@ -106,6 +107,11 @@ const PowerGenerationScreen = ({ navigation, route }) => {
   };
 
   const fetchGenerationData = async (tab) => {
+    const net = await NetInfo.fetch();
+    if (!net.isConnected) {
+      alert("No network connection available");
+      return;
+    }
     setLoading(true);
     try {
       await setAuthToken();
@@ -362,5 +368,5 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   infoText: { fontSize: 13, color: "#333", marginLeft: 6, flex: 1 },
-  footerLink: { color: "#E60000", textAlign: "left", marginTop: 10, fontSize: 13 },
+  footerLink: { color: "#E60000", textAlign: "left", marginTop: 10, fontSize: 13, marginLeft: 20, },
 });

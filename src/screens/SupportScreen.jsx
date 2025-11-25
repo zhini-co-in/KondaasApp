@@ -31,13 +31,21 @@ const SupportScreen = ({ route, navigation }) => {
     };
 
     const getDaysAgo = (date) => {
-        const diff = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24);
-        if (diff < 1) return "Today";
-        if (diff < 2) return "1 day ago";
-        if (diff < 7) return `${Math.floor(diff)} days ago`;
-        return `${Math.floor(diff / 7)} week${Math.floor(diff / 7) > 1 ? "s" : ""} ago`;
-    };
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
+        const target = new Date(date);
+        target.setHours(0, 0, 0, 0);
+
+        const diff = (today - target) / (1000 * 60 * 60 * 24);
+
+        if (diff === 0) return "Today";
+        if (diff === 1) return "1 day ago";
+        if (diff < 7) return `${diff} days ago`;
+
+        const weeks = Math.floor(diff / 7);
+        return `${weeks} week${weeks > 1 ? "s" : ""} ago`;
+    };
 
     const fetchTickets = async () => {
         try {
@@ -55,8 +63,8 @@ const SupportScreen = ({ route, navigation }) => {
             const snapshot = await firestore()
                 .collection("createTicket")
                 .where("PhoneNo", "==", phoneNo)
-                .get();
 
+                .get();
 
             if (snapshot.empty) {
                 setTickets([]);
@@ -77,8 +85,12 @@ const SupportScreen = ({ route, navigation }) => {
                                 ? "#F59E0B"
                                 : "#E11D48",
                     daysAgo: data.createdAt ? getDaysAgo(data.createdAt.toDate()) : "N/A",
+                    createdAt: data.createdAt ? data.createdAt.toDate() : null, // ⬅ added for sorting
                 };
             });
+
+            fetchedTickets.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
 
             setTickets(fetchedTickets);
         } catch (error) {
@@ -137,10 +149,8 @@ const SupportScreen = ({ route, navigation }) => {
                     </TouchableOpacity>
 
                 </View>
-
                 {/* Recent Tickets */}
                 <Text style={styles.recentTitle}>Recent Tickets</Text>
-
                 {tickets.map((ticket, index) => (
                     <View key={index} style={styles.ticketCard}>
                         <View style={styles.ticketHeader}>
@@ -163,7 +173,6 @@ const SupportScreen = ({ route, navigation }) => {
                             </View>
                             <Text style={styles.daysAgo}>{ticket.daysAgo}</Text>
                         </View>
-
                         <Text style={styles.ticketTitle}>{ticket.title}</Text>
                         <Text style={styles.ticketCategory}>{ticket.category}</Text>
                     </View>
@@ -211,19 +220,19 @@ const styles = StyleSheet.create({
     },
     callButton: {
         borderWidth: 1,
-        borderColor: "#E60000",
+        borderColor: "#EF4949",
         borderRadius: 8,
         paddingVertical: 12,
         alignItems: "center",
         marginBottom: 10,
     },
     callButtonText: {
-        color: "#E60000",
+        color: "#EF4949",
         fontWeight: "600",
         fontSize: 15,
     },
     createButton: {
-        backgroundColor: "#E60000",
+        backgroundColor: "#EF4949",
         borderRadius: 8,
         paddingVertical: 12,
         alignItems: "center",

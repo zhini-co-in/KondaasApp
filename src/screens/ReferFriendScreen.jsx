@@ -20,7 +20,7 @@ import Loader from '../components/Loader';
 import Contacts from 'react-native-contacts';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
-
+import NetInfo from "@react-native-community/netinfo";
 const ReferFriendScreen = ({ navigation }) => {
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
@@ -31,7 +31,6 @@ const ReferFriendScreen = ({ navigation }) => {
   const [filteredContacts, setFilteredContacts] = useState([]);
   const [showList, setShowList] = useState(false);
 
-  // 🔹 Fetch product list
   useEffect(() => {
     const fetchProducts = async () => {
       try {
@@ -43,16 +42,15 @@ const ReferFriendScreen = ({ navigation }) => {
           }));
           setProducts(productData);
         } else {
-          console.log("⚠️ No products found in Firestore");
+          console.log(" No products found in Firestore");
         }
       } catch (error) {
-        console.error("❌ Error fetching products:", error);
+        console.error(" Error fetching products:", error);
       }
     };
     fetchProducts();
   }, []);
 
-  // 🔹 Fetch device contacts
   useEffect(() => {
     const getContacts = async () => {
       try {
@@ -81,6 +79,21 @@ const ReferFriendScreen = ({ navigation }) => {
 
     getContacts();
   }, []);
+  const handleNameSearch = (text) => {
+    setName(text);
+
+    if (text.length > 0) {
+      const filtered = contacts.filter(
+        (c) =>
+          c.name.toLowerCase().includes(text.toLowerCase()) ||
+          c.number.replace(/\D/g, "").includes(text)
+      );
+      setFilteredContacts(filtered.slice(0, 5));
+      setShowList(true);
+    } else {
+      setShowList(false);
+    }
+  };
 
   const handleSearch = (text) => {
     const cleaned = text.replace(/[^0-9]/g, "").slice(0, 10);
@@ -106,8 +119,19 @@ const ReferFriendScreen = ({ navigation }) => {
     setShowList(false);
   };
   const handleRefer = async () => {
+      const net = await NetInfo.fetch();
+    if (!net.isConnected) {
+      alert("No network connection available");
+      return;
+    }
     if (!name || !mobile || !product) {
       Alert.alert("Missing Info", "Please fill all fields before submitting.");
+      return;
+    }
+    const mobileRegex = /^[6-9]\d{9}$/;
+
+    if (!mobileRegex.test(mobile)) {
+      Alert.alert("Invalid Mobile Number", "Enter a valid 10-digit mobile number.");
       return;
     }
 
@@ -186,7 +210,7 @@ const ReferFriendScreen = ({ navigation }) => {
           style={styles.input}
           placeholder="Enter your friend's name"
           value={name}
-          onChangeText={setName}
+          onChangeText={handleNameSearch}
         />
 
         {showList && (
@@ -198,7 +222,7 @@ const ReferFriendScreen = ({ navigation }) => {
                 borderRadius: 8,
                 backgroundColor: "#fff",
               }}
-              nestedScrollEnabled={true} 
+              nestedScrollEnabled={true}
             >
               {filteredContacts.map((item, index) => (
                 <TouchableOpacity
@@ -294,7 +318,7 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   referBtn: {
-    backgroundColor: "#E60000",
+    backgroundColor: "#EF4949",
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: "center",

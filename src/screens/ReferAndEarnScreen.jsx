@@ -98,7 +98,7 @@ const ReferAndEarnScreen = ({ navigation }) => {
           <Text style={styles.topValue}>
             {referrals.length.toString().padStart(2, "0")}
           </Text>
-          <Text style={styles.topLabel}>Successful Referrals</Text>
+          <Text style={styles.topLabel}>Total Referrals</Text>
         </View>
       </View>
       {/* Refer Now Button */}
@@ -114,7 +114,7 @@ const ReferAndEarnScreen = ({ navigation }) => {
         {/* Step 1 */}
         <View style={styles.stepRow}>
           <View style={styles.iconCircle}>
-            <Ionicons name="link-outline" size={22} color="#E60000" />
+            <Ionicons name="link-outline" size={22} color="#EF4949" />
           </View>
           <Text style={styles.stepText}>
             Invite your friends through the referral link
@@ -127,7 +127,7 @@ const ReferAndEarnScreen = ({ navigation }) => {
         {/* Step 2 */}
         <View style={styles.stepRow}>
           <View style={styles.iconCircle}>
-            <Ionicons name="solar-outline" size={22} color="#E60000" />
+            <Ionicons name="solar-outline" size={22} color="#EF4949" />
           </View>
           <Text style={styles.stepText}>
             Your friend installs the Kondaas’s solar
@@ -140,7 +140,7 @@ const ReferAndEarnScreen = ({ navigation }) => {
         {/* Step 3 */}
         <View style={styles.stepRow}>
           <View style={styles.iconCircle}>
-            <Ionicons name="wallet-outline" size={22} color="#E60000" />
+            <Ionicons name="wallet-outline" size={22} color="#EF4949" />
           </View>
           <Text style={styles.stepText}>
             You will get ₹5,000 in your wallet
@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
   topLabel: { fontSize: 13, color: "#777", marginTop: 2 },
 
   referBtn: {
-    backgroundColor: "#E60000",
+    backgroundColor: "#EF4949",
     borderRadius: 8,
     marginHorizontal: 20,
     marginVertical: 20,
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
   referralName: { fontWeight: "700", fontSize: 14 },
   referralStatus: { fontSize: 12, color: "#666" },
   remindBtn: {
-    backgroundColor: "#E60000",
+    backgroundColor: "#EF4949",
     borderRadius: 20,
     paddingVertical: 5,
     paddingHorizontal: 12,

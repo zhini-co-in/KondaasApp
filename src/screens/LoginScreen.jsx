@@ -14,7 +14,7 @@ import {
 import auth from "@react-native-firebase/auth";
 import NetInfo from "@react-native-community/netinfo";
 import Loader from "../components/Loader";
-import { storeData, getData, USER_DATA } from "../service/localStorage";
+import { storeData, getStorageData, USER_DATA } from "../service/localStorage";
 import LinearGradient from "react-native-linear-gradient";
 
 const LoginScreen = ({ navigation }) => {
@@ -48,7 +48,7 @@ const LoginScreen = ({ navigation }) => {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const savedData = await getData(USER_DATA);
+        const savedData = await getStorageData(USER_DATA);
         if (savedData) {
           const parsed = JSON.parse(savedData);
           const savedPhone = parsed?.UserInfo?.phoneNo || "";
@@ -62,13 +62,12 @@ const LoginScreen = ({ navigation }) => {
   }, []);
 
   const handleSendOTP = async () => {
-    if (phoneNumber.trim().length < 10) {
-      Alert.alert("Error", "Please enter a valid 10-digit phone number.");
-      return;
-    }
-
     const net = await NetInfo.fetch();
     if (!net.isConnected) {
+      return;
+    }
+    if (phoneNumber.trim().length < 10) {
+      Alert.alert("Error", "Please enter a valid 10-digit phone number.");
       return;
     }
 
@@ -76,9 +75,8 @@ const LoginScreen = ({ navigation }) => {
       setLoading(true);
       const fullNumber = "+91" + phoneNumber;
       const confirmation = await auth().signInWithPhoneNumber(fullNumber);
-      const userData = { UserInfo: { phoneNo: phoneNumber } };
-      await storeData(USER_DATA, JSON.stringify(userData));
-
+      // const userData = { UserInfo: { phoneNo: phoneNumber } };
+      // await storeData(USER_DATA, JSON.stringify(userData));
       setLoading(false);
       navigation.navigate("OtpScreen", { confirmation, phoneNumber: fullNumber });
     } catch (error) {
@@ -88,7 +86,7 @@ const LoginScreen = ({ navigation }) => {
     }
   };
 
- return (
+  return (
     <LinearGradient
       colors={["#D60000", "#EF4949", "#FFB3B3"]}
       start={{ x: 0, y: 0 }}
@@ -103,7 +101,7 @@ const LoginScreen = ({ navigation }) => {
         </Animated.View>
 
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-          
+
           {/* HEADER WITH GRADIENT */}
           <LinearGradient
             colors={["#D60000", "#EF4949", "#FFB3B3"]}
@@ -146,12 +144,16 @@ const LoginScreen = ({ navigation }) => {
             </View>
 
             <TouchableOpacity
-              style={[styles.otpButton, !isConnected && { backgroundColor: "#aaa" }]}
-              disabled={!isConnected}
+              style={[
+                styles.otpButton,
+                { opacity: phoneNumber.length === 10 && isConnected ? 1 : 0.5 }
+              ]}
+              disabled={phoneNumber.length !== 10 || !isConnected}
               onPress={handleSendOTP}
             >
               <Text style={styles.otpButtonText}>Send OTP</Text>
             </TouchableOpacity>
+
 
             <Text style={styles.termsText}>
               By signing up you are accepting the{" "}

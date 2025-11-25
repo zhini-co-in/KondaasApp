@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Modal,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useNavigation } from "@react-navigation/native";
@@ -23,6 +24,7 @@ const ProductsHomeScreen = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState(null);
+const [showLogoutPopup, setShowLogoutPopup] = useState(false);
 
   const handleCall = () => {
     const phoneNumber = "tel:9244414441";
@@ -98,9 +100,13 @@ const ProductsHomeScreen = () => {
             </View>
           </View>
           <View style={styles.iconRow}>
-            <TouchableOpacity style={styles.iconBox} onPress={handleLogout}>
-              <Ionicons name="log-out-outline" size={22} color="#000" />
-            </TouchableOpacity>
+           <TouchableOpacity
+  style={styles.iconBox}
+  onPress={() => setShowLogoutPopup(true)}
+>
+  <Ionicons name="log-out-outline" size={22} color="#000" />
+</TouchableOpacity>
+
             {/* <TouchableOpacity style={styles.iconBox}>
               <Ionicons name="document-text-outline" size={22} color="#000" />
             </TouchableOpacity> */}
@@ -146,6 +152,33 @@ const ProductsHomeScreen = () => {
             ))
           )}
         </View>
+        <Modal
+  transparent
+  visible={showLogoutPopup}
+  animationType="fade"
+  onRequestClose={() => setShowLogoutPopup(false)}
+>
+  <View style={styles.modalOverlay}>
+    <View style={styles.popupBox}>
+      <Ionicons name="log-out-outline" size={45} color="#f15b5d" />
+      <Text style={styles.popupText}>Are you sure want to logout?</Text>
+
+      <View style={styles.popupButtons}>
+        <TouchableOpacity style={styles.yesButton} onPress={handleLogout}>
+          <Text style={styles.yesText}>Yes</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.noButton}
+          onPress={() => setShowLogoutPopup(false)}
+        >
+          <Text style={styles.noText}>No</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </View>
+</Modal>
+
       </ScrollView>
       {loading && <Loader />}
     </SafeAreaView>
@@ -166,6 +199,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: "#eee",
   },
+
   profileRow: { flexDirection: "row", alignItems: "center" },
   profileImg: { width: 35, height: 35, borderRadius: 20, marginRight: 10 },
   profileName: { fontSize: 15, fontWeight: "600", color: "#000" },
@@ -240,4 +274,44 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
   },
+   modalOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.4)",
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    popupBox: {
+        width: "80%",
+        backgroundColor: "#fff",
+        borderRadius: 12,
+        paddingVertical: 25,
+        paddingHorizontal: 20,
+        alignItems: "center",
+        elevation: 10,
+    },
+    popupText: {
+        fontSize: 16,
+        color: "#333",
+        marginVertical: 15,
+        textAlign: "center",
+    },
+    popupButtons: {
+        flexDirection: "row",
+        justifyContent: "space-around",
+        width: "100%",
+    },
+    yesButton: {
+        backgroundColor: "#f15b5d",
+        paddingVertical: 10,
+        paddingHorizontal: 50,
+        borderRadius: 8,
+    },
+    noButton: {
+        backgroundColor: "#888",
+        paddingVertical: 10,
+        paddingHorizontal: 50,
+        borderRadius: 8,
+    },
+    yesText: { color: "#fff", fontWeight: "700" },
+    noText: { color: "#fff", fontWeight: "700" },
 });

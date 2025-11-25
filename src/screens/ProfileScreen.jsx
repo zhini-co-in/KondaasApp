@@ -92,14 +92,15 @@ const ProfileScreen = ({ route, navigation }) => {
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar backgroundColor="#fff" barStyle="dark-content" />
+            {/* Header */}
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                    <Ionicons name="arrow-back-outline" size={24} color="#000" />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Profile</Text>
+            </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-                {/* Header */}
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                        <Ionicons name="arrow-back-outline" size={24} color="#000" />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Profile</Text>
-                </View>
+
                 <View style={styles.profileCard}>
                     <View>
                         <Text style={styles.userName}>
@@ -395,13 +396,13 @@ const styles = StyleSheet.create({
     yesButton: {
         backgroundColor: "#f15b5d",
         paddingVertical: 10,
-        paddingHorizontal: 30,
+        paddingHorizontal: 50,
         borderRadius: 8,
     },
     noButton: {
         backgroundColor: "#888",
         paddingVertical: 10,
-        paddingHorizontal: 30,
+        paddingHorizontal: 50,
         borderRadius: 8,
     },
     yesText: { color: "#fff", fontWeight: "700" },

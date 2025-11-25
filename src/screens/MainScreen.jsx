@@ -20,6 +20,8 @@ import { fetchHistoricalData, fetchRealTimeData, fetchStationList } from "../api
 import messaging from '@react-native-firebase/messaging';
 import { PermissionsAndroid, Platform } from "react-native";
 import notifee from '@notifee/react-native';
+import FontStyles from "../constants/fonts";
+
 const MainScreen = ({ navigation }) => {
   const [isDay, setIsDay] = useState(isDaytime());
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -29,10 +31,35 @@ const MainScreen = ({ navigation }) => {
   const [selectedStation, setSelectedStation] = useState(0);
   const [selectedStationId, setSelectedStationId] = useState(null);
   const [todayGeneration, setTodayGeneration] = useState(0);
-  const [lifeTimeGeneration, setLifeTimeGeneration] = useState(0);
+  const [lifeTimeGeneration, setLifetimeGeneration] = useState(0);
   const [userInfo, setUserInfo] = useState(null);
+  const [updatedTime, setUpdatedTime] = useState("");
 
+  useEffect(() => {
+    if (selectedStationId) {
+      loadTodayGeneration(selectedStationId);
+      getRealTimeGeneration(selectedStationId);
+    }
+  }, [selectedStationId]);
 
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      try {
+        const data = await getStorageData(USER_DATA);
+        if (data) {
+          const parsed = JSON.parse(data);
+          setUserInfo(parsed);
+          console.log(" Loaded User Info:", parsed);
+        } else {
+          console.warn(" No User Info found in storage");
+        }
+      } catch (err) {
+        console.error(" Error loading user info:", err);
+      }
+    };
+
+    fetchUserInfo();
+  }, []);
   async function requestPermission() {
     const authStatus = await messaging().requestPermission();
     const enabled =
@@ -47,6 +74,24 @@ const MainScreen = ({ navigation }) => {
     requestPermission();
   }, []);
 
+  useEffect(() => {
+    const now = new Date();
+
+    const formatted =
+      now.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      }) +
+      " " +
+      now.toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+
+    setUpdatedTime(formatted);
+  }, []);
 
   async function sendLocalNotification() {
     await notifee.requestPermission();
@@ -70,26 +115,6 @@ const MainScreen = ({ navigation }) => {
     });
   }, []);
 
-
-  useEffect(() => {
-    const fetchUserInfo = async () => {
-      try {
-        const data = await getStorageData(USER_DATA);
-        if (data) {
-          const parsed = JSON.parse(data);
-          setUserInfo(parsed);
-          console.log(" Loaded User Info:", parsed);
-        } else {
-          console.warn(" No User Info found in storage");
-        }
-      } catch (err) {
-        console.error(" Error loading user info:", err);
-      }
-    };
-
-    fetchUserInfo();
-  }, []);
-
   const unitRate = parseFloat(userInfo?.UserInfo?.unitsrupees || 0);
   const totalSavings = (lifeTimeGeneration * unitRate).toFixed(2);
 
@@ -97,12 +122,7 @@ const MainScreen = ({ navigation }) => {
     const hour = new Date().getHours();
     return hour >= 6 && hour < 18;
   }
-  useEffect(() => {
-    if (selectedStationId) {
-      loadTodayGeneration(selectedStationId);
-      loadLifeTimeGeneration(selectedStationId);
-    }
-  }, [selectedStationId]);
+
   const loadTodayGeneration = async (stationId) => {
     try {
       const today = new Date();
@@ -135,36 +155,19 @@ const MainScreen = ({ navigation }) => {
     }
   };
 
-  const loadLifeTimeGeneration = async (stationId) => {
+  const getRealTimeGeneration = async (stationId) => {
     try {
-      const currentYear = new Date().getFullYear().toString(); // 👉 dynamic year
+      console.log("⚡ Fetching real-time data for station:", stationId);
+      const response = await fetchRealTimeData({ stationId });
+      console.log("📦 Real-time response:", response);
 
-      const payload = {
-        stationId: stationId,
-        timeType: 4,
-        startTime: currentYear,
-        endTime: currentYear,
-      };
-
-      console.log("Lifetime Payload:", payload);
-
-      const response = await fetchHistoricalData(payload);
-      console.log("🌍 Lifetime Response:", response);
-
-      if (
-        response &&
-        response.stationDataItems &&
-        response.stationDataItems.length > 0
-      ) {
-        const generationValue =
-          response.stationDataItems[0].generationValue || 0;
-
-        setLifeTimeGeneration(generationValue.toFixed(1));
+      if (response?.generationTotal !== undefined) {
+        setLifetimeGeneration(response.generationTotal);
       } else {
-        setLifeTimeGeneration(0);
+        console.warn("⚠️ No generationTotal in response");
       }
     } catch (error) {
-      console.error("Lifetime Error:", error);
+      console.error("🚨 Error fetching real-time data:", error);
     }
   };
 
@@ -179,6 +182,18 @@ const MainScreen = ({ navigation }) => {
   useEffect(() => {
     loadStations();
   }, []);
+
+  const convertUnits = (value) => {
+    if (!value) return "0 kWh";
+
+    if (value >= 1_000_000) {
+      return (value / 1_000_000).toFixed(2) + " GWh";
+    } else if (value >= 1000) {
+      return (value / 1000).toFixed(2) + " MWh";
+    } else {
+      return value + " kWh";
+    }
+  };
 
   const loadStations = async () => {
     try {
@@ -218,10 +233,10 @@ const MainScreen = ({ navigation }) => {
     }
   };
 
-  const formattedTime = currentTime.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  // const formattedTime = currentTime.toLocaleTimeString([], {
+  //   hour: "2-digit",
+  //   minute: "2-digit",
+  // });
 
   const formattedTemp = "";
   const formattedCity = "";
@@ -279,12 +294,12 @@ const MainScreen = ({ navigation }) => {
             </View>
           </View>
         </View>
-        <View style={styles.locationRow}>
+        {/* <View style={styles.locationRow}>
           <Ionicons name="time-outline" size={14} color={isDay ? "#444" : "#fff"} />
           <Text style={[styles.locationText, { color: isDay ? "#444" : "#fff" }]}>
             {` ${formattedTime} · ${formattedTemp} · ${formattedCity}`}
           </Text>
-        </View>
+        </View> */}
 
         {/* 🔹 Weather Info */}
         {/* <View style={styles.weatherRow}>
@@ -318,14 +333,14 @@ const MainScreen = ({ navigation }) => {
             </View>
 
             <View style={styles.unitBlock}>
-              <Text style={styles.unitValue}>{lifeTimeGeneration} kWh</Text>
+              <Text style={styles.unitValue}>{convertUnits(lifeTimeGeneration)}</Text>
               <Text style={styles.unitLabel}>LIFETIME</Text>
             </View>
 
 
 
           </View>
-          <Text style={styles.updateText}></Text>
+          <Text style={styles.updateText}>Updated {updatedTime}</Text>
           {/* Card */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>
@@ -383,6 +398,8 @@ const MainScreen = ({ navigation }) => {
             >
               <Text style={styles.grayButtonText}>Refer & Earn</Text>
             </TouchableOpacity>
+             <Text style={styles.bottomText}>Powered by Trisentrix | Version 1.0</Text>
+
           </View>
 
           {/* 🔹 Modal */}
@@ -445,7 +462,6 @@ const MainScreen = ({ navigation }) => {
           </Modal>
         </View>
       </ScrollView>
-
       {loading && <Loader />}
     </SafeAreaView>
   );
@@ -461,6 +477,7 @@ const styles = StyleSheet.create({
     paddingTop: 15,
     justifyContent: "flex-start",
   },
+  
 
   headerRow: {
     flexDirection: "row",
@@ -697,6 +714,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
   },
+   bottomText: {
+    color: '#0b0a0aff',
+    fontSize: 10,
+    fontFamily: FontStyles.POPPINS500,
+    fontWeight: '400',
+    padding: 12,
+    
+  },
+  
   grayButtonText: { color: "#333", fontWeight: "600", fontSize: 14 },
 });
 

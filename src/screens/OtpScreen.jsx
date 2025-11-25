@@ -17,7 +17,9 @@ import Loader from "../components/Loader";
 import { storeData, USER_DATA } from "../service/localStorage";
 import { setToken, getSolarmanToken } from "../api/api";
 import { SOLARMAN_CONFIG } from "../api/solarmanAuth";
-import messaging from "@react-native-firebase/messaging"; 
+import NetInfo from "@react-native-community/netinfo";
+import messaging from "@react-native-firebase/messaging";
+import LinearGradient from "react-native-linear-gradient";
 const OtpScreen = ({ navigation, route }) => {
   const { confirmation, phoneNumber } = route.params;
   const [loading, setLoading] = useState(false);
@@ -46,6 +48,11 @@ const OtpScreen = ({ navigation, route }) => {
   };
 
   const handleConfirm = async () => {
+    const net = await NetInfo.fetch();
+    if (!net.isConnected) {
+      alert("No network connection available");
+      return;
+    }
     const otpCode = otp.join("");
     if (otpCode.length < 6) {
       Alert.alert("Error", "Please enter the full OTP");
@@ -111,19 +118,17 @@ const OtpScreen = ({ navigation, route }) => {
         console.log("Created new user document");
       }
 
-     console.log("Fetching FCM Token...");
+      console.log("Fetching FCM Token...");
 
-let fcmToken = null;
+      let fcmToken = null;
 
-try {
-  await new Promise((resolve) => setTimeout(resolve, 1500)); 
-  fcmToken = await messaging().getToken();
-  console.log("FCM TOKEN:", fcmToken);
-} catch (tokenErr) {
-  console.warn("⚠ FCM Token Error:", tokenErr);
-}
-
-
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        fcmToken = await messaging().getToken();
+        console.log("FCM TOKEN:", fcmToken);
+      } catch (tokenErr) {
+        console.warn("⚠ FCM Token Error:", tokenErr);
+      }
       await userRef.set(
         {
           UserInfo: {
@@ -133,7 +138,7 @@ try {
         },
         { merge: true }
       );
-      console.log("🔥 FCM Token saved in Firestore");
+      console.log(" FCM Token saved in Firestore");
       const { email, password } = userData?.UserInfo || {};
       let accessToken = null;
 
@@ -166,7 +171,7 @@ try {
         accessToken: accessToken || null,
         UserInfo: {
           ...userData.UserInfo,
-          fcmToken: fcmToken, 
+          fcmToken: fcmToken,
         },
       };
 
@@ -194,13 +199,12 @@ try {
     }
   };
 
-  const handleChangeNumber = async () => {
-    await storeData(USER_DATA, JSON.stringify({ UserInfo: { phoneNo: "" } }));
-    navigation.goBack();
-  };
-
-
   const handleResendOtp = async () => {
+    const net = await NetInfo.fetch();
+    if (!net.isConnected) {
+      alert("No network connection available");
+      return;
+    }
     try {
       setLoading(true);
       setCanResend(false);
@@ -218,74 +222,93 @@ try {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <View style={styles.header}>
-          <Image
-            source={require("../../assets/images/kondass.png")}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-        </View>
-
-        <View style={styles.bottomContainer}>
-          <View style={styles.indicatorWrapper}>
-            <View style={styles.indicator}></View>
-          </View>
-
-          <View style={styles.welcomeContainer}>
-            <Text style={styles.welcomeText}>Welcome</Text>
-            <Text style={styles.subText}>Enter the OTP sent to your phone</Text>
-          </View>
-
-          <View style={styles.welcomeContainer}>
-            <Text style={styles.welcomeText}>OTP Number</Text>
-          </View>
-
-          <View style={styles.otpContainer}>
-            {otp.map((digit, index) => (
-              <TextInput
-                key={index}
-                ref={(ref) => (inputs.current[index] = ref)}
-                style={[styles.otpInput, error && styles.errorBorder]}
-                value={digit}
-                onChangeText={(text) => handleChange(text, index)}
-                keyboardType="number-pad"
-                maxLength={1}
-                returnKeyType="next"
-              />
-            ))}
-          </View>
-
-          {error && <Text style={styles.errorText}>Incorrect OTP</Text>}
-
-          <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
-            <Text style={styles.confirmText}>Confirm</Text>
-          </TouchableOpacity>
-
-          <View style={styles.resendContainer}>
-            {canResend ? (
-              <TouchableOpacity onPress={handleResendOtp}>
-                <Text style={styles.resendText}>Resend OTP</Text>
-              </TouchableOpacity>
-            ) : (
-              <Text style={styles.timerText}>Resend available in {timer}s</Text>
-            )}
-          </View>
-          <TouchableOpacity
-            style={styles.changeNumberContainer}
-            onPress={handleChangeNumber}
+    <LinearGradient
+      colors={["#D60000", "#EF4949", "#FFB3B3"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 0 }}
+      style={styles.safeArea}
+    >
+      <SafeAreaView style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+          <LinearGradient
+            colors={["#D60000", "#EF4949", "#FFB3B3"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.header}
           >
-            <Text style={styles.changeNumberText}>
-              Wrong number? <Text style={styles.changeLink}>Change Phone Number</Text>
-            </Text>
-          </TouchableOpacity>
+            <Image
+              source={require("../../assets/images/kondass.png")}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </LinearGradient>
+
+          <View style={styles.bottomContainer}>
+            <View style={styles.indicatorWrapper}>
+              <View style={styles.indicator}></View>
+            </View>
+
+            <View style={styles.welcomeContainer}>
+              <Text style={styles.welcomeText}>Welcome</Text>
+              <Text style={styles.subText}>Enter the OTP sent to your phone</Text>
+            </View>
+
+            <View style={styles.welcomeContainer}>
+              <Text style={styles.welcomeText}>OTP Number</Text>
+            </View>
+
+            <View style={styles.otpContainer}>
+              {otp.map((digit, index) => (
+                <TextInput
+                  key={index}
+                  ref={(ref) => (inputs.current[index] = ref)}
+                  style={[styles.otpInput, error && styles.errorBorder]}
+                  value={digit}
+                  onChangeText={(text) => handleChange(text, index)}
+                  keyboardType="number-pad"
+                  maxLength={1}
+                  returnKeyType="next"
+                />
+              ))}
+            </View>
+
+            {error && <Text style={styles.errorText}>Incorrect OTP</Text>}
+
+            <TouchableOpacity
+              style={[
+                styles.confirmButton,
+                { opacity: otp.join("").length === 6 ? 1 : 0.5 }
+              ]}
+              disabled={otp.join("").length !== 6}
+              onPress={handleConfirm}
+            >
+              <Text style={styles.confirmText}>Confirm</Text>
+            </TouchableOpacity>
 
 
-        </View>
-      </ScrollView>
-      {loading && <Loader />}
-    </SafeAreaView>
+            <View style={styles.resendContainer}>
+              {canResend ? (
+                <TouchableOpacity onPress={handleResendOtp}>
+                  <Text style={styles.resendText}>Resend OTP</Text>
+                </TouchableOpacity>
+              ) : (
+                <Text style={styles.timerText}>Resend available in {timer}s</Text>
+              )}
+            </View>
+            <TouchableOpacity
+              style={styles.changeNumberContainer}
+              onPress={() => navigation.navigate("Login")}
+            >
+              <Text style={styles.changeNumberText}>
+                Wrong number? <Text style={styles.changeLink}>Change Phone Number</Text>
+              </Text>
+            </TouchableOpacity>
+
+          </View>
+        </ScrollView>
+        {loading && <Loader />}
+      </SafeAreaView>
+    </LinearGradient>
   );
 };
 
@@ -338,7 +361,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   confirmButton: {
-    backgroundColor: "#666",
+    backgroundColor: "#444",
     width: "100%",
     paddingVertical: 14,
     borderRadius: 10,
