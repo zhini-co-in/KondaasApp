@@ -196,6 +196,7 @@ const CreateTicketScreen = ({ route, navigation }) => {
             selectedValue={selectedDevice}
             onValueChange={(itemValue) => setSelectedDevice(itemValue)}
             style={styles.picker}
+            itemStyle={styles.itemStyle}
             dropdownIconColor="#000"
             enabled={!loading}
           >
@@ -227,6 +228,7 @@ const CreateTicketScreen = ({ route, navigation }) => {
             selectedValue={selectedIssue}
             onValueChange={(itemValue) => setSelectedIssue(itemValue)}
             style={styles.picker}
+            itemStyle={styles.itemStyle}
             dropdownIconColor="#000"
           >
             <Picker.Item label="Select an Issue Type" value="" />
@@ -301,8 +303,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   picker: {
-    height: 50,
-    width: "100%",
+    height: 55,        // important for TECNO devices
+    paddingHorizontal: 10,
+    justifyContent: "center",
+    color: "#000",
+  },
+  itemStyle: {
+    fontSize: 16,
+    height: 55,
+    lineHeight: 24,    // prevents text clipping
   },
 
 

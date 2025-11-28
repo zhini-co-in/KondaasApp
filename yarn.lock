@@ -6305,6 +6305,13 @@ react-native-device-info@^14.1.1:
   resolved "https://registry.npmjs.org/react-native-device-info/-/react-native-device-info-14.1.1.tgz"
   integrity sha512-lXFpe6DJmzbQXNLWxlMHP2xuTU5gwrKAvI8dCAZuERhW9eOXSubOQIesk9lIBnsi9pI19GMrcpJEvs4ARPRYmw==
 
+react-native-element-dropdown@^2.12.4:
+  version "2.12.4"
+  resolved "https://registry.npmjs.org/react-native-element-dropdown/-/react-native-element-dropdown-2.12.4.tgz"
+  integrity sha512-abZc5SVji9FIt7fjojRYrbuvp03CoeZJrgvezQoDoSOrpiTqkX69ix5m+j06W2AVncA0VWvbT+vCMam8SoVadw==
+  dependencies:
+    lodash "^4.17.21"
+
 react-native-gesture-handler@^2.28.0:
   version "2.28.0"
   resolved "https://registry.npmjs.org/react-native-gesture-handler/-/react-native-gesture-handler-2.28.0.tgz"

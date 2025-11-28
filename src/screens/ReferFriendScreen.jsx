@@ -118,8 +118,9 @@ const ReferFriendScreen = ({ navigation }) => {
     setName(contact.name);
     setShowList(false);
   };
+
   const handleRefer = async () => {
-      const net = await NetInfo.fetch();
+    const net = await NetInfo.fetch();
     if (!net.isConnected) {
       alert("No network connection available");
       return;
@@ -149,6 +150,19 @@ const ReferFriendScreen = ({ navigation }) => {
         Alert.alert("Error", "Referer phone number missing in user data.");
         return;
       }
+      const existingRef = await firestore()
+        .collection("Referrals")
+        .where("friendPhNo", "==", mobile)
+        .get();
+
+      if (!existingRef.empty) {
+        Alert.alert(
+          "Already Exists",
+          "This mobile number has already been referred."
+        );
+        setLoading(false);
+        return;
+      }
       const salesId = firestore().collection("Referrals").doc().id;
       const referralData = {
         salesId,
@@ -174,7 +188,6 @@ const ReferFriendScreen = ({ navigation }) => {
       navigation.navigate("ReferandEarnScreen");
 
     } catch (error) {
-      console.error("❌ Error saving referral:", error);
       Alert.alert("Error", "Something went wrong while submitting referral.");
     } finally {
       setLoading(false);
@@ -250,6 +263,8 @@ const ReferFriendScreen = ({ navigation }) => {
             onValueChange={(itemValue) => setProduct(itemValue)}
             mode="dropdown"
             style={styles.picker}
+            itemStyle={styles.itemStyle}
+
           >
             <Picker.Item label="Select Product" value="" />
             {products.map((item) => (
@@ -313,9 +328,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     overflow: "hidden",
   },
-  picker: {
-    height: 48,
-    color: "#333",
+   picker: {
+    height: 55,          
+    borderWidth: 1,
+    borderColor: "#555",
+    borderRadius: 8,
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  itemStyle: {
+    fontSize: 16,
+    height: 55,          
+    lineHeight: 22,      
   },
   referBtn: {
     backgroundColor: "#EF4949",

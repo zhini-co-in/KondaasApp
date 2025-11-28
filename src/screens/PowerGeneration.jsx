@@ -15,7 +15,7 @@ import api, { fetchHistoricalData } from "../api/api";
 import { setAuthToken } from "../api/api";
 import NetInfo from '@react-native-community/netinfo';
 import { USER_DATA, getStorageData } from "../service/localStorage";
-
+import firestore from "@react-native-firebase/firestore";
 const screenWidth = Dimensions.get("window").width;
 
 const PowerGenerationScreen = ({ navigation, route }) => {
@@ -28,6 +28,8 @@ const PowerGenerationScreen = ({ navigation, route }) => {
   const [weekStart, setWeekStart] = useState("");
   const [weekEnd, setWeekEnd] = useState("");
   const [userData, setUserData] = useState(null);
+  const [committedUnits, setCommittedUnits] = useState(0);
+  const [percentGenerated, setPercentGenerated] = useState(0);
 
 
   useEffect(() => {
@@ -105,6 +107,23 @@ const PowerGenerationScreen = ({ navigation, route }) => {
 
     return { start, end };
   };
+  const loadCommittedUnits = async (generated) => {
+    try {
+      const snapshot = await firestore().collection("comittedUnits").get();
+      let committed = 0;
+
+      if (!snapshot.empty) {
+        snapshot.forEach((doc) => {
+          committed = Number(doc.data().Comitted);
+        });
+        setCommittedUnits(committed);
+        const percent = committed > 0 ? ((generated / committed) * 100).toFixed(1) : 0;
+        setPercentGenerated(percent);
+      }
+    } catch (error) {
+      console.log("Error fetching committed units:", error);
+    }
+  };
 
   const fetchGenerationData = async (tab) => {
     const net = await NetInfo.fetch();
@@ -158,6 +177,7 @@ const PowerGenerationScreen = ({ navigation, route }) => {
 
       const total = dataPoints.reduce((sum, val) => sum + val, 0);
       setTotalGenerated(total.toFixed(1));
+      await loadCommittedUnits(total);
 
       setChartData({
         labels,
@@ -217,8 +237,6 @@ const PowerGenerationScreen = ({ navigation, route }) => {
             <Text style={styles.dateText}>{selectedDate}</Text>
           )}
         </View>
-
-
         {loading && (
           <ActivityIndicator
             size="large"
@@ -270,11 +288,9 @@ const PowerGenerationScreen = ({ navigation, route }) => {
           />
           <Text style={styles.energyText}>
             Your solar home generated{" "}
-            <Text style={styles.highlight}>80%</Text> of the potential energy
-            for today
+            <Text style={styles.highlight}>{percentGenerated}%</Text> of the potential energy
           </Text>
         </View>
-
         <View style={styles.summaryContainer}>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryValue}>{totalGenerated} Units</Text>

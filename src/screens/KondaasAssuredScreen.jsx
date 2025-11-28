@@ -15,6 +15,8 @@ import { fetchHistoricalData } from "../api/api";
 import Loader from "../components/Loader";
 import { getStorageData, USER_DATA } from "../service/localStorage";
 import NetInfo from '@react-native-community/netinfo';
+import firestore from "@react-native-firebase/firestore";
+
 const KondaasAssuredScreen = ({ navigation, route }) => {
   const { stationId } = route.params || {};
   console.log(" Received Station ID:", stationId);
@@ -23,7 +25,8 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
   const [loading, setLoading] = useState(true);
   const [totals, setTotals] = useState({ generated: 0, committed: 0 });
   const [UserInfo, setUserInfo] = useState(null);
-
+  const [percentAbove, setPercentAbove] = useState(0);
+  const [committedUnits, setCommittedUnits] = useState(0);
 
   useEffect(() => {
     const fetchUserInfo = async () => {
@@ -55,6 +58,7 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
   useEffect(() => {
 
     loadData();
+
     const interval = setInterval(() => {
       const currentDate = new Date().getDate();
       if (currentDate !== new Date().getDate()) {
@@ -63,6 +67,10 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
     }, 3600000);
     return () => clearInterval(interval);
   }, []);
+
+
+
+
 
 
 
@@ -101,12 +109,15 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
           generated: totalGenerated.toFixed(0),
           committed: totalCommitted.toFixed(0),
         });
+     
+
         setChartData([
           { label: "Generated (kWh)", values, color: "#EF4444" },
           { label: "Committed (kWh)", values: committedValues, color: "#FECACA" },
         ]);
 
         setLabels(labels);
+        await loadComitted(totalGenerated.toFixed(0));
 
         console.log(" Labels (Days):", labels);
         console.log(" Generated Values:", values);
@@ -119,6 +130,32 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
       setLoading(false);
     }
   };
+ const loadComitted = async (generatedUnits) => {
+  try {
+    const snapshot = await firestore().collection("comittedUnits").get();
+
+    let committed = 0;
+    if (!snapshot.empty) {
+      snapshot.forEach((doc) => {
+        committed = Number(doc.data().Comitted);
+      });
+    }
+
+    setCommittedUnits(committed);
+
+    const percent =
+      committed > 0
+        ? ((generatedUnits / committed) * 100).toFixed(1)
+        : 0;
+
+    console.log("⚡ Generated units:", generatedUnits);
+    console.log("📊 Percentage Above:", percent, "%");
+
+    setPercentAbove(percent);
+  } catch (error) {
+    console.log("🔥 Error fetching committed units:", error);
+  }
+};
 
 
 
@@ -165,7 +202,8 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
           </View>
           <Text style={styles.infoText}>
             Your Solar home has generated{" "}
-            <Text style={{ fontWeight: "700" }}>5.4%</Text> above{" "}
+            <Text style={{ fontWeight: "700" }}>{percentAbove}%</Text> above{" "}
+
             <Text style={{ fontWeight: "700" }}>Kondaas Assured™</Text> target!
           </Text>
         </View>
