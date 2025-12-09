@@ -20,6 +20,7 @@ import { SOLARMAN_CONFIG } from "../api/solarmanAuth";
 import NetInfo from "@react-native-community/netinfo";
 import messaging from "@react-native-firebase/messaging";
 import LinearGradient from "react-native-linear-gradient";
+
 const OtpScreen = ({ navigation, route }) => {
   const { confirmation, phoneNumber } = route.params;
   const [loading, setLoading] = useState(false);

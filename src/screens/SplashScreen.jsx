@@ -107,7 +107,7 @@ const SplashScreen = () => {
         />
       </View>
 
-      <Text style={styles.bottomText}>Powered by Trisentrix | Version 1.0</Text>
+      <Text style={styles.bottomText}>Powered by Trisentrix | Version 2.0</Text>
     </LinearGradient>
   );
 };

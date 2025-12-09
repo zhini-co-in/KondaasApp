@@ -3,6 +3,7 @@ import React
 import React_RCTAppDelegate
 import ReactAppDependencyProvider
 
+import CodePush
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
   var window: UIWindow?
@@ -39,10 +40,16 @@ class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {
   }
 
   override func bundleURL() -> URL? {
-#if DEBUG
-    RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: "index")
+    #if DEBUG
+    // Debug mode → Metro bundler
+    return RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: "index")
 #else
-    Bundle.main.url(forResource: "main", withExtension: "jsbundle")
+    // Release mode → LOAD Revopush/CodePush Updated Bundle
+    return CodePush.bundleURL()
+// #if DEBUG
+//     RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: "index")
+// #else
+//     Bundle.main.url(forResource: "main", withExtension: "jsbundle")
 #endif
   }
 }

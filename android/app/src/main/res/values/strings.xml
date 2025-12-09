@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Kondaas</string>
+    <string name="CodePushServerUrl">https://api.revopush.org</string>
+    <string moduleConfig="true" name="CodePushDeploymentKey">f0NBcqKXv3kuAIdzNPafU91lwc0sNJbYg_yzXe</string>
 </resources>
