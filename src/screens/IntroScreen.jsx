@@ -11,7 +11,7 @@ const slides = [
   },
   {
     image: require("../../assets/images/solarkondass.png"),
-    title: "Kondaas Assured",
+    title: "Kondaas Assured™",
     subtitle:
       "Enjoy complete peace of mind with our generation guarantee & reliable service support.",
   },
@@ -98,13 +98,13 @@ const styles = StyleSheet.create({
   skipButton: {
     alignSelf: "flex-end",
     borderWidth: 1,
-    borderColor: "#EF4949",
+    borderColor: "#df0101",
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 5,
   },
   skipText: {
-    color: "#EF4949",
+    color: "#df0101",
     fontWeight: "500",
   },
   image: {
@@ -150,10 +150,10 @@ const styles = StyleSheet.create({
     marginRight: 5,
   },
   activeDot: {
-    backgroundColor: "#EF4949",
+    backgroundColor: "#df0101",
   },
   nextButton: {
-    backgroundColor: "#EF4949",
+    backgroundColor: "#df0101",
     width: 50,
     height: 50,
     borderRadius: 25,
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   letsGoButton: {
-    backgroundColor: "#EF4949",
+    backgroundColor: "#df0101",
     paddingVertical: 12,
     paddingHorizontal: 28,
     borderRadius: 25,

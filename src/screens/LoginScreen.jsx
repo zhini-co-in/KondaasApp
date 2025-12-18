@@ -88,7 +88,7 @@ const LoginScreen = ({ navigation }) => {
 
   return (
     <LinearGradient
-      colors={["#D60000", "#EF4949", "#FFB3B3"]}
+      colors={["#df0101", "#df0101", "#df0101"]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 0 }}
       style={styles.safeArea}
@@ -104,7 +104,7 @@ const LoginScreen = ({ navigation }) => {
 
           {/* HEADER WITH GRADIENT */}
           <LinearGradient
-            colors={["#D60000", "#EF4949", "#FFB3B3"]}
+            colors={["#df0101", "#df0101", "#df0101"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.header}
@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    backgroundColor: "#D60000",
+    backgroundColor: "#df0101",
     paddingVertical: 10,
     alignItems: "center",
     zIndex: 999,

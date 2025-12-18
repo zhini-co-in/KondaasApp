@@ -56,7 +56,6 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
   const totalSavings = (totalGenerated * unitsRupees).toFixed(0);
 
   useEffect(() => {
-
     loadData();
 
     const interval = setInterval(() => {
@@ -67,12 +66,6 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
     }, 3600000);
     return () => clearInterval(interval);
   }, []);
-
-
-
-
-
-
 
   const loadData = async () => {
     try {
@@ -109,11 +102,9 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
           generated: totalGenerated.toFixed(0),
           committed: totalCommitted.toFixed(0),
         });
-     
-
         setChartData([
           { label: "Generated (kWh)", values, color: "#EF4444" },
-          { label: "Committed (kWh)", values: committedValues, color: "#FECACA" },
+          // { label: "Committed (kWh)", values: committedValues, color: "#FECACA" },
         ]);
 
         setLabels(labels);
@@ -156,9 +147,6 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
     console.log("🔥 Error fetching committed units:", error);
   }
 };
-
-
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />

@@ -11,8 +11,8 @@ import {
   ScrollView,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import LightBg from "../../assets/images/Lightmode.png";
-import DarkBg from "../../assets/images/Darkmode.png";
+import LightBg from "../../assets/images/Lightmode.jpg";
+import DarkBg from "../../assets/images/Darkmode.jpg";
 import ProfileImg from "../../assets/images/Round.png";
 import Loader from "../components/Loader";
 import { getStorageData, USER_DATA } from "../service/localStorage";
@@ -138,7 +138,7 @@ const MainScreen = ({ navigation }) => {
       console.log("Today Gen Payload:", payload);
 
       const response = await fetchHistoricalData(payload);
-      console.log("🌞 Response:", response);
+      console.log(" Response:", response);
 
       if (
         response &&
@@ -157,9 +157,9 @@ const MainScreen = ({ navigation }) => {
 
   const getRealTimeGeneration = async (stationId) => {
     try {
-      console.log("⚡ Fetching real-time data for station:", stationId);
+      console.log(" Fetching real-time data for station:", stationId);
       const response = await fetchRealTimeData({ stationId });
-      console.log("📦 Real-time response:", response);
+      console.log(" Real-time response:", response);
 
       if (response?.generationTotal !== undefined) {
         setLifetimeGeneration(response.generationTotal);
@@ -191,7 +191,7 @@ const MainScreen = ({ navigation }) => {
     } else if (value >= 1000) {
       return (value / 1000).toFixed(2) + " MWh";
     } else {
-      return value + " kWh";
+      return value + " ";
     }
   };
 
@@ -232,14 +232,6 @@ const MainScreen = ({ navigation }) => {
       console.log(" Station loading complete.");
     }
   };
-
-  // const formattedTime = currentTime.toLocaleTimeString([], {
-  //   hour: "2-digit",
-  //   minute: "2-digit",
-  // });
-
-  const formattedTemp = "";
-  const formattedCity = "";
 
   return (
     <SafeAreaView style={styles.container}>
@@ -294,24 +286,7 @@ const MainScreen = ({ navigation }) => {
             </View>
           </View>
         </View>
-        {/* <View style={styles.locationRow}>
-          <Ionicons name="time-outline" size={14} color={isDay ? "#444" : "#fff"} />
-          <Text style={[styles.locationText, { color: isDay ? "#444" : "#fff" }]}>
-            {` ${formattedTime} · ${formattedTemp} · ${formattedCity}`}
-          </Text>
-        </View> */}
 
-        {/* 🔹 Weather Info */}
-        {/* <View style={styles.weatherRow}>
-          <Ionicons
-            name="warning-outline"
-            size={16}
-            color={isDay ? "#e67e22" : "#f6b93b"}
-          />
-          <Text style={[styles.weatherText, { color: isDay ? "#333" : "#fff" }]}>
-            Rainy weather might not give optimum generation
-          </Text>
-        </View> */}
       </ImageBackground>
 
       {/* 🔹 Scrollable Content */}
@@ -319,26 +294,16 @@ const MainScreen = ({ navigation }) => {
         <View style={styles.bottomContainer}>
           {/* Units Row */}
           <View style={styles.unitsRow}>
-            {/* <View style={styles.unitBlock}>
-              <Text style={styles.unitValue}>
-                {todayGeneration} kWh
-              </Text>
-              <Text style={styles.unitLabel}>TODAY</Text>
-            </View> */}
             <View style={styles.unitBlock}>
               <Text style={styles.unitValue}>
                 {todayGeneration ? Math.round(todayGeneration) : 0} kWh
               </Text>
               <Text style={styles.unitLabel}>TODAY</Text>
             </View>
-
             <View style={styles.unitBlock}>
               <Text style={styles.unitValue}>{convertUnits(lifeTimeGeneration)}</Text>
               <Text style={styles.unitLabel}>LIFETIME</Text>
             </View>
-
-
-
           </View>
           <Text style={styles.updateText}>Updated {updatedTime}</Text>
           {/* Card */}
@@ -357,10 +322,6 @@ const MainScreen = ({ navigation }) => {
             </View>
             <Text style={styles.profitText}>₹ {totalSavings}
             </Text>
-            {/* <Text style={styles.descText}>
-              Billings: from ₹7,000 → to just ₹500 last month.{"\n"}That’s Solar
-              Freedom!
-            </Text> */}
           </View>
 
           {/* Buttons */}
@@ -386,8 +347,6 @@ const MainScreen = ({ navigation }) => {
             >
               <Text style={styles.secondaryButtonText}>Support</Text>
             </TouchableOpacity>
-
-
             <TouchableOpacity
               style={styles.grayButton}
               onPress={() =>
@@ -398,7 +357,7 @@ const MainScreen = ({ navigation }) => {
             >
               <Text style={styles.grayButtonText}>Refer & Earn</Text>
             </TouchableOpacity>
-             <Text style={styles.bottomText}>Powered by Trisentrix | Version 1.0</Text>
+            <Text style={styles.bottomText}>Powered by Trisentrix | Version 1.0</Text>
 
           </View>
 
@@ -428,7 +387,6 @@ const MainScreen = ({ navigation }) => {
                     Click a name to switch to that household.
                   </Text>
                 </View>
-
                 {stations.map((item, index) => (
                   <TouchableOpacity
                     key={index}
@@ -477,7 +435,7 @@ const styles = StyleSheet.create({
     paddingTop: 15,
     justifyContent: "flex-start",
   },
-  
+
 
   headerRow: {
     flexDirection: "row",
@@ -714,15 +672,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
   },
-   bottomText: {
+  bottomText: {
     color: '#0b0a0aff',
     fontSize: 10,
     fontFamily: FontStyles.POPPINS500,
     fontWeight: '400',
     padding: 12,
-    
+
   },
-  
+
   grayButtonText: { color: "#333", fontWeight: "600", fontSize: 14 },
 });
 

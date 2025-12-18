@@ -316,7 +316,7 @@ const PowerGenerationScreen = ({ navigation, route }) => {
         >
           <Text style={styles.footerLink}>
             Know more about{" "}
-            <Text style={{ fontWeight: "700" }}>Kondaas Assured™ →</Text>
+            <Text style={{ fontWeight: "800" }}>Kondaas Assured™ →</Text>
           </Text>
         </TouchableOpacity>
       </ScrollView>

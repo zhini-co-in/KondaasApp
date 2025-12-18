@@ -12,7 +12,9 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import firestore from "@react-native-firebase/firestore";
 import Loader from "../components/Loader";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { USER_DATA } from "../service/localStorage"; 
+import { Linking, Alert } from "react-native";
+
+import { USER_DATA } from "../service/localStorage";
 const ReferAndEarnScreen = ({ navigation }) => {
   const [referrals, setReferrals] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -42,7 +44,7 @@ const ReferAndEarnScreen = ({ navigation }) => {
           .collection("Referrals")
           .where("refererPhNo", "==", phoneNo)
           .get();
-           const data = snapshot.docs.map(doc => doc.data());
+        const data = snapshot.docs.map(doc => doc.data());
         setReferrals(data);
 
         const successCount = data.filter(item => item.PurchaseTracking).length;
@@ -70,6 +72,46 @@ const ReferAndEarnScreen = ({ navigation }) => {
     fetchReferrals();
   }, []);
 
+
+  const openWhatsAppRemind = (friendPhNo) => {
+    if (!friendPhNo) {
+      Alert.alert("Error", "Phone number not available");
+      return;
+    }
+
+    const phone = friendPhNo.startsWith("91")
+      ? friendPhNo
+      : `91${friendPhNo}`;
+
+    const message = "Please install the Kondaas App";
+
+    const whatsappURL = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(
+      message
+    )}`;
+
+    const smsURL =
+      Platform.OS === "ios"
+        ? `sms:${phone}&body=${encodeURIComponent(message)}`
+        : `sms:${phone}?body=${encodeURIComponent(message)}`;
+
+    // First check WhatsApp
+    Linking.canOpenURL(whatsappURL)
+      .then((supported) => {
+        if (supported) {
+          // WhatsApp available → open WhatsApp
+          return Linking.openURL(whatsappURL);
+        } else {
+          // WhatsApp not available → open SMS
+          return Linking.openURL(smsURL);
+        }
+      })
+      .catch(() => {
+        Alert.alert("Error", "Unable to open WhatsApp or SMS");
+      });
+  };
+
+
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
@@ -90,7 +132,7 @@ const ReferAndEarnScreen = ({ navigation }) => {
         <View style={styles.topBox}>
           <Ionicons name="wallet-outline" size={28} color="#555" />
           <Text style={styles.topValue}>₹{totalAmount.toLocaleString("en-IN")}
-</Text>
+          </Text>
           <Text style={styles.topLabel}>Earnings</Text>
         </View>
         <View style={styles.topBox}>
@@ -166,9 +208,14 @@ const ReferAndEarnScreen = ({ navigation }) => {
               {item.PurchaseTracking ? (
                 <Ionicons name="checkmark-circle" size={22} color="#4CAF50" />
               ) : (
-                <TouchableOpacity style={styles.remindBtn}>
+
+                <TouchableOpacity
+                  style={styles.remindBtn}
+                  onPress={() => openWhatsAppRemind(item.friendPhNo)}
+                >
                   <Text style={styles.remindBtnText}>Remind</Text>
                 </TouchableOpacity>
+
               )}
             </View>
           ))}
