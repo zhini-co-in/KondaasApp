@@ -331,7 +331,7 @@ const MainScreen = ({ navigation }) => {
                   stationId: selectedStationId,
                 });
               }}
-            >
+            >  
               <Text style={styles.primaryButtonText}>View Insights →</Text>
             </TouchableOpacity>
             <TouchableOpacity
