@@ -123,7 +123,7 @@ const ProfileScreen = ({ route, navigation }) => {
                         </View>
                     </View>
 
-                    <MaterialIcons name="verified-user" size={26} color="#f15b5d" />
+                    <MaterialIcons name="verified-user" size={26} color="#B50203" />
                 </View>
 
                 <View style={styles.card}>
@@ -245,7 +245,7 @@ const ProfileScreen = ({ route, navigation }) => {
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.popupBox}>
-                        <Ionicons name="log-out-outline" size={45} color="#f15b5d" />
+                        <Ionicons name="log-out-outline" size={45} color="#B50203" />
                         <Text style={styles.popupText}>Are you sure want to logout?</Text>
                         <View style={styles.popupButtons}>
                             <TouchableOpacity style={styles.yesButton} onPress={handleLogout}>
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
     },
     sectionTitle: { fontSize: 16, fontWeight: "700", color: "#000", marginBottom: 8 },
     labelText: { fontSize: 13, color: "#666" },
-    highlightText: { color: "#f15b5d", fontWeight: "700", marginBottom: 10 },
+    highlightText: { color: "#B50203", fontWeight: "700", marginBottom: 10 },
     anniversaryRow: { flexDirection: "row", justifyContent: "space-between" },
     anniversaryBox: { alignItems: "center", flex: 1 },
     valueText: { fontSize: 20, fontWeight: "700", color: "#333" },
@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
     achievementText: { fontWeight: "600", color: "#333" },
 
     logoutButton: {
-        backgroundColor: "#f15b5d",
+        backgroundColor: "#B50203",
         margin: 15,
         paddingVertical: 12,
         borderRadius: 10,
@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
         width: "100%",
     },
     yesButton: {
-        backgroundColor: "#f15b5d",
+        backgroundColor: "#B50203",
         paddingVertical: 10,
         paddingHorizontal: 50,
         borderRadius: 8,

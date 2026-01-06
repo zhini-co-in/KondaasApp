@@ -20,12 +20,12 @@ const SplashScreen = () => {
   useEffect(() => {
     const checkUserData = async () => {
       try {
-        console.log("🔍 Checking AsyncStorage for USER_DATA...");
+        console.log(" Checking AsyncStorage for USER_DATA...");
 
         const storedData = await AsyncStorage.getItem(USER_DATA);
 
         if (!storedData) {
-          console.log("❌ No USER_DATA found → Navigating to Intro");
+          console.log("No USER_DATA found → Navigating to Intro");
           navigation.replace("Intro");
           return;
         }
@@ -38,12 +38,12 @@ const SplashScreen = () => {
         const email = userData?.UserInfo?.email;
         const password = userData?.UserInfo?.password;
         const unitsrupees = userData?.UserInfo?.unitsrupees;
-        console.log("📆 lastLogin:", lastLogin);
-        console.log("🔧 deviceId:", deviceId);
+        console.log("lastLogin:", lastLogin);
+        console.log("deviceId:", deviceId);
         console.log("unitId:", unitsrupees);
 
         if (!lastLogin) {
-          console.log("⚠️ lastLogin missing → Navigating to Intro");
+          console.log("lastLogin missing → Navigating to Intro");
           navigation.replace("Intro");
           return;
         }
@@ -90,11 +90,11 @@ const SplashScreen = () => {
   }, [navigation]);
 
 
-   return (
+  return (
     <LinearGradient
-      colors={['#df0101', '#df0101', '#df0101']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 0 }}
+      colors={['#F00001', '#B00100']}
+      start={{ x: 0.5, y: 0 }}
+      end={{ x: 0.5, y: 1 }}
       style={styles.container}
     >
       {/* <StatusBar backgroundColor="#D60000" barStyle="light-content" /> */}
@@ -107,7 +107,7 @@ const SplashScreen = () => {
         />
       </View>
 
-      <Text style={styles.bottomText}>Powered by Trisentrix | Version 2.0</Text>
+      <Text style={styles.bottomText}>Powered by Trisentrix | Version 1.0</Text>
     </LinearGradient>
   );
 };
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     alignItems: 'center',
-  
+
   },
   imageContainer: {
     flex: 1,

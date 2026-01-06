@@ -15,6 +15,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Linking, Alert } from "react-native";
 
 import { USER_DATA } from "../service/localStorage";
+import LinearGradient from "react-native-linear-gradient";
 const ReferAndEarnScreen = ({ navigation }) => {
   const [referrals, setReferrals] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -93,15 +94,11 @@ const ReferAndEarnScreen = ({ navigation }) => {
       Platform.OS === "ios"
         ? `sms:${phone}&body=${encodeURIComponent(message)}`
         : `sms:${phone}?body=${encodeURIComponent(message)}`;
-
-    // First check WhatsApp
     Linking.canOpenURL(whatsappURL)
       .then((supported) => {
         if (supported) {
-          // WhatsApp available → open WhatsApp
           return Linking.openURL(whatsappURL);
         } else {
-          // WhatsApp not available → open SMS
           return Linking.openURL(smsURL);
         }
       })
@@ -109,8 +106,6 @@ const ReferAndEarnScreen = ({ navigation }) => {
         Alert.alert("Error", "Unable to open WhatsApp or SMS");
       });
   };
-
-
 
   return (
     <SafeAreaView style={styles.container}>
@@ -145,10 +140,16 @@ const ReferAndEarnScreen = ({ navigation }) => {
       </View>
       {/* Refer Now Button */}
       <TouchableOpacity
-        style={styles.referBtn}
         onPress={() => navigation.navigate("ReferFriendScreen")}
       >
-        <Text style={styles.referBtnText}>Refer Now!</Text>
+        <LinearGradient
+          colors={["#F00001", "#B00100"]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.referBtn}
+        >
+          <Text style={styles.referBtnText}>Refer Now!</Text>
+        </LinearGradient>
       </TouchableOpacity>
       <Text style={styles.sectionTitle}>How it works</Text>
 
@@ -156,7 +157,7 @@ const ReferAndEarnScreen = ({ navigation }) => {
         {/* Step 1 */}
         <View style={styles.stepRow}>
           <View style={styles.iconCircle}>
-            <Ionicons name="link-outline" size={22} color="#EF4949" />
+            <Ionicons name="link-outline" size={22} color="#B50203" />
           </View>
           <Text style={styles.stepText}>
             Invite your friends through the referral link
@@ -169,7 +170,7 @@ const ReferAndEarnScreen = ({ navigation }) => {
         {/* Step 2 */}
         <View style={styles.stepRow}>
           <View style={styles.iconCircle}>
-            <Ionicons name="solar-outline" size={22} color="#EF4949" />
+            <Ionicons name="solar-outline" size={22} color="#B50203" />
           </View>
           <Text style={styles.stepText}>
             Your friend installs the Kondaas’s solar
@@ -182,7 +183,7 @@ const ReferAndEarnScreen = ({ navigation }) => {
         {/* Step 3 */}
         <View style={styles.stepRow}>
           <View style={styles.iconCircle}>
-            <Ionicons name="wallet-outline" size={22} color="#EF4949" />
+            <Ionicons name="wallet-outline" size={22} color="#B50203" />
           </View>
           <Text style={styles.stepText}>
             You will get ₹5,000 in your wallet
@@ -210,11 +211,18 @@ const ReferAndEarnScreen = ({ navigation }) => {
               ) : (
 
                 <TouchableOpacity
-                  style={styles.remindBtn}
                   onPress={() => openWhatsAppRemind(item.friendPhNo)}
                 >
-                  <Text style={styles.remindBtnText}>Remind</Text>
+                  <LinearGradient
+                    colors={["#F00001", "#B00100"]}
+                    start={{ x: 0.5, y: 1 }}
+                    end={{ x: 0.5, y: 1 }}
+                    style={styles.remindBtn}
+                  >
+                    <Text style={styles.remindBtnText}>Remind</Text>
+                  </LinearGradient>
                 </TouchableOpacity>
+
 
               )}
             </View>
@@ -259,7 +267,7 @@ const styles = StyleSheet.create({
   topLabel: { fontSize: 13, color: "#777", marginTop: 2 },
 
   referBtn: {
-    backgroundColor: "#EF4949",
+
     borderRadius: 8,
     marginHorizontal: 20,
     marginVertical: 20,
@@ -296,7 +304,6 @@ const styles = StyleSheet.create({
   referralName: { fontWeight: "700", fontSize: 14 },
   referralStatus: { fontSize: 12, color: "#666" },
   remindBtn: {
-    backgroundColor: "#EF4949",
     borderRadius: 20,
     paddingVertical: 5,
     paddingHorizontal: 12,

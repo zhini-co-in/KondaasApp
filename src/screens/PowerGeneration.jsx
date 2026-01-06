@@ -16,6 +16,7 @@ import { setAuthToken } from "../api/api";
 import NetInfo from '@react-native-community/netinfo';
 import { USER_DATA, getStorageData } from "../service/localStorage";
 import firestore from "@react-native-firebase/firestore";
+import LinearGradient from "react-native-linear-gradient";
 const screenWidth = Dimensions.get("window").width;
 
 const PowerGenerationScreen = ({ navigation, route }) => {
@@ -30,6 +31,8 @@ const PowerGenerationScreen = ({ navigation, route }) => {
   const [userData, setUserData] = useState(null);
   const [committedUnits, setCommittedUnits] = useState(0);
   const [percentGenerated, setPercentGenerated] = useState(0);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const today = new Date();
 
 
   useEffect(() => {
@@ -63,50 +66,93 @@ const PowerGenerationScreen = ({ navigation, route }) => {
     const d = String(date.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   };
-  const getDateRange = (tab) => {
-    const today = new Date();
-    let start, end;
-    if (tab === "Day") {
-      start = formatDate(today);
-      end = formatDate(today);
+  const formatDisplayDate = (date) => {
+    return `Today, ${date.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    })}`;
+  };
+
+  const changeDate = (direction) => {
+    if (direction === 1 && isFutureDisabled()) return;
+
+    const newDate = new Date(currentDate);
+
+    if (selectedTab === "Day") newDate.setDate(newDate.getDate() + direction);
+    else if (selectedTab === "Week") newDate.setDate(newDate.getDate() + direction * 7);
+    else if (selectedTab === "Month") newDate.setMonth(newDate.getMonth() + direction);
+    else if (selectedTab === "Year") newDate.setFullYear(newDate.getFullYear() + direction);
+
+    setCurrentDate(newDate);
+  };
+
+  const isFutureDisabled = () => {
+    const tempDate = new Date(currentDate);
+
+    if (selectedTab === "Day") {
+      tempDate.setDate(tempDate.getDate() + 1);
+      return tempDate > today;
     }
-    // else if (tab === "Week") {
-    //   const day = today.getDay();
-    //   const diffToSunday = today.getDate() - day;
-    //   const sunday = new Date(today.setDate(diffToSunday));
-    //   const monday = new Date(sunday);
-    //   monday.setDate(sunday.getDate() + 6);
-    //   start = formatDate(sunday);
-    //   end = formatDate(monday);
-    // }
+
+    if (selectedTab === "Week") {
+      tempDate.setDate(tempDate.getDate() + 7);
+      return tempDate > today;
+    }
+
+    if (selectedTab === "Month") {
+      tempDate.setMonth(tempDate.getMonth() + 1);
+      return (
+        tempDate.getFullYear() > today.getFullYear() ||
+        (tempDate.getFullYear() === today.getFullYear() &&
+          tempDate.getMonth() > today.getMonth())
+      );
+    }
+
+    if (selectedTab === "Year") {
+      return tempDate.getFullYear() + 1 > today.getFullYear();
+    }
+
+    return false;
+  };
+
+
+  const getDateRange = (tab) => {
+    let start, end;
+    const baseDate = new Date(currentDate);
+
+    if (tab === "Day") {
+      start = formatDate(baseDate);
+      end = formatDate(baseDate);
+    }
     else if (tab === "Week") {
-      const today = new Date();
-      const day = today.getDay();
+      const day = baseDate.getDay();
       const diffToMonday = (day + 6) % 7;
-      const monday = new Date(today);
-      monday.setDate(today.getDate() - diffToMonday);
+
+      const monday = new Date(baseDate);
+      monday.setDate(baseDate.getDate() - diffToMonday);
+
       const sunday = new Date(monday);
       sunday.setDate(monday.getDate() + 6);
 
       start = formatDate(monday);
       end = formatDate(sunday);
     }
-
     else if (tab === "Month") {
-
-      const y = today.getFullYear();
-      const m = String(today.getMonth() + 1).padStart(2, "0");
+      const y = baseDate.getFullYear();
+      const m = String(baseDate.getMonth() + 1).padStart(2, "0");
       start = `${y}-${m}`;
       end = `${y}-${m}`;
-    } else if (tab === "Year") {
-
-      const y = today.getFullYear();
+    }
+    else if (tab === "Year") {
+      const y = baseDate.getFullYear();
       start = `${y}`;
       end = `${y}`;
     }
 
     return { start, end };
   };
+
   const loadCommittedUnits = async (generated) => {
     try {
       const snapshot = await firestore().collection("comittedUnits").get();
@@ -195,7 +241,8 @@ const PowerGenerationScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     if (stationId) fetchGenerationData(selectedTab);
-  }, [selectedTab]);
+  }, [selectedTab, currentDate]);
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -208,39 +255,57 @@ const PowerGenerationScreen = ({ navigation, route }) => {
           <Text style={styles.headerTitle}>Power Generation</Text>
         </View>
         <View style={styles.tabContainer}>
-          {["Day", "Week", "Month", "Year"].map((tab) => (
-            <TouchableOpacity
-              key={tab}
-              style={[
-                styles.tabButton,
-                selectedTab === tab && styles.activeTabButton,
-              ]}
-              onPress={() => setSelectedTab(tab)}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  selectedTab === tab && styles.activeTabText,
-                ]}
-              >
-                {tab}
-              </Text>
+  {["Day", "Week", "Month", "Year"].map((tab) => {
+    const isActive = selectedTab === tab;
+
+    return (
+      <TouchableOpacity
+        key={tab}
+        style={styles.tabButton}
+        onPress={() => setSelectedTab(tab)}
+        activeOpacity={0.8}
+      >
+        {isActive ? (
+          <LinearGradient
+            colors={["#F00001", "#B00100"]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={styles.activeTabButton}
+          >
+            <Text style={styles.activeTabText}>{tab}</Text>
+          </LinearGradient>
+        ) : (
+          <Text style={styles.tabText}>{tab}</Text>
+        )}
+      </TouchableOpacity>
+    );
+  })}
+</View>
+        <View style={styles.dateNav}>
+          <TouchableOpacity onPress={() => changeDate(-1)}>
+            <Ionicons name="chevron-back" size={22} color="#000" />
+          </TouchableOpacity>
+
+          <Text style={styles.dateNavText}>
+            {selectedTab === "Week"
+              ? `${weekStart} - ${weekEnd}`
+              : formatDisplayDate(currentDate)}
+          </Text>
+
+          {!isFutureDisabled() ? (
+            <TouchableOpacity onPress={() => changeDate(1)}>
+              <Ionicons name="chevron-forward" size={22} color="#000" />
             </TouchableOpacity>
-          ))}
-        </View>
-        <View style={styles.dateSelector}>
-          {selectedTab === "Week" ? (
-            <Text style={styles.dateText}>
-              {weekStart} - {weekEnd}
-            </Text>
           ) : (
-            <Text style={styles.dateText}>{selectedDate}</Text>
+            <View style={{ width: 22 }} />
           )}
         </View>
+
+
         {loading && (
           <ActivityIndicator
             size="large"
-            color="#FF6B6B"
+            color="#ED1C25"
             style={{ marginTop: 20 }}
           />
         )}
@@ -283,7 +348,7 @@ const PowerGenerationScreen = ({ navigation, route }) => {
           <Ionicons
             name="sunny"
             size={20}
-            color="#E60000"
+            color="#ED1C25"
             style={{ marginRight: 8 }}
           />
           <Text style={styles.energyText}>
@@ -296,13 +361,6 @@ const PowerGenerationScreen = ({ navigation, route }) => {
             <Text style={styles.summaryValue}>{totalGenerated} Units</Text>
             <Text style={styles.summaryLabel}>Total Generated</Text>
           </View>
-          {/* <View style={styles.summaryBox}>
-  <Text style={styles.summaryTitle}>
-    {selectedTab === "Month" ? "Monthly Production:" : "Total Production:"}
-  </Text>
-  <Text style={styles.summaryValue}>{totalGenerated} kWh</Text>
-</View> */}
-
           <View style={styles.summaryItem}>
             <Text style={styles.summaryValue}>
               ₹{totalSaved}
@@ -330,16 +388,21 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", padding: 15 },
   headerTitle: { fontSize: 18, fontWeight: "600", marginLeft: 10 },
   tabContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginHorizontal: 15,
-    backgroundColor: "#f2f2f2",
-    borderRadius: 8,
-    padding: 5,
-  },
+  flexDirection: "row",
+  backgroundColor: "#f2f2f2",
+  borderRadius: 10,
+  padding: 4,
+  marginHorizontal: 16,
+},
 
-  tabButton: { flex: 1, alignItems: "center", paddingVertical: 8 },
-  activeTabButton: { backgroundColor: "#FF6B6B", borderRadius: 6 },
+tabButton: {
+  flex: 1,
+  height: 38,
+  justifyContent: "center",
+  alignItems: "center",
+},
+  activeTabButton: {  width: "100%",borderRadius: 6, paddingVertical: 8, alignItems: "center"}  ,
+  
   tabText: { color: "#444", fontSize: 14, fontWeight: "500" },
   activeTabText: { color: "#fff" },
   dateSelector: {
@@ -364,7 +427,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
   },
   energyText: { flex: 1, fontSize: 14, color: "#333" },
-  highlight: { color: "#FF6B6B", fontWeight: "700" },
+  highlight: { color: "#ED1C25", fontWeight: "700" },
 
   summaryContainer: {
     flexDirection: "row",
@@ -383,6 +446,25 @@ const styles = StyleSheet.create({
     padding: 10,
     marginTop: 20,
   },
+  dateNav: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#ED1C25",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 16,
+    marginTop: 12,
+  },
+
+  dateNavText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#000",
+  },
+
   infoText: { fontSize: 13, color: "#333", marginLeft: 6, flex: 1 },
-  footerLink: { color: "#E60000", textAlign: "left", marginTop: 10, fontSize: 13, marginLeft: 20, },
+  footerLink: { color: "#ED1C25", textAlign: "left", marginTop: 10, fontSize: 15, marginLeft: 20, },
 });

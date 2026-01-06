@@ -98,13 +98,13 @@ const styles = StyleSheet.create({
   skipButton: {
     alignSelf: "flex-end",
     borderWidth: 1,
-    borderColor: "#df0101",
+    borderColor: "#f00001",
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 5,
   },
   skipText: {
-    color: "#df0101",
+    color: "#f00001",
     fontWeight: "500",
   },
   image: {
@@ -150,10 +150,10 @@ const styles = StyleSheet.create({
     marginRight: 5,
   },
   activeDot: {
-    backgroundColor: "#df0101",
+    backgroundColor: "#f00001",
   },
   nextButton: {
-    backgroundColor: "#df0101",
+    backgroundColor: "#f00001",
     width: 50,
     height: 50,
     borderRadius: 25,
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   letsGoButton: {
-    backgroundColor: "#df0101",
+    backgroundColor: "#f00001",
     paddingVertical: 12,
     paddingHorizontal: 28,
     borderRadius: 25,

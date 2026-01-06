@@ -104,7 +104,7 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
         });
         setChartData([
           { label: "Generated (kWh)", values, color: "#EF4444" },
-          // { label: "Committed (kWh)", values: committedValues, color: "#FECACA" },
+          { label: "Committed (kWh)", values: committedValues, color: "#FECACA" },
         ]);
 
         setLabels(labels);
@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
   footerLink: {
     color: "#E60000",
     marginTop: 10,
-    fontSize: 13,
+    fontSize: 15,
     width: "100%",
   },
 });

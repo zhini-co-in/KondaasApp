@@ -21,6 +21,7 @@ import Contacts from 'react-native-contacts';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import NetInfo from "@react-native-community/netinfo";
+import LinearGradient from "react-native-linear-gradient";
 const ReferFriendScreen = ({ navigation }) => {
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
@@ -274,13 +275,19 @@ const ReferFriendScreen = ({ navigation }) => {
         </View>
 
         <TouchableOpacity
-          style={styles.referBtn}
           onPress={handleRefer}
           disabled={loading}
         >
+           <LinearGradient
+    colors={["#F00001", "#B00100"]}
+    start={{ x: 0.5, y: 0 }}
+    end={{ x: 0.5, y: 1 }}
+   style={styles.referBtn}
+  >
           <Text style={styles.referBtnText}>
             {loading ? "Submitting..." : "Refer"}
           </Text>
+          </LinearGradient>
         </TouchableOpacity>
       </KeyboardAwareScrollView>
     </SafeAreaView>
@@ -342,7 +349,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,      
   },
   referBtn: {
-    backgroundColor: "#EF4949",
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: "center",

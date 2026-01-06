@@ -17,7 +17,7 @@ import firestore from "@react-native-firebase/firestore";
 import Loader from "../components/Loader";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { USER_DATA } from "../service/localStorage";
-
+import LinearGradient from "react-native-linear-gradient";
 const SupportScreen = ({ route, navigation }) => {
     const { stationId } = route.params;
 
@@ -137,16 +137,25 @@ const SupportScreen = ({ route, navigation }) => {
                         <Text style={styles.callButtonText}>Call Our Support Expert</Text>
                     </TouchableOpacity>
 
+
+
                     <TouchableOpacity
-                        style={styles.createButton}
                         onPress={() =>
                             navigation.navigate("createticketScreen", {
                                 stationId: stationId,
                             })
                         }
                     >
-                        <Text style={styles.createButtonText}>Create Ticket</Text>
+                        <LinearGradient
+                            colors={["#F00001", "#B00100"]}
+                            start={{ x: 0.5, y: 0 }}
+                            end={{ x: 0.5, y: 1 }}
+                            style={styles.createButton}
+                        >
+                            <Text style={styles.createButtonText}>Create Ticket</Text>
+                        </LinearGradient>
                     </TouchableOpacity>
+
 
                 </View>
                 {/* Recent Tickets */}
@@ -220,19 +229,19 @@ const styles = StyleSheet.create({
     },
     callButton: {
         borderWidth: 1,
-        borderColor: "#EF4949",
+        borderColor: "#ED1C25",
         borderRadius: 8,
         paddingVertical: 12,
         alignItems: "center",
         marginBottom: 10,
     },
     callButtonText: {
-        color: "#EF4949",
+        color: "#ED1C25",
         fontWeight: "600",
         fontSize: 15,
     },
     createButton: {
-        backgroundColor: "#EF4949",
+
         borderRadius: 8,
         paddingVertical: 12,
         alignItems: "center",

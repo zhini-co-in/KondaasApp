@@ -1,186 +1,148 @@
-import React, { useRef, useEffect } from "react";
-import { View, Text, StyleSheet, Animated, Dimensions } from "react-native";
+import React from "react";
+import { View, Text, StyleSheet, Dimensions } from "react-native";
+import Svg, { Path } from "react-native-svg";
 
 const { width } = Dimensions.get("window");
 
-const MultiLineChart = ({ datasets = [], labels = [] }) => {
-    const animatedValue = useRef(new Animated.Value(0)).current;
+const SmoothLineChart = ({
+  datasets = [],
+  labels = [],
+  yAxisUnit = "Units",
+}) => {
+  const chartHeight = 160;
+  const chartWidth = width - 90;
 
-    useEffect(() => {
-        Animated.timing(animatedValue, {
-            toValue: 1,
-            duration: 1500,
-            useNativeDriver: false,
-        }).start();
-    }, []);
+  const allValues = datasets.flatMap(d => d.values);
+  const maxValue = Math.max(...allValues, 1);
 
-    const allValues = datasets.flatMap((ds) => ds.values);
-    const maxValue = Math.max(...allValues);
-    const minValue = Math.min(...allValues);
+  const getX = i =>
+    (i / (labels.length - 1)) * chartWidth;
 
-    const chartHeight = 140;
-    const chartWidth = width - 60;
+  const getY = v =>
+    chartHeight - (v / maxValue) * chartHeight;
 
-    const getPoints = (values) =>
-        values.map((value, index) => {
-            const x = (index / (values.length - 1)) * chartWidth;
-            const y =
-                chartHeight - ((value - minValue) / (maxValue - minValue)) * chartHeight;
-            return { x, y, value };
-        });
+  // 👉 Create smooth Bezier path
+  const createPath = values => {
+    if (values.length === 0) return "";
 
-    return (
-        <View style={styles.chartWrapper}>
-            <View style={[styles.chart, { height: chartHeight, width: chartWidth }]}>
-                {datasets.map((ds, dsIndex) => {
-                    const points = getPoints(ds.values);
+    let d = `M ${getX(0)} ${getY(values[0])}`;
 
-                    return (
-                        <React.Fragment key={`ds-${dsIndex}`}>
-                            {points.map((point, index) => {
-                                if (index === 0) return null;
-                                const prev = points[index - 1];
-                                const dx = point.x - prev.x;
-                                const dy = point.y - prev.y;
-                                const length = Math.sqrt(dx * dx + dy * dy);
-                                const angle = Math.atan2(dy, dx);
+    for (let i = 1; i < values.length; i++) {
+      const x = getX(i);
+      const y = getY(values[i]);
+      const prevX = getX(i - 1);
+      const prevY = getY(values[i - 1]);
 
-                                return (
-                                    <Animated.View
-                                        key={`line-${dsIndex}-${index}`}
-                                        style={{
-                                            position: "absolute",
-                                            left: prev.x,
-                                            top: prev.y,
-                                            width: animatedValue.interpolate({
-                                                inputRange: [0, 1],
-                                                outputRange: [0, length],
-                                            }),
-                                            height: 2,
-                                            backgroundColor: ds.color,
-                                            transform: [{ rotateZ: `${angle}rad` }],
-                                            transformOrigin: "left center",
-                                        }}
-                                    />
-                                );
-                            })}
+      const cx = (prevX + x) / 2;
 
-                            {points.map((point, index) => (
-                                <React.Fragment key={`point-${dsIndex}-${index}`}>
-                                    <Text
-                                        style={{
-                                            position: "absolute",
-                                            left: point.x - 12,
-                                            top: point.y - 22,
-                                            fontSize: 10,
-                                            fontWeight: "200",
-                                            color: "#111",
-                                        }}
-                                    >
-                                        {point.value}
-                                    </Text>
-                                    <View
-                                        style={[
-                                            styles.dot,
-                                            {
-                                                left: point.x - 4,
-                                                top: point.y - 4,
-                                                backgroundColor: ds.color,
-                                            },
-                                        ]}
-                                    />
-                                </React.Fragment>
-                            ))}
-                        </React.Fragment>
-                    );
-                })}
-            </View>
+      d += ` C ${cx} ${prevY}, ${cx} ${y}, ${x} ${y}`;
+    }
+    return d;
+  };
 
-            <View style={styles.labelRow}>
-                {labels.map((lbl, i) => (
-                    <Text key={i} style={styles.label}>
-                        {lbl}
-                    </Text>
-                ))}
-            </View>
-
-            <View style={styles.legendRow}>
-                {datasets.map((ds, i) => (
-                    <View key={i} style={styles.legendItem}>
-                        <View
-                            style={[styles.legendDot, { backgroundColor: ds.color }]}
-                        />
-                        <Text style={styles.legendLabel}>{ds.label}</Text>
-                    </View>
-                ))}
-            </View>
+  return (
+    <View style={styles.wrapper}>
+      <View style={styles.row}>
+        {/* Y AXIS */}
+        <View style={styles.yAxis}>
+          {[...Array(5)].map((_, i) => (
+            <Text key={i} style={styles.yLabel}>
+              {Math.round((maxValue / 4) * (4 - i))}
+            </Text>
+          ))}
+          <Text style={styles.unit}>{yAxisUnit}</Text>
         </View>
-    );
+
+        {/* CHART */}
+        <Svg width={chartWidth} height={chartHeight}>
+          {datasets.map((ds, i) => (
+            <Path
+              key={i}
+              d={createPath(ds.values)}
+              stroke={ds.color}
+              strokeWidth={3}
+              fill="none"
+            />
+          ))}
+        </Svg>
+      </View>
+
+      {/* X AXIS */}
+      <View style={styles.xAxis}>
+        {labels.map((l, i) => (
+          <Text key={i} style={styles.xLabel}>
+            {l}
+          </Text>
+        ))}
+      </View>
+
+      {/* LEGEND */}
+      <View style={styles.legend}>
+        {datasets.map((ds, i) => (
+          <View key={i} style={styles.legendItem}>
+            <View
+              style={[styles.legendLine, { backgroundColor: ds.color }]}
+            />
+            <Text style={styles.legendText}>{ds.label}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
 };
 
-const styles = StyleSheet.create({
-    chartWrapper: {
-        marginTop: 15,
-        padding: 12,
-        backgroundColor: "#fff",
-        borderRadius: 10,
-        elevation: 3,
-        shadowColor: "#000",
-        shadowOpacity: 0.08,
-        shadowOffset: { width: 0, height: 3 },
-    },
-    chartTitle: {
-        fontSize: 14,
-        fontWeight: "600",
-        color: "#111",
-        marginBottom: 10,
-    },
-    chart: {
-        alignSelf: "center",
-        backgroundColor: "#F9FAFB",
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: "#eee",
-    },
-    dot: {
-        position: "absolute",
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        borderWidth: 2,
-        borderColor: "#fff",
-    },
-    labelRow: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        marginTop: 8,
-        paddingHorizontal: 4,
-    },
-    label: {
-        fontSize: 11,
-        color: "#555",
-    },
-    legendRow: {
-        flexDirection: "row",
-        marginTop: 10,
-        justifyContent: "center",
-        flexWrap: "wrap",
-    },
-    legendItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginHorizontal: 8,
-    },
-    legendDot: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        marginRight: 4,
-    },
-    legendLabel: {
-        fontSize: 11,
-        color: "#444",
-    },
-});
+export default SmoothLineChart;
 
-export default MultiLineChart;
+const styles = StyleSheet.create({
+  wrapper: {
+    backgroundColor: "#fff",
+    padding: 12,
+    borderRadius: 10,
+  },
+  row: {
+    flexDirection: "row",
+  },
+  yAxis: {
+    width: 40,
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    paddingRight: 6,
+  },
+  yLabel: {
+    fontSize: 10,
+    color: "#666",
+  },
+  unit: {
+    fontSize: 10,
+    color: "#999",
+  },
+  xAxis: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginLeft: 40,
+    marginTop: 6,
+  },
+  xLabel: {
+    fontSize: 10,
+    color: "#666",
+  },
+  legend: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginTop: 10,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 8,
+  },
+  legendLine: {
+    width: 18,
+    height: 3,
+    marginRight: 6,
+  },
+  legendText: {
+    fontSize: 11,
+    color: "#444",
+  },
+});

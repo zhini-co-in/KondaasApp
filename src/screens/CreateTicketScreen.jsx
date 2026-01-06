@@ -18,6 +18,7 @@ import { USER_DATA } from "../service/localStorage";
 import Loader from "../components/Loader";
 import { fetchStationDevices, fetchStationList } from "../api/api";
 import NetInfo from '@react-native-community/netinfo';
+import LinearGradient from "react-native-linear-gradient";
 const CreateTicketScreen = ({ route, navigation }) => {
   const { stationId } = route.params;
   console.log("CreateTicketScreen Station ID:", stationId);
@@ -254,13 +255,20 @@ const CreateTicketScreen = ({ route, navigation }) => {
 
         {/* Submit Button */}
         <TouchableOpacity
-          style={styles.submitButton}
+
           onPress={handleSubmit}
           disabled={submitting}
         >
-          <Text style={styles.submitButtonText}>
-            {submitting ? "Submitting..." : "Submit Ticket"}
-          </Text>
+          <LinearGradient
+            colors={["#F00001", "#B00100"]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={styles.submitButton}
+          >
+            <Text style={styles.submitButtonText}>
+              {submitting ? "Submitting..." : "Submit Ticket"}
+            </Text>
+          </LinearGradient>
         </TouchableOpacity>
       </ScrollView>
 
@@ -330,7 +338,7 @@ const styles = StyleSheet.create({
 
 
   submitButton: {
-    backgroundColor: "#EF4949",
+
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: "center",

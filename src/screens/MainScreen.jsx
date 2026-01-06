@@ -93,21 +93,21 @@ const MainScreen = ({ navigation }) => {
     setUpdatedTime(formatted);
   }, []);
 
-  async function sendLocalNotification() {
-    await notifee.requestPermission();
+  // async function sendLocalNotification() {
+  //   await notifee.requestPermission();
 
-    await notifee.displayNotification({
-      title: 'Hi',
-      body: 'Welcome back to Kondaas App!',
-      android: {
-        channelId: 'default',
-        smallIcon: 'ic_launcher',
-      },
-    });
-  }
-  useEffect(() => {
-    sendLocalNotification();
-  }, []);
+  //   await notifee.displayNotification({
+  //     title: 'Hi',
+  //     body: 'Welcome back to Kondaas App!',
+  //     android: {
+  //       channelId: 'default',
+  //       smallIcon: 'ic_launcher',
+  //     },
+  //   });
+  // }
+  // useEffect(() => {
+  //   sendLocalNotification();
+  // }, []);
   useEffect(() => {
     notifee.createChannel({
       id: 'default',
@@ -184,17 +184,15 @@ const MainScreen = ({ navigation }) => {
   }, []);
 
   const convertUnits = (value) => {
-    if (!value) return "0 kWh";
-
+    if (!value) return "0 Units";
     if (value >= 1_000_000) {
-      return (value / 1_000_000).toFixed(2) + " GWh";
+      return (value).toFixed(0) + " Units";
     } else if (value >= 1000) {
-      return (value / 1000).toFixed(2) + " MWh";
+      return (value).toFixed(0) + " Units";
     } else {
-      return value + " ";
+      return value.toFixed(2) + " Units";
     }
   };
-
   const loadStations = async () => {
     try {
       console.log(" Fetching station list...");
@@ -296,7 +294,7 @@ const MainScreen = ({ navigation }) => {
           <View style={styles.unitsRow}>
             <View style={styles.unitBlock}>
               <Text style={styles.unitValue}>
-                {todayGeneration ? Math.round(todayGeneration) : 0} kWh
+                {todayGeneration ? Math.round(todayGeneration) : 0} Units
               </Text>
               <Text style={styles.unitLabel}>TODAY</Text>
             </View>
@@ -310,20 +308,19 @@ const MainScreen = ({ navigation }) => {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>
               Your Solar home is{" "}
-              <Text style={styles.brandText}>kondaas</Text> Assured™
+              <Text style={styles.brandText}>kondaas Assured™</Text>
             </Text>
             <View style={styles.progressBar}>
               <View style={styles.progressFill} />
             </View>
             <View style={styles.progressMarkers}>
               {/* <Text style={styles.markerText}>Invested</Text> */}
-              <Text style={styles.markerText}>Break-even</Text>
-              <Text style={styles.markerText}>ROI Achieved</Text>
+              <Text style={styles.markerText}>Kick Off</Text>
+              <Text style={styles.markerText}>Solar Freedom</Text>
             </View>
             <Text style={styles.profitText}>₹ {totalSavings}
             </Text>
           </View>
-
           {/* Buttons */}
           <View style={styles.buttonContainer}>
             <TouchableOpacity
@@ -426,7 +423,7 @@ const MainScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f5f5f5" },
+  container: { flex: 1, backgroundColor: "#fff" },
 
   topBackground: {
     width: "106%",
@@ -435,7 +432,6 @@ const styles = StyleSheet.create({
     paddingTop: 15,
     justifyContent: "flex-start",
   },
-
 
   headerRow: {
     flexDirection: "row",
@@ -458,7 +454,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 2,
   },
-
   liveDot: {
     width: 7,
     height: 7,
@@ -475,7 +470,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-
   iconBox: {
     width: 34,
     height: 34,
@@ -500,7 +494,6 @@ const styles = StyleSheet.create({
   nameContainer: {
     justifyContent: "center",
   },
-
   locationText: {
     color: "#fff",
     fontSize: 13,
@@ -518,7 +511,6 @@ const styles = StyleSheet.create({
     color: "#ddd",
     textAlign: "center",
   },
-
   bottomContainer: {
     backgroundColor: "#fff",
     borderTopLeftRadius: 20,
@@ -541,7 +533,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
     color: "#6c757d",
   },
-
   card: {
     borderRadius: 14,
     padding: 16,
@@ -555,11 +546,11 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     textAlign: "center",
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "500",
     color: "#333",
   },
-  brandText: { color: "#EF4949", fontWeight: "700" },
+  brandText: { color: "#ED1C25", fontWeight: "700" },
   progressBar: {
     marginTop: 16,
     height: 5,
@@ -567,7 +558,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     overflow: "hidden",
   },
-  progressFill: { height: "100%", width: "80%", backgroundColor: "#EF4949" },
+  progressFill: { height: "100%", width: "80%", backgroundColor: "#ED1C25" },
   progressMarkers: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -614,7 +605,6 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 4,
   },
-
   familyItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -628,7 +618,6 @@ const styles = StyleSheet.create({
   familyName: { fontSize: 15, fontWeight: "600", color: "#000" },
   familyNameActive: { fontSize: 15, fontWeight: "700", color: "#007BFF" },
   familyAddress: { fontSize: 12, color: "#555" },
-
   homeButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -647,7 +636,7 @@ const styles = StyleSheet.create({
   },
   buttonContainer: { alignItems: "center", marginTop: 25 },
   primaryButton: {
-    backgroundColor: "#EF4949",
+    backgroundColor: "#ED1C25",
     paddingVertical: 12,
     borderRadius: 8,
     width: "85%",
@@ -657,14 +646,14 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   secondaryButton: {
     borderWidth: 1,
-    borderColor: "#EF4949",
+    borderColor: "#ED1C25",
     borderRadius: 8,
     width: "85%",
     alignItems: "center",
     paddingVertical: 12,
     marginBottom: 10,
   },
-  secondaryButtonText: { color: "#EF4949", fontWeight: "700", fontSize: 15 },
+  secondaryButtonText: { color: "#ED1C25", fontWeight: "700", fontSize: 15 },
   grayButton: {
     backgroundColor: "#eee",
     borderRadius: 8,
@@ -677,7 +666,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: FontStyles.POPPINS500,
     fontWeight: '400',
-    padding: 12,
+    padding: 15,
 
   },
 

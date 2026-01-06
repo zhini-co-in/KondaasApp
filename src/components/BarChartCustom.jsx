@@ -38,7 +38,7 @@ const BarChartCustom = ({
       Animated.timing(anim, {
         toValue: values[i],
         duration: 900,
-        delay: i * 120, // video-style stagger
+        delay: i * 120, 
         useNativeDriver: false,
       })
     );

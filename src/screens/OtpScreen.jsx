@@ -20,6 +20,7 @@ import { SOLARMAN_CONFIG } from "../api/solarmanAuth";
 import NetInfo from "@react-native-community/netinfo";
 import messaging from "@react-native-firebase/messaging";
 import LinearGradient from "react-native-linear-gradient";
+import { PermissionsAndroid, Platform } from "react-native";
 
 const OtpScreen = ({ navigation, route }) => {
   const { confirmation, phoneNumber } = route.params;
@@ -124,7 +125,8 @@ const OtpScreen = ({ navigation, route }) => {
       let fcmToken = null;
 
       try {
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+          await requestFCMPermission();
+        await new Promise((resolve) => setTimeout(resolve, 2000));
         fcmToken = await messaging().getToken();
         console.log("FCM TOKEN:", fcmToken);
       } catch (tokenErr) {
@@ -221,10 +223,20 @@ const OtpScreen = ({ navigation, route }) => {
       setLoading(false);
     }
   };
+const requestFCMPermission = async () => {
+  if (Platform.OS === "android" && Platform.Version >= 33) {
+    const granted = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+    );
+    console.log("🔔 Notification permission:", granted);
+  }
 
+  const authStatus = await messaging().requestPermission();
+  console.log("📩 FCM permission status:", authStatus);
+};
   return (
     <LinearGradient
-      colors={["#D60000", "#EF4949", "#FFB3B3"]}
+      colors={['#F00001', '#B00100']}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 0 }}
       style={styles.safeArea}
@@ -232,7 +244,7 @@ const OtpScreen = ({ navigation, route }) => {
       <SafeAreaView style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
           <LinearGradient
-            colors={["#D60000", "#EF4949", "#FFB3B3"]}
+            colors={['#F00001', '#B00100']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.header}

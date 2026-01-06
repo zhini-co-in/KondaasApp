@@ -29,7 +29,7 @@ const TermsConditionsScreen = ({ navigation }) => {
 
 
       <LinearGradient
-        colors={["#df0101", "#df0101", "#df0101"]}
+        colors={['#F00001', '#B00100']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.highlightBox}
