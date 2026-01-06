@@ -115,6 +115,16 @@ const PowerGenerationScreen = ({ navigation, route }) => {
 
     return false;
   };
+const formatMonthYear = (date) => {
+  return date.toLocaleDateString("en-GB", {
+    month: "long",
+    year: "numeric",
+  });
+};
+
+const formatYearOnly = (date) => {
+  return date.getFullYear().toString();
+};
 
 
   const getDateRange = (tab) => {
@@ -246,51 +256,57 @@ const PowerGenerationScreen = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.container}>
+      
       <ScrollView>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={22} color="#000" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Power Generation</Text>
+          <Text style={styles.headerTitle}>More Insights</Text>
         </View>
         <View style={styles.tabContainer}>
-  {["Day", "Week", "Month", "Year"].map((tab) => {
-    const isActive = selectedTab === tab;
+          {["Day", "Week", "Month", "Year"].map((tab) => {
+            const isActive = selectedTab === tab;
 
-    return (
-      <TouchableOpacity
-        key={tab}
-        style={styles.tabButton}
-        onPress={() => setSelectedTab(tab)}
-        activeOpacity={0.8}
-      >
-        {isActive ? (
-          <LinearGradient
-            colors={["#F00001", "#B00100"]}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={styles.activeTabButton}
-          >
-            <Text style={styles.activeTabText}>{tab}</Text>
-          </LinearGradient>
-        ) : (
-          <Text style={styles.tabText}>{tab}</Text>
-        )}
-      </TouchableOpacity>
-    );
-  })}
-</View>
+            return (
+              <TouchableOpacity
+                key={tab}
+                style={styles.tabButton}
+                onPress={() => setSelectedTab(tab)}
+                activeOpacity={0.8}
+              >
+                {isActive ? (
+                  <LinearGradient
+                    colors={["#F00001", "#B00100"]}
+                    start={{ x: 0.5, y: 0 }}
+                    end={{ x: 0.5, y: 1 }}
+                    style={styles.activeTabButton}
+                  >
+                    <Text style={styles.activeTabText}>{tab}</Text>
+                  </LinearGradient>
+                ) : (
+                  <Text style={styles.tabText}>{tab}</Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
         <View style={styles.dateNav}>
           <TouchableOpacity onPress={() => changeDate(-1)}>
             <Ionicons name="chevron-back" size={22} color="#000" />
           </TouchableOpacity>
 
-          <Text style={styles.dateNavText}>
-            {selectedTab === "Week"
-              ? `${weekStart} - ${weekEnd}`
-              : formatDisplayDate(currentDate)}
-          </Text>
+        <Text style={styles.dateNavText}>
+  {selectedTab === "Day" && formatDisplayDate(currentDate)}
+
+  {selectedTab === "Week" && `${weekStart} - ${weekEnd}`}
+
+  {selectedTab === "Month" && formatMonthYear(currentDate)}
+
+  {selectedTab === "Year" && formatYearOnly(currentDate)}
+</Text>
+
 
           {!isFutureDisabled() ? (
             <TouchableOpacity onPress={() => changeDate(1)}>
@@ -385,24 +401,31 @@ export default PowerGenerationScreen;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F6F6F6" },
-  header: { flexDirection: "row", alignItems: "center", padding: 15 },
+   header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderColor: "#eee",
+  },
   headerTitle: { fontSize: 18, fontWeight: "600", marginLeft: 10 },
   tabContainer: {
-  flexDirection: "row",
-  backgroundColor: "#f2f2f2",
-  borderRadius: 10,
-  padding: 4,
-  marginHorizontal: 16,
-},
+    flexDirection: "row",
+    backgroundColor: "#f2f2f2",
+    borderRadius: 10,
+    padding: 4,
+    marginHorizontal: 16,
+  },
 
-tabButton: {
-  flex: 1,
-  height: 38,
-  justifyContent: "center",
-  alignItems: "center",
-},
-  activeTabButton: {  width: "100%",borderRadius: 6, paddingVertical: 8, alignItems: "center"}  ,
-  
+  tabButton: {
+    flex: 1,
+    height: 38,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  activeTabButton: { width: "100%", borderRadius: 6, paddingVertical: 8, alignItems: "center" },
+
   tabText: { color: "#444", fontSize: 14, fontWeight: "500" },
   activeTabText: { color: "#fff" },
   dateSelector: {

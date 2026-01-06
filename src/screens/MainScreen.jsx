@@ -331,7 +331,7 @@ const MainScreen = ({ navigation }) => {
                   stationId: selectedStationId,
                 });
               }}
-            >  
+            >
               <Text style={styles.primaryButtonText}>View Insights →</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -546,11 +546,11 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     textAlign: "center",
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "500",
     color: "#333",
   },
-  brandText: { color: "#ED1C25", fontWeight: "700" },
+  brandText: { color: "#ED1C25", fontWeight: "900" },
   progressBar: {
     marginTop: 16,
     height: 5,
@@ -643,7 +643,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 10,
   },
-  primaryButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  primaryButtonText: { color: "#fff", fontWeight: "700", fontSize: 17 },
   secondaryButton: {
     borderWidth: 1,
     borderColor: "#ED1C25",

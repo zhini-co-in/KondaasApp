@@ -104,7 +104,7 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
         });
         setChartData([
           { label: "Generated (kWh)", values, color: "#EF4444" },
-          { label: "Committed (kWh)", values: committedValues, color: "#FECACA" },
+          { label: "Committed (kWh)", values: committedValues, color: "#280872ff" },
         ]);
 
         setLabels(labels);
@@ -121,32 +121,32 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
       setLoading(false);
     }
   };
- const loadComitted = async (generatedUnits) => {
-  try {
-    const snapshot = await firestore().collection("comittedUnits").get();
+  const loadComitted = async (generatedUnits) => {
+    try {
+      const snapshot = await firestore().collection("comittedUnits").get();
 
-    let committed = 0;
-    if (!snapshot.empty) {
-      snapshot.forEach((doc) => {
-        committed = Number(doc.data().Comitted);
-      });
+      let committed = 0;
+      if (!snapshot.empty) {
+        snapshot.forEach((doc) => {
+          committed = Number(doc.data().Comitted);
+        });
+      }
+
+      setCommittedUnits(committed);
+
+      const percent =
+        committed > 0
+          ? ((generatedUnits / committed) * 100).toFixed(1)
+          : 0;
+
+      console.log("⚡ Generated units:", generatedUnits);
+      console.log("📊 Percentage Above:", percent, "%");
+
+      setPercentAbove(percent);
+    } catch (error) {
+      console.log("🔥 Error fetching committed units:", error);
     }
-
-    setCommittedUnits(committed);
-
-    const percent =
-      committed > 0
-        ? ((generatedUnits / committed) * 100).toFixed(1)
-        : 0;
-
-    console.log("⚡ Generated units:", generatedUnits);
-    console.log("📊 Percentage Above:", percent, "%");
-
-    setPercentAbove(percent);
-  } catch (error) {
-    console.log("🔥 Error fetching committed units:", error);
-  }
-};
+  };
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
@@ -155,7 +155,7 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back-outline" size={24} color="#000" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Kondaas Assured</Text>
+        <Text style={styles.headerTitle}>Insights</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -190,9 +190,9 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
           </View>
           <Text style={styles.infoText}>
             Your Solar home has generated{" "}
-            <Text style={{ fontWeight: "700" }}>{percentAbove}%</Text> above{" "}
+            <Text style={{ fontWeight: "900" }}>{percentAbove}%</Text> above{" "}
 
-            <Text style={{ fontWeight: "700" }}>Kondaas Assured™</Text> target!
+            <Text style={{ fontWeight: "900" }}>Kondaas Assured™</Text> target!
           </Text>
         </View>
 
@@ -202,20 +202,26 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
           </View>
           <Text style={styles.infoText}>
             Your Solar home has saved{" "}
-            {/* <Text style={{ fontWeight: "700" }}>₹34,125</Text> until{" "} */}
             <Text style={{ fontWeight: "700" }}>₹{totalSavings}</Text> until{" "}
 
             {new Date().toLocaleString("en-US", { month: "short", year: "numeric" })}
           </Text>
         </View>
-
         <TouchableOpacity
-          onPress={() => navigation.navigate("PowerGenerationScreen", { stationId })}
+          style={styles.reachUsButton}
+          activeOpacity={0.8}
+          onPress={() =>
+            navigation.navigate("PowerGenerationScreen", { stationId })
+          }
         >
-          <Text style={styles.footerLink}>
-            Know more about <Text style={{ fontWeight: "700" }}>Kondaas Assured™ →</Text>
-          </Text>
+       <Text style={styles.reachUsText}>
+  View More Insights{" "}
+  <Text style={styles.bigArrow}>→</Text>
+</Text>
+
+       
         </TouchableOpacity>
+
       </ScrollView>
 
       {loading && <Loader />}
@@ -302,4 +308,38 @@ const styles = StyleSheet.create({
     fontSize: 15,
     width: "100%",
   },
+ reachUsButton: {
+  flexDirection: "row",
+  marginTop: 12,
+  alignItems: "center",
+  justifyContent: "space-between",
+  backgroundColor: "#fff",
+  borderRadius: 16,
+  paddingHorizontal: 14,
+  height: 56,             
+  width: "100%",
+  elevation: 3,
+  shadowColor: "#000",
+  shadowOpacity: 0.12,
+  shadowRadius: 6,
+  shadowOffset: { width: 0, height: 3 },
+},
+
+arrowIcon: {
+  color: "#E60000",
+  fontSize: 20,
+  fontWeight: "700",
+},
+reachUsText: {
+  color: "#E60000",
+  fontSize: 16,
+  fontWeight: "600",
+},
+
+bigArrow: {
+  fontSize: 20,     
+  fontWeight: "700",
+},
+
+
 });

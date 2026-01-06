@@ -118,9 +118,9 @@ const KondaaAboutScreen = ({ navigation }) => {
               Join thousands of satisfied customers with Kondaas Assured™
             </Text>
           </Text>
-          <TouchableOpacity style={styles.getStartedButton}>
+          {/* <TouchableOpacity style={styles.getStartedButton}>
             <Text style={styles.getStartedText}>Get Started Today</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
       </ScrollView>
     </SafeAreaView>

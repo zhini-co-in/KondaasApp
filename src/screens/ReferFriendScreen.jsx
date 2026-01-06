@@ -215,6 +215,7 @@ const ReferFriendScreen = ({ navigation }) => {
         <TextInput
           style={styles.input}
           placeholder="+91 XXXXX XXXXX"
+           placeholderTextColor="#999" 
           keyboardType="phone-pad"
           value={mobile}
           onChangeText={handleSearch}
@@ -223,6 +224,7 @@ const ReferFriendScreen = ({ navigation }) => {
         <TextInput
           style={styles.input}
           placeholder="Enter your friend's name"
+           placeholderTextColor="#999" 
           value={name}
           onChangeText={handleNameSearch}
         />
@@ -233,6 +235,7 @@ const ReferFriendScreen = ({ navigation }) => {
               style={{
                 borderWidth: 1,
                 borderColor: "#eee",
+                
                 borderRadius: 8,
                 backgroundColor: "#fff",
               }}

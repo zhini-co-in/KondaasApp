@@ -45,13 +45,20 @@ const SmoothLineChart = ({
       <View style={styles.row}>
         {/* Y AXIS */}
         <View style={styles.yAxis}>
-          {[...Array(5)].map((_, i) => (
-            <Text key={i} style={styles.yLabel}>
-              {Math.round((maxValue / 4) * (4 - i))}
-            </Text>
-          ))}
-          <Text style={styles.unit}>{yAxisUnit}</Text>
+          <View style={styles.yLabels}>
+            {[...Array(5)].map((_, i) => (
+              <Text key={i} style={styles.yLabel}>
+                {Math.round((maxValue / 4) * (4 - i))}
+              </Text>
+            ))}
+          </View>
+
+          {/* Units */}
+          <View style={styles.yAxisUnit}>
+            <Text style={styles.unit}>{yAxisUnit}</Text>
+          </View>
         </View>
+
 
         {/* CHART */}
         <Svg width={chartWidth} height={chartHeight}>
@@ -75,6 +82,7 @@ const SmoothLineChart = ({
           </Text>
         ))}
       </View>
+      <Text style={styles.xAxisTitle}>Date</Text>
 
       {/* LEGEND */}
       <View style={styles.legend}>
@@ -108,13 +116,30 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     paddingRight: 6,
   },
+  yLabels: {
+    flex: 1,
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    paddingRight: 6,
+  },
+  yAxisUnit: {
+    position: "absolute",
+    left: -18,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   yLabel: {
     fontSize: 10,
     color: "#666",
   },
   unit: {
-    fontSize: 10,
+    fontSize: 11,
     color: "#999",
+    fontWeight: "bold",
+    transform: [{ rotate: "-90deg" }],
+    textAlign: "center",
   },
   xAxis: {
     flexDirection: "row",
@@ -144,5 +169,12 @@ const styles = StyleSheet.create({
   legendText: {
     fontSize: 11,
     color: "#444",
+  },
+  xAxisTitle: {
+    textAlign: "center",
+    fontSize: 11,
+    color: "#999",
+    marginTop: 4,
+    fontWeight: "bold",
   },
 });
