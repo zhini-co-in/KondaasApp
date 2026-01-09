@@ -8,11 +8,10 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
-import { BarChart } from "react-native-chart-kit";
+import { BarChart,LineChart  } from "react-native-chart-kit";
 import { Dimensions } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import api, { fetchHistoricalData } from "../api/api";
-import { setAuthToken } from "../api/api";
+import { setAuthToken, fetchHistoricalData } from "../api/api";
 import NetInfo from '@react-native-community/netinfo';
 import { USER_DATA, getStorageData } from "../service/localStorage";
 import firestore from "@react-native-firebase/firestore";
@@ -115,17 +114,21 @@ const PowerGenerationScreen = ({ navigation, route }) => {
 
     return false;
   };
-const formatMonthYear = (date) => {
-  return date.toLocaleDateString("en-GB", {
-    month: "long",
-    year: "numeric",
-  });
-};
+  const formatMonthYear = (date) => {
+    return date.toLocaleDateString("en-GB", {
+      month: "long",
+      year: "numeric",
+    });
+  };
 
-const formatYearOnly = (date) => {
-  return date.getFullYear().toString();
-};
+  const formatYearOnly = (date) => {
+    return date.getFullYear().toString();
+  };
 
+  const onTabChange = (tab) => {
+    setSelectedTab(tab);
+    setCurrentDate(new Date());
+  };
 
   const getDateRange = (tab) => {
     let start, end;
@@ -256,7 +259,7 @@ const formatYearOnly = (date) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      
+
       <ScrollView>
         {/* Header */}
         <View style={styles.header}>
@@ -273,9 +276,10 @@ const formatYearOnly = (date) => {
               <TouchableOpacity
                 key={tab}
                 style={styles.tabButton}
-                onPress={() => setSelectedTab(tab)}
+                onPress={() => onTabChange(tab)}
                 activeOpacity={0.8}
               >
+
                 {isActive ? (
                   <LinearGradient
                     colors={["#F00001", "#B00100"]}
@@ -297,15 +301,15 @@ const formatYearOnly = (date) => {
             <Ionicons name="chevron-back" size={22} color="#000" />
           </TouchableOpacity>
 
-        <Text style={styles.dateNavText}>
-  {selectedTab === "Day" && formatDisplayDate(currentDate)}
+          <Text style={styles.dateNavText}>
+            {selectedTab === "Day" && formatDisplayDate(currentDate)}
 
-  {selectedTab === "Week" && `${weekStart} - ${weekEnd}`}
+            {selectedTab === "Week" && `${weekStart} - ${weekEnd}`}
 
-  {selectedTab === "Month" && formatMonthYear(currentDate)}
+            {selectedTab === "Month" && formatMonthYear(currentDate)}
 
-  {selectedTab === "Year" && formatYearOnly(currentDate)}
-</Text>
+            {selectedTab === "Year" && formatYearOnly(currentDate)}
+          </Text>
 
 
           {!isFutureDisabled() ? (
@@ -327,38 +331,67 @@ const formatYearOnly = (date) => {
         )}
 
         {!loading && chartData && (
-          <BarChart
-            data={chartData}
-            width={screenWidth - 30}
-            height={240}
-            yAxisSuffix=" kWh"
+  <View style={{ alignItems: "center" }}>
+    
+    {/* BAR CHART */}
+    <BarChart
+      data={chartData}
+      width={screenWidth - 30}
+      height={240}
+      fromZero
+      withHorizontalLabels={true}
+      showValuesOnTopOfBars={true}
+      chartConfig={{
+        backgroundColor: "#fff",
+        backgroundGradientFrom: "#fff",
+        backgroundGradientTo: "#fff",
+        decimalPlaces: 1,
+        color: () => "#2F5FB3",    
+        labelColor: () => "#000",
+        barPercentage: 0.6,
+        propsForLabels: {
+          fontSize: 11,
+          fontWeight: "600",
+        },
+      }}
+      style={{
+        borderRadius: 12,
+      }}
+    />
 
-            withVerticalLabels={false}
-            fromZero
-            chartConfig={{
-              backgroundColor: "#fff",
-              backgroundGradientFrom: "#fff",
-              backgroundGradientTo: "#fff",
-              decimalPlaces: 1,
-              color: (opacity = 1) => `rgba(0, 102, 204, ${opacity})`,
-              labelColor: (opacity = 1) => `rgba(0,0,0,${opacity})`,
-              barPercentage: 0.6,
-              style: { borderRadius: 12 },
-              propsForLabels: {
-                fontSize: 10,
-                paddingRight: 10,
-              },
-            }}
-            style={{
-              marginVertical: 10,
-              borderRadius: 12,
-              alignSelf: "center",
-              paddingRight: 100,
-              paddingLeft: 100,
-              paddingBottom: 15,
-            }}
-          />
-        )}
+    {/* LINE CHART (OVERLAY) */}
+    <LineChart
+      data={{
+        labels: chartData.labels,
+        datasets: [
+          {
+            data: chartData.datasets[0].data,
+          },
+        ],
+      }}
+      width={screenWidth - 30}
+      height={240}
+      withDots={true}
+      withInnerLines={false}
+      withOuterLines={false}
+      withHorizontalLabels={false}
+      withVerticalLabels={false}
+      transparent
+      chartConfig={{
+        backgroundGradientFrom: "transparent",
+        backgroundGradientTo: "transparent",
+        color: () => "#f5ae68ff",   
+        strokeWidth: 3,
+      }}
+      style={{
+        position: "absolute",  
+        top: 0,
+        left: 0,
+      }}
+    />
+  </View>
+)}
+
         {/* Summary Box */}
         <View style={styles.energyBox}>
           <Ionicons
@@ -389,9 +422,13 @@ const formatYearOnly = (date) => {
           onPress={() => navigation.navigate("KondaaAboutScreen")}
         >
           <Text style={styles.footerLink}>
-            Know more about{" "}
-            <Text style={{ fontWeight: "800" }}>Kondaas Assured™ →</Text>
-          </Text>
+  Know more about{" "}
+  <Text style={{ fontWeight: "900" }}>
+    Kondaas Assured™{" "}
+    <Text style={{ fontSize: 22, fontWeight: "900" }}>→</Text>
+  </Text>
+</Text>
+
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -401,7 +438,7 @@ export default PowerGenerationScreen;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F6F6F6" },
-   header: {
+  header: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 15,

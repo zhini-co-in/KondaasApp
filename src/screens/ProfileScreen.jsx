@@ -16,6 +16,7 @@ import { fetchStationList } from "../api/api";
 import Loader from "../components/Loader";
 import { getStorageData, USER_DATA } from "../service/localStorage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import LinearGradient from "react-native-linear-gradient";
 const ProfileScreen = ({ route, navigation }) => {
     const { stationId } = route.params || {};
     const [showLogoutPopup, setShowLogoutPopup] = useState(false);
@@ -123,7 +124,7 @@ const ProfileScreen = ({ route, navigation }) => {
                         </View>
                     </View>
 
-                    <MaterialIcons name="verified-user" size={26} color="#B50203" />
+                    <MaterialIcons name="verified-user" size={26} color="#ED1C25" />
                 </View>
 
                 <View style={styles.card}>
@@ -230,10 +231,16 @@ const ProfileScreen = ({ route, navigation }) => {
 
                 {/* Logout Button */}
                 <TouchableOpacity
-                    style={styles.logoutButton}
                     onPress={() => setShowLogoutPopup(true)}
                 >
-                    <Text style={styles.logoutText}>Logout</Text>
+                    <LinearGradient
+                        colors={["#F00001", "#B00100"]}
+                        start={{ x: 0.5, y: 0 }}
+                        end={{ x: 0.5, y: 1 }}
+                        style={styles.logoutButton}
+                    >
+                        <Text style={styles.logoutText}>Logout</Text>
+                    </LinearGradient>
                 </TouchableOpacity>
 
             </ScrollView>
@@ -245,7 +252,7 @@ const ProfileScreen = ({ route, navigation }) => {
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.popupBox}>
-                        <Ionicons name="log-out-outline" size={45} color="#B50203" />
+                        <Ionicons name="log-out-outline" size={45} color="#ED1C25" />
                         <Text style={styles.popupText}>Are you sure want to logout?</Text>
                         <View style={styles.popupButtons}>
                             <TouchableOpacity style={styles.yesButton} onPress={handleLogout}>
@@ -306,7 +313,7 @@ const styles = StyleSheet.create({
     },
     sectionTitle: { fontSize: 16, fontWeight: "700", color: "#000", marginBottom: 8 },
     labelText: { fontSize: 13, color: "#666" },
-    highlightText: { color: "#B50203", fontWeight: "700", marginBottom: 10 },
+    highlightText: { color: "#ED1C25", fontWeight: "700", marginBottom: 10 },
     anniversaryRow: { flexDirection: "row", justifyContent: "space-between" },
     anniversaryBox: { alignItems: "center", flex: 1 },
     valueText: { fontSize: 20, fontWeight: "700", color: "#333" },
@@ -359,14 +366,12 @@ const styles = StyleSheet.create({
     achievementText: { fontWeight: "600", color: "#333" },
 
     logoutButton: {
-        backgroundColor: "#B50203",
         margin: 15,
         paddingVertical: 12,
         borderRadius: 10,
         alignItems: "center",
     },
     logoutText: { color: "#fff", fontWeight: "700", fontSize: 16 },
-    // 🔹 Modal Styles
     modalOverlay: {
         flex: 1,
         backgroundColor: "rgba(0,0,0,0.4)",
@@ -394,7 +399,7 @@ const styles = StyleSheet.create({
         width: "100%",
     },
     yesButton: {
-        backgroundColor: "#B50203",
+        backgroundColor: "#ED1C25",
         paddingVertical: 10,
         paddingHorizontal: 50,
         borderRadius: 8,

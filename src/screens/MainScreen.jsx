@@ -11,8 +11,8 @@ import {
   ScrollView,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import LightBg from "../../assets/images/Lightmode.jpg";
-import DarkBg from "../../assets/images/Darkmode.jpg";
+import LightBg from "../../assets/images/Lightmode.png";
+import DarkBg from "../../assets/images/Darkmode.png";
 import ProfileImg from "../../assets/images/Round.png";
 import Loader from "../components/Loader";
 import { getStorageData, USER_DATA } from "../service/localStorage";
@@ -134,9 +134,7 @@ const MainScreen = ({ navigation }) => {
         startTime: dateString,
         endTime: dateString,
       };
-
       console.log("Today Gen Payload:", payload);
-
       const response = await fetchHistoricalData(payload);
       console.log(" Response:", response);
 
@@ -408,7 +406,9 @@ const MainScreen = ({ navigation }) => {
                     </View>
                   </TouchableOpacity>
                 ))}
-                <TouchableOpacity style={styles.homeButton}>
+                <TouchableOpacity style={styles.homeButton}
+                  onPress={() => setVisible(false)}
+                >
                   <Ionicons name="settings-outline" size={16} color="#007BFF" />
                   <Text style={styles.homeButtonText}>Home settings</Text>
                 </TouchableOpacity>

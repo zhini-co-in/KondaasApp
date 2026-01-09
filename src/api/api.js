@@ -22,12 +22,12 @@ export const setAuthToken = async () => {
 
     if (token) {
       api.defaults.headers.common.Authorization = `Bearer ${token}`;
-      console.log("✅ Token added to header:", token);
+      console.log(" Token added to header:", token);
     } else {
-      console.warn("⚠️ No token found in USER_DATA:", parsed);
+      console.warn(" No token found in USER_DATA:", parsed);
     }
   } catch (error) {
-    console.error("🚨 Error setting token:", error);
+    console.error(" Error setting token:", error);
   }
 };
 

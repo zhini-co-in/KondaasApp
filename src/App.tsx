@@ -16,7 +16,6 @@ let App = () => {
   const scheme = useColorScheme();
   const theme = scheme === 'dark' ? darkTheme : lightTheme;
 
-  // CodePush sync on app start
   useEffect(() => {
     codePush.sync({
       updateDialog: true,
