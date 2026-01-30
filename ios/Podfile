@@ -8,6 +8,11 @@ require Pod::Executable.execute_command('node', ['-p',
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
 
+use_modular_headers!
+
+# Force static framework linkage to avoid duplicate module / header clashes
+# (keeps linkage consistent for Swift + ObjC pods)
+ENV['USE_FRAMEWORKS'] = 'static' unless ENV['USE_FRAMEWORKS']
 linkage = ENV['USE_FRAMEWORKS']
 if linkage != nil
   Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
@@ -30,5 +35,13 @@ target 'KondaasApp' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # Allow non-modular includes in framework modules to avoid
+    # "non-modular-include-in-framework-module" build errors
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+      end
+    end
   end
 end

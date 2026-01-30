@@ -42,7 +42,7 @@ const ReferAndEarnScreen = ({ navigation }) => {
 
         console.log("📱 Fetching referrals for phone:", phoneNo);
         const snapshot = await firestore()
-          .collection("Referrals")
+          .collection("referrals")
           .where("refererPhNo", "==", phoneNo)
           .get();
         const data = snapshot.docs.map(doc => doc.data());

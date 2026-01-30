@@ -138,19 +138,25 @@ const PowerGenerationScreen = ({ navigation, route }) => {
       start = formatDate(baseDate);
       end = formatDate(baseDate);
     }
-    else if (tab === "Week") {
-      const day = baseDate.getDay();
-      const diffToMonday = (day + 6) % 7;
+   else if (tab === "Week") {
+  const day = baseDate.getDay();
+  const diffToMonday = (day + 6) % 7;
 
-      const monday = new Date(baseDate);
-      monday.setDate(baseDate.getDate() - diffToMonday);
+  const monday = new Date(baseDate);
+  monday.setDate(baseDate.getDate() - diffToMonday);
 
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
+  let sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
 
-      start = formatDate(monday);
-      end = formatDate(sunday);
-    }
+  // 🔥 IMPORTANT FIX
+  if (sunday > today) {
+    sunday = today;
+  }
+
+  start = formatDate(monday);
+  end = formatDate(sunday);
+}
+
     else if (tab === "Month") {
       const y = baseDate.getFullYear();
       const m = String(baseDate.getMonth() + 1).padStart(2, "0");
@@ -176,8 +182,12 @@ const PowerGenerationScreen = ({ navigation, route }) => {
           committed = Number(doc.data().Comitted);
         });
         setCommittedUnits(committed);
-        const percent = committed > 0 ? ((generated / committed) * 100).toFixed(1) : 0;
-        setPercentGenerated(percent);
+         const percent =
+        committed > 0 && generated > 0
+          ? Number(((generated / committed) * 100).toFixed(1))
+          : 0;
+
+      setPercentGenerated(percent);
       }
     } catch (error) {
       console.log("Error fetching committed units:", error);
@@ -231,11 +241,14 @@ const PowerGenerationScreen = ({ navigation, route }) => {
           labels.push(monthNames[item.month - 1] || `M${index + 1}`);
         }
 
-        dataPoints.push(Number(item.generationValue ?? 0));
+        const value = Number(item.generationValue);
+dataPoints.push(isFinite(value) ? value : 0);
+
       });
 
       const total = dataPoints.reduce((sum, val) => sum + val, 0);
-      setTotalGenerated(total.toFixed(1));
+      setTotalGenerated(Number(total.toFixed(1)));
+
       await loadCommittedUnits(total);
 
       setChartData({
@@ -256,7 +269,8 @@ const PowerGenerationScreen = ({ navigation, route }) => {
     if (stationId) fetchGenerationData(selectedTab);
   }, [selectedTab, currentDate]);
 
-
+  const hasValidData =
+    chartData && chartData.datasets[0].data.some((v) => v > 0);
   return (
     <SafeAreaView style={styles.container}>
 
@@ -330,7 +344,7 @@ const PowerGenerationScreen = ({ navigation, route }) => {
           />
         )}
 
-        {!loading && chartData && (
+         {!loading && hasValidData && (
   <View style={{ alignItems: "center" }}>
     
     {/* BAR CHART */}

@@ -152,7 +152,7 @@ const ReferFriendScreen = ({ navigation }) => {
         return;
       }
       const existingRef = await firestore()
-        .collection("Referrals")
+        .collection("referrals")
         .where("friendPhNo", "==", mobile)
         .get();
 
@@ -164,7 +164,7 @@ const ReferFriendScreen = ({ navigation }) => {
         setLoading(false);
         return;
       }
-      const salesId = firestore().collection("Referrals").doc().id;
+      const salesId = firestore().collection("referrals").doc().id;
       const referralData = {
         salesId,
         refererPhNo,
@@ -180,9 +180,9 @@ const ReferFriendScreen = ({ navigation }) => {
         createdAt: firestore.FieldValue.serverTimestamp(),
       };
 
-      await firestore().collection("Referrals").doc(salesId).set(referralData);
+      await firestore().collection("referrals").doc(salesId).set(referralData);
 
-      Alert.alert("✅ Success", "Referral submitted successfully!");
+      Alert.alert("Success", "Referral submitted successfully!");
       setName("");
       setMobile("");
       setProduct("");
@@ -215,7 +215,7 @@ const ReferFriendScreen = ({ navigation }) => {
         <TextInput
           style={styles.input}
           placeholder="+91 XXXXX XXXXX"
-           placeholderTextColor="#999" 
+          placeholderTextColor="#999"
           keyboardType="phone-pad"
           value={mobile}
           onChangeText={handleSearch}
@@ -224,7 +224,7 @@ const ReferFriendScreen = ({ navigation }) => {
         <TextInput
           style={styles.input}
           placeholder="Enter your friend's name"
-           placeholderTextColor="#999" 
+          placeholderTextColor="#999"
           value={name}
           onChangeText={handleNameSearch}
         />
@@ -235,7 +235,7 @@ const ReferFriendScreen = ({ navigation }) => {
               style={{
                 borderWidth: 1,
                 borderColor: "#eee",
-                
+
                 borderRadius: 8,
                 backgroundColor: "#fff",
               }}
@@ -260,43 +260,33 @@ const ReferFriendScreen = ({ navigation }) => {
           </View>
         )}
 
-        <Text style={styles.label}>Interested Product</Text>
-        <View style={styles.pickerContainer}>
-          <Picker
-            selectedValue={product}
-            onValueChange={(itemValue) => setProduct(itemValue)}
-            mode="dropdown"
-            style={styles.picker}
-            itemStyle={styles.itemStyle}
-
-          >
-            <Picker.Item label="Select Product" value="" />
-            {products.map((item) => (
-              <Picker.Item key={item.id} label={item.title} value={item.id} />
-            ))}
-          </Picker>
-        </View>
-
+        <Text style={styles.label}>Enter a Product</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter interested product"
+          placeholderTextColor="#999"
+          value={product}
+          onChangeText={setProduct}
+        />
         <TouchableOpacity
           onPress={handleRefer}
           disabled={loading}
         >
-           <LinearGradient
-    colors={["#F00001", "#B00100"]}
-    start={{ x: 0.5, y: 0 }}
-    end={{ x: 0.5, y: 1 }}
-   style={styles.referBtn}
-  >
-          <Text style={styles.referBtnText}>
-            {loading ? "Submitting..." : "Refer"}
-          </Text>
+          <LinearGradient
+            colors={["#F00001", "#B00100"]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={styles.referBtn}
+          >
+            <Text style={styles.referBtnText}>
+              {loading ? "Submitting..." : "Refer"}
+            </Text>
           </LinearGradient>
         </TouchableOpacity>
       </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 };
-
 export default ReferFriendScreen;
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
@@ -338,8 +328,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     overflow: "hidden",
   },
-   picker: {
-    height: 55,          
+  picker: {
+    height: 55,
     borderWidth: 1,
     borderColor: "#555",
     borderRadius: 8,
@@ -348,8 +338,8 @@ const styles = StyleSheet.create({
   },
   itemStyle: {
     fontSize: 16,
-    height: 55,          
-    lineHeight: 22,      
+    height: 55,
+    lineHeight: 22,
   },
   referBtn: {
     borderRadius: 8,

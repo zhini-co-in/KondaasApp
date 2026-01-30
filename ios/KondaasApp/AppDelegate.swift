@@ -2,8 +2,8 @@ import UIKit
 import React
 import React_RCTAppDelegate
 import ReactAppDependencyProvider
+import Firebase
 
-import CodePush
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
   var window: UIWindow?
@@ -15,6 +15,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
+
     let delegate = ReactNativeDelegate()
     let factory = RCTReactNativeFactory(delegate: delegate)
     delegate.dependencyProvider = RCTAppDependencyProvider()
@@ -40,16 +41,10 @@ class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {
   }
 
   override func bundleURL() -> URL? {
-    #if DEBUG
-    // Debug mode → Metro bundler
-    return RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: "index")
+#if DEBUG
+    RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: "index")
 #else
-    // Release mode → LOAD Revopush/CodePush Updated Bundle
-    return CodePush.bundleURL()
-// #if DEBUG
-//     RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: "index")
-// #else
-//     Bundle.main.url(forResource: "main", withExtension: "jsbundle")
+    Bundle.main.url(forResource: "main", withExtension: "jsbundle")
 #endif
   }
 }

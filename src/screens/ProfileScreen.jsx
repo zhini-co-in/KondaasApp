@@ -189,7 +189,7 @@ const ProfileScreen = ({ route, navigation }) => {
 
 
                 {/* Environmental Impact */}
-                <View style={styles.card}>
+                {/* <View style={styles.card}>
                     <Text style={styles.sectionTitle}>🌿 Environmental Impact</Text>
                     <View style={styles.envBox}>
                         <Text style={styles.envValue}>127</Text>
@@ -206,10 +206,10 @@ const ProfileScreen = ({ route, navigation }) => {
                             <Text style={styles.statLabel}>CO₂ Saved</Text>
                         </View>
                     </View>
-                </View>
+                </View> */}
 
                 {/* Achievements */}
-                <View style={styles.card}>
+                {/* <View style={styles.card}>
                     <Text style={styles.sectionTitle}>🏅 Achievements</Text>
                     <View style={styles.achievementsRow}>
                         <View style={[styles.achievementBox, { backgroundColor: "#f9f6ff" }]}>
@@ -227,7 +227,7 @@ const ProfileScreen = ({ route, navigation }) => {
                             <Text style={styles.achievementText}>Locked</Text>
                         </View>
                     </View>
-                </View>
+                </View> */}
 
                 {/* Logout Button */}
                 <TouchableOpacity

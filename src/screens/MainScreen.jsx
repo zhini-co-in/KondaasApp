@@ -162,10 +162,10 @@ const MainScreen = ({ navigation }) => {
       if (response?.generationTotal !== undefined) {
         setLifetimeGeneration(response.generationTotal);
       } else {
-        console.warn("⚠️ No generationTotal in response");
+        console.warn(" No generationTotal in response");
       }
     } catch (error) {
-      console.error("🚨 Error fetching real-time data:", error);
+      console.error(" Error fetching real-time data:", error);
     }
   };
 

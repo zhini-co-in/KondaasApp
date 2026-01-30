@@ -104,7 +104,7 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
         });
         setChartData([
           { label: "Generated (kWh)", values, color: "#EF4444" },
-          { label: "Committed (kWh)", values: committedValues, color: "#280872ff" },
+          { label: "Committed (kWh)", values: committedValues, color: "#FF8A80" },
         ]);
 
         setLabels(labels);

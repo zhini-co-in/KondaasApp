@@ -125,7 +125,7 @@ const OtpScreen = ({ navigation, route }) => {
       let fcmToken = null;
 
       try {
-          await requestFCMPermission();
+        await requestFCMPermission();
         await new Promise((resolve) => setTimeout(resolve, 2000));
         fcmToken = await messaging().getToken();
         console.log("FCM TOKEN:", fcmToken);
@@ -223,17 +223,17 @@ const OtpScreen = ({ navigation, route }) => {
       setLoading(false);
     }
   };
-const requestFCMPermission = async () => {
-  if (Platform.OS === "android" && Platform.Version >= 33) {
-    const granted = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-    );
-    console.log("🔔 Notification permission:", granted);
-  }
+  const requestFCMPermission = async () => {
+    if (Platform.OS === "android" && Platform.Version >= 33) {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+      );
+      console.log("🔔 Notification permission:", granted);
+    }
 
-  const authStatus = await messaging().requestPermission();
-  console.log("📩 FCM permission status:", authStatus);
-};
+    const authStatus = await messaging().requestPermission();
+    console.log("📩 FCM permission status:", authStatus);
+  };
   return (
     <LinearGradient
       colors={['#F00001', '#B00100']}
