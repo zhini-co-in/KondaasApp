@@ -13,7 +13,6 @@ import firestore from "@react-native-firebase/firestore";
 import Loader from "../components/Loader";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Linking, Alert } from "react-native";
-
 import { USER_DATA } from "../service/localStorage";
 import LinearGradient from "react-native-linear-gradient";
 const ReferAndEarnScreen = ({ navigation }) => {
@@ -32,14 +31,12 @@ const ReferAndEarnScreen = ({ navigation }) => {
           userData?.phoneNumber ||
           userData?.mobile ||
           "";
-
         if (!phoneNo) {
           console.warn("⚠️ No phone number found in USER_DATA.");
           setReferrals([]);
           setLoading(false);
           return;
         }
-
         console.log("📱 Fetching referrals for phone:", phoneNo);
         const snapshot = await firestore()
           .collection("referrals")
@@ -47,16 +44,13 @@ const ReferAndEarnScreen = ({ navigation }) => {
           .get();
         const data = snapshot.docs.map(doc => doc.data());
         setReferrals(data);
-
         const successCount = data.filter(item => item.PurchaseTracking).length;
         setTotalAmount(successCount * 5000);
-
         if (snapshot.empty) {
           console.log("No referrals found for this user.");
           setReferrals([]);
           return;
         }
-
         const referralData = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
@@ -73,13 +67,11 @@ const ReferAndEarnScreen = ({ navigation }) => {
     fetchReferrals();
   }, []);
 
-
   const openWhatsAppRemind = (friendPhNo) => {
     if (!friendPhNo) {
       Alert.alert("Error", "Phone number not available");
       return;
     }
-
     const phone = friendPhNo.startsWith("91")
       ? friendPhNo
       : `91${friendPhNo}`;
@@ -148,7 +140,7 @@ const ReferAndEarnScreen = ({ navigation }) => {
           end={{ x: 0.5, y: 1 }}
           style={styles.referBtn}
         >
-          <Text style={styles.referBtnText}>Refer Now!</Text>
+        <Text style={styles.referBtnText}>Refer Now!</Text>
         </LinearGradient>
       </TouchableOpacity>
       <Text style={styles.sectionTitle}>How it works</Text>

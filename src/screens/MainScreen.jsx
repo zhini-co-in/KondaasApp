@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   SafeAreaView,
   View,
@@ -21,7 +21,9 @@ import messaging from '@react-native-firebase/messaging';
 import { PermissionsAndroid, Platform } from "react-native";
 import notifee from '@notifee/react-native';
 import FontStyles from "../constants/fonts";
-
+import firestore from '@react-native-firebase/firestore';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Animated } from "react-native";
 const MainScreen = ({ navigation }) => {
   const [isDay, setIsDay] = useState(isDaytime());
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -34,14 +36,40 @@ const MainScreen = ({ navigation }) => {
   const [lifeTimeGeneration, setLifetimeGeneration] = useState(0);
   const [userInfo, setUserInfo] = useState(null);
   const [updatedTime, setUpdatedTime] = useState("");
+  const [installationAmount, setInstallationAmount] = useState(0);
+  const [todaySavings, setTodaySavings] = useState(0);
+  const [progressPercent, setProgressPercent] = useState(0);
+  const progressAnim = useRef(new Animated.Value(0)).current;
 
+  const widthInterpolate = progressAnim.interpolate({
+    inputRange: [0, 100],
+    outputRange: ["0%", "100%"],
+  });
   useEffect(() => {
     if (selectedStationId) {
       loadTodayGeneration(selectedStationId);
       getRealTimeGeneration(selectedStationId);
+      getInstallationAmountFromFirebase(selectedStationId);
     }
   }, [selectedStationId]);
-
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: progressPercent,
+      duration: 800,
+      useNativeDriver: false,
+    }).start();
+  }, [progressPercent]);
+  useEffect(() => {
+    if (todayGeneration > 0) {
+      const units = todayGeneration * 4;
+      const rupees = units * 5;
+      setTodaySavings(rupees.toFixed(0));
+      if (installationAmount > 0) {
+        const percent = Math.min((rupees / installationAmount) * 100, 100);
+        setProgressPercent(percent);
+      }
+    }
+  }, [todayGeneration, installationAmount]);
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
@@ -122,7 +150,78 @@ const MainScreen = ({ navigation }) => {
     const hour = new Date().getHours();
     return hour >= 6 && hour < 18;
   }
+  const saveStationsToFirestore = async () => {
+    try {
+      const storedData = await AsyncStorage.getItem(USER_DATA);
+      const parsedData = storedData ? JSON.parse(storedData) : null;
+      const phoneNo = parsedData?.UserInfo?.phoneNo;
+      if (!phoneNo) return;
 
+      const stations = await fetchStationList();
+      if (!stations || stations.length === 0) return;
+
+      const docRef = firestore()
+        .collection("userDetails")
+        .doc(phoneNo.toString());
+
+      const docSnap = await docRef.get();
+
+      let existingList = [];
+      if (docSnap.exists) {
+        existingList = docSnap.data()?.devicelist || [];
+      }
+
+      const stationArray = stations.map(item => {
+        const old = existingList.find(d => d.id === item.id);
+
+        return {
+          id: item.id,
+          name: item.name,
+          installationAmount: old?.installationAmount ?? "",
+          // OLD VALUE irundha adha use pannum
+        };
+      });
+
+      await docRef.set(
+        {
+          UserInfo: { phoneNo },
+          devicelist: stationArray,
+        },
+        { merge: true }
+      );
+
+      console.log("Installation amount safe ✔");
+    } catch (error) {
+      console.error("Error:", error);
+    }
+  };
+  const getInstallationAmountFromFirebase = async (stationId) => {
+    try {
+      const storedData = await AsyncStorage.getItem(USER_DATA);
+      const parsedData = storedData ? JSON.parse(storedData) : null;
+      const phoneNo = parsedData?.UserInfo?.phoneNo;
+
+      if (!phoneNo) return;
+
+      const doc = await firestore()
+        .collection("userDetails")
+        .doc(phoneNo.toString())
+        .get();
+
+      if (doc.exists) {
+        const data = doc.data();
+        const device = data?.devicelist?.find(d => d.id === stationId);
+
+        if (device) {
+          const amt = Number(device.installationAmount || 0);
+          setInstallationAmount(amt);
+          console.log("💰 Installation Amount:", amt);
+        }
+      }
+    } catch (e) {
+      console.log("Install amount error:", e);
+    }
+  };
   const loadTodayGeneration = async (stationId) => {
     try {
       const today = new Date();
@@ -179,6 +278,7 @@ const MainScreen = ({ navigation }) => {
 
   useEffect(() => {
     loadStations();
+    saveStationsToFirestore();
   }, []);
 
   const convertUnits = (value) => {
@@ -195,12 +295,9 @@ const MainScreen = ({ navigation }) => {
     try {
       console.log(" Fetching station list...");
       setLoading(true);
-
       const response = await fetchStationList();
       console.log(" Full API Response:", JSON.stringify(response, null, 2));
-
       let stationArray = [];
-
       if (Array.isArray(response)) {
         stationArray = response;
         console.log(" Response is an array. Stations:", stationArray.length);
@@ -309,7 +406,12 @@ const MainScreen = ({ navigation }) => {
               <Text style={styles.brandText}>kondaas Assured™</Text>
             </Text>
             <View style={styles.progressBar}>
-              <View style={styles.progressFill} />
+              <Animated.View
+                style={[
+                  styles.progressFill,
+                  { width: widthInterpolate },
+                ]}
+              />
             </View>
             <View style={styles.progressMarkers}>
               {/* <Text style={styles.markerText}>Invested</Text> */}

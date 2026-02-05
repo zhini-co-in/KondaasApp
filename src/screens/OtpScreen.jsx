@@ -23,13 +23,17 @@ import LinearGradient from "react-native-linear-gradient";
 import { PermissionsAndroid, Platform } from "react-native";
 
 const OtpScreen = ({ navigation, route }) => {
-  const { confirmation, phoneNumber } = route.params;
   const [loading, setLoading] = useState(false);
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
   const [timer, setTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
+
+  const [confirmation, setConfirmation] = useState(route.params.confirmation);
   const inputs = useRef([]);
+  const { verificationId, phoneNumber } = route.params;
 
   useEffect(() => {
     if (timer > 0) {
@@ -49,38 +53,17 @@ const OtpScreen = ({ navigation, route }) => {
     if (text && index < otp.length - 1) inputs.current[index + 1].focus();
   };
 
-  const handleConfirm = async () => {
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) {
-      alert("No network connection available");
-      return;
-    }
-    const otpCode = otp.join("");
-    if (otpCode.length < 6) {
-      Alert.alert("Error", "Please enter the full OTP");
-      return;
-    }
-
+  const handleAutoLogin = async (credential, phone) => {
     try {
       setLoading(true);
-      console.log(" Verifying OTP...");
 
-      const result = await confirmation.confirm(otpCode);
-      console.log(" OTP Verified:", result);
+      const result = await auth().signInWithCredential(credential);
+      Alert.alert("Login Successful", "Your phone number has been verified automatically.");
 
-      const cleanPhone = phoneNumber?.replace(/^\+91/, "");
-      if (!cleanPhone) throw new Error("Invalid phone number");
+      const cleanPhone = phone.replace("+91", "");
 
-      const appInfo = {
-        version: "1.0.0",
-        buildNo: "1",
-        lastLogin: new Date().toISOString(),
-      };
-
-      const platformInfo = {
-        os: DeviceInfo.getSystemName(),
-        version: DeviceInfo.getSystemVersion(),
-      };
+      const appInfo = { version: "1.0.0", buildNo: "1", lastLogin: new Date().toISOString() };
+      const platformInfo = { os: DeviceInfo.getSystemName(), version: DeviceInfo.getSystemVersion() };
 
       const userRef = firestore().collection("userDetails").doc(cleanPhone);
       const docSnap = await userRef.get();
@@ -89,140 +72,112 @@ const OtpScreen = ({ navigation, route }) => {
       if (docSnap.exists) {
         userData = docSnap.data() || {};
         const userInfo = userData.UserInfo || {};
-
         if (Object.keys(userInfo).length === 0) {
-          console.log("🆕 UserInfo empty — adding default values...");
-          userData.UserInfo = {
-            phoneNo: cleanPhone,
-            name: "",
-            deviceId: "",
-            email: "",
-            password: "",
-          };
+          userData.UserInfo = { phoneNo: cleanPhone, name: "", deviceId: "", email: "", password: "", unitsrupees: "4" };
           await userRef.set({ UserInfo: userData.UserInfo }, { merge: true });
         }
-
         await userRef.set({ AppInfo: appInfo, PlatformInfo: platformInfo }, { merge: true });
-        console.log(" Updated existing user");
       } else {
-        userData = {
-          AppInfo: appInfo,
-          PlatformInfo: platformInfo,
-          UserInfo: {
-            phoneNo: cleanPhone,
-            name: "",
-            deviceId: "",
-            email: "",
-            password: "",
-          },
-        };
+        userData = { AppInfo: appInfo, PlatformInfo: platformInfo, UserInfo: { phoneNo: cleanPhone, name: "", deviceId: "", email: "", password: "", unitsrupees: "4" } };
         await userRef.set(userData);
-        console.log("Created new user document");
       }
 
-      console.log("Fetching FCM Token...");
-
+      // FCM Token
       let fcmToken = null;
-
       try {
         await requestFCMPermission();
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
         fcmToken = await messaging().getToken();
-        console.log("FCM TOKEN:", fcmToken);
-      } catch (tokenErr) {
-        console.warn("⚠ FCM Token Error:", tokenErr);
+      } catch (err) {
+        Alert.alert("FCM Error", "Failed to get FCM token");
       }
-      await userRef.set(
-        {
-          UserInfo: {
-            ...userData.UserInfo,
-            fcmToken: fcmToken,
-          },
-        },
-        { merge: true }
-      );
-      console.log(" FCM Token saved in Firestore");
-      const { email, password } = userData?.UserInfo || {};
+
+      await userRef.set({ UserInfo: { ...userData.UserInfo, fcmToken } }, { merge: true });
+
+      // Solarman token
+      const { email, password } = userData.UserInfo || {};
       let accessToken = null;
-
       if (email && password) {
-        console.log(" Fetching Solarman Token...");
-        const tokenData = await getSolarmanToken(
-          SOLARMAN_CONFIG.appId,
-          SOLARMAN_CONFIG.appSecret,
-          email,
-          password,
-          SOLARMAN_CONFIG.language
-        );
-
-        console.log(" Solarman Token Response:", tokenData);
-
-        if (tokenData?.access_token) {
-          accessToken = tokenData.access_token;
-          console.log(" Access Token:", accessToken);
-        } else {
-          console.warn(" No access token found in response");
-        }
-      } else {
-        console.warn(" Email or password missing — skipping token fetch");
+        const tokenData = await getSolarmanToken(SOLARMAN_CONFIG.appId, SOLARMAN_CONFIG.appSecret, email, password, SOLARMAN_CONFIG.language);
+        if (tokenData?.access_token) accessToken = tokenData.access_token;
       }
 
-      const finalData = {
-        ...userData,
-        AppInfo: appInfo,
-        PlatformInfo: platformInfo,
-        accessToken: accessToken || null,
-        UserInfo: {
-          ...userData.UserInfo,
-          fcmToken: fcmToken,
-        },
-      };
-
+      const finalData = { ...userData, AppInfo: appInfo, PlatformInfo: platformInfo, accessToken: accessToken || null, UserInfo: { ...userData.UserInfo, fcmToken } };
       await storeData(USER_DATA, JSON.stringify(finalData));
-      console.log(" User data stored locally");
 
-      if (email && email.trim() !== "" && password && password.trim() !== "") {
-        console.log("Navigating to mainScreen...");
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "mainScreen" }],
-        });
+      // Navigate
+      if (email && password) {
+        navigation.reset({ index: 0, routes: [{ name: "mainScreen" }] });
       } else {
-        console.log("Navigating to ProductsHomeScreen...");
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "ProductsHomeScreen" }],
-        });
+        navigation.reset({ index: 0, routes: [{ name: "ProductsHomeScreen" }] });
       }
+
     } catch (err) {
-      console.error(" OTP Verification Error:", err);
-      setError(true);
+      Alert.alert("Login Failed", err.message || "Something went wrong during auto-login");
     } finally {
       setLoading(false);
     }
   };
+
+
+const handleConfirm = async () => {
+  const net = await NetInfo.fetch();
+  if (!net.isConnected) {
+    Alert.alert("No Internet", "No network connection available");
+    return;
+  }
+
+  const otpCode = otp.join("");
+
+  if (otpCode.length < 6) {
+    setErrorMessage("Please enter full OTP");
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    const credential = auth.PhoneAuthProvider.credential(
+      verificationId,
+      otpCode
+    );
+
+    await handleAutoLogin(credential, phoneNumber);
+    setErrorMessage("");
+
+  } catch (err) {
+    setErrorMessage(err.message || "OTP verification failed");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleResendOtp = async () => {
     const net = await NetInfo.fetch();
     if (!net.isConnected) {
-      alert("No network connection available");
+      Alert.alert("No Internet", "No network connection available");
       return;
     }
+
     try {
       setLoading(true);
       setCanResend(false);
       setTimer(30);
+
       const confirmationResult = await auth().signInWithPhoneNumber(phoneNumber);
-      route.params.confirmation = confirmationResult;
+      setConfirmation(confirmationResult);
+      setOtp(["", "", "", "", "", ""]);
+
       Alert.alert("OTP Sent", "A new OTP has been sent to your phone number.");
+
     } catch (error) {
-      console.error("Resend OTP Error:", error);
-      Alert.alert("Error", "Failed to resend OTP. Please try again later.");
       setCanResend(true);
+      Alert.alert("Error", "Failed to resend OTP. Please try again later.");
     } finally {
       setLoading(false);
     }
   };
+
   const requestFCMPermission = async () => {
     if (Platform.OS === "android" && Platform.Version >= 33) {
       const granted = await PermissionsAndroid.request(
@@ -285,7 +240,9 @@ const OtpScreen = ({ navigation, route }) => {
               ))}
             </View>
 
-            {error && <Text style={styles.errorText}>Incorrect OTP</Text>}
+            {errorMessage ? (
+              <Text style={styles.errorText}>{errorMessage}</Text>
+            ) : null}
 
             <TouchableOpacity
               style={[

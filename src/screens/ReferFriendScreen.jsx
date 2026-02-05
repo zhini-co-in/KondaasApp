@@ -31,7 +31,7 @@ const ReferFriendScreen = ({ navigation }) => {
   const [contacts, setContacts] = useState([]);
   const [filteredContacts, setFilteredContacts] = useState([]);
   const [showList, setShowList] = useState(false);
-
+  
   useEffect(() => {
     const fetchProducts = async () => {
       try {

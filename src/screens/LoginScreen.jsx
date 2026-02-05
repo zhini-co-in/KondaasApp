@@ -61,34 +61,61 @@ const LoginScreen = ({ navigation }) => {
     fetchUserData();
   }, []);
 
-  const handleSendOTP = async () => {
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) {
-      return;
-    }
-    if (phoneNumber.trim().length < 10) {
-      Alert.alert("Error", "Please enter a valid 10-digit phone number.");
-      return;
-    }
+const handleSendOTP = async () => {
+  if (loading) return;
 
-    try {
-      setLoading(true);
-      const fullNumber = "+91" + phoneNumber;
-      const confirmation = await auth().signInWithPhoneNumber(fullNumber);
-      // const userData = { UserInfo: { phoneNo: phoneNumber } };
-      // await storeData(USER_DATA, JSON.stringify(userData));
-      setLoading(false);
-      navigation.navigate("OtpScreen", { confirmation, phoneNumber: fullNumber });
-    } catch (error) {
-      console.log("OTP send error:", error);
-      Alert.alert("Error", error.message || "Something went wrong while sending the OTP.");
-      setLoading(false);
-    }
-  };
+  const net = await NetInfo.fetch();
+  if (!net.isConnected) {
+    Alert.alert("No Internet", "No network connection available");
+    return;
+  }
+
+  if (phoneNumber.trim().length !== 10) {
+    Alert.alert("Error", "Enter a valid 10-digit phone number");
+    return;
+  }
+
+  try {
+    setLoading(true);
+    const fullNumber = "+91" + phoneNumber.trim();
+ auth()
+      .verifyPhoneNumber(fullNumber)
+      .on("state_changed", async snapshot => {
+
+        switch (snapshot.state) {
+
+          case auth.PhoneAuthState.CODE_SENT:
+            setLoading(false);
+            navigation.navigate("OtpScreen", {
+              verificationId: snapshot.verificationId,
+              phoneNumber: fullNumber,
+            });
+           
+            break;
+
+          case auth.PhoneAuthState.AUTO_VERIFIED:
+            setLoading(false);
+            await handleAutoLogin(snapshot.credential, fullNumber);
+          
+            break;
+
+          case auth.PhoneAuthState.ERROR:
+            setLoading(false);
+            Alert.alert("OTP Error", snapshot.error?.message);
+          
+            break;
+        }
+      });
+
+  } catch (err) {
+    setLoading(false);
+    Alert.alert("Error", err.message);
+  }
+};
 
   return (
     <LinearGradient
-     colors={['#F00001', '#B00100']}
+      colors={['#F00001', '#B00100']}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 0 }}
       style={styles.safeArea}
@@ -104,7 +131,7 @@ const LoginScreen = ({ navigation }) => {
 
           {/* HEADER WITH GRADIENT */}
           <LinearGradient
-          colors={['#F00001', '#B00100']}
+            colors={['#F00001', '#B00100']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.header}
@@ -172,7 +199,6 @@ const LoginScreen = ({ navigation }) => {
     </LinearGradient>
   );
 };
-
 export default LoginScreen;
 
 const styles = StyleSheet.create({

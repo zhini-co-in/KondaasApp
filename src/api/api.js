@@ -13,6 +13,7 @@ export const setToken = (token) => {
     delete api.defaults.headers.common["Authorization"];
   }
 };
+
 export const setAuthToken = async () => {
   try {
     const userData = await getStorageData(USER_DATA);
@@ -31,7 +32,6 @@ export const setAuthToken = async () => {
   }
 };
 
-
 export const getSolarmanToken = async (appId, appSecret, email, password, language = "en") => {
   try {
     const response = await api.post(
@@ -45,19 +45,20 @@ export const getSolarmanToken = async (appId, appSecret, email, password, langua
     throw new Error(error.response?.data?.msg || "Failed to get Solarman token");
   }
 };
+
 export const fetchStationList = async () => {
   try {
     await setAuthToken();
     const token = api.defaults.headers.common.Authorization;
-    console.log("🪪 Current Authorization Token:", token);
+    console.log("Current Authorization Token:", token);
     const response = await api.post("station/v1.0/list?language=en", {
       page: 1,
       size: 10,
     });
-    console.log("✅ Station API Response:", response.data);
+    console.log("Station API Response:", response.data);
     return response.data?.stationList || [];
   } catch (error) {
-    console.error("🚨 Station List API Error:", error.response?.data || error.message);
+    console.error("Station List API Error:", error.response?.data || error.message);
     return [];
   }
 };
@@ -104,7 +105,6 @@ export const fetchRealTimeData = async (body) => {
     throw err;
   }
 };
-
 
 export default api;
 
