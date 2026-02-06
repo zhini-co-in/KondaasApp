@@ -37,7 +37,7 @@ export default function RootStack() {
       <Stack.Screen name={SCREEN_NAMES.PRODUCTS_LIST} component={ProductsList} />
       <Stack.Screen name={SCREEN_NAMES.KONDAAS_ASSURED} component={KondaasAssuredScreen} />
       <Stack.Screen name={SCREEN_NAMES.POWER_GENERATION} component={PowerGeneration} />
-      <Stack.Screen name={SCREEN_NAMES.KONDEA_ABOUT} component={KondaaAboutScreen} />
+      <Stack.Screen name={SCREEN_NAMES.KONDA_ABOUT} component={KondaaAboutScreen} />
       <Stack.Screen name={SCREEN_NAMES.SUPPORT} component={SupportScreen} />
       <Stack.Screen name={SCREEN_NAMES.CREATE_TICKET} component={CreateTicketScreen} />
       <Stack.Screen name={SCREEN_NAMES.REFER_AND_EARN} component={ReferAndEarnScreen} />

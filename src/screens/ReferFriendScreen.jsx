@@ -22,6 +22,8 @@ import { PermissionsAndroid, Platform } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import NetInfo from "@react-native-community/netinfo";
 import LinearGradient from "react-native-linear-gradient";
+import { SCREEN_NAMES } from '../constants/screenNames';
+
 const ReferFriendScreen = ({ navigation }) => {
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");

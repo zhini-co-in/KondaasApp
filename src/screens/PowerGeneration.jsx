@@ -16,6 +16,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { USER_DATA, getStorageData } from "../service/localStorage";
 import firestore from "@react-native-firebase/firestore";
 import LinearGradient from "react-native-linear-gradient";
+import { SCREEN_NAMES } from '../constants/screenNames';
 const screenWidth = Dimensions.get("window").width;
 
 const PowerGenerationScreen = ({ navigation, route }) => {

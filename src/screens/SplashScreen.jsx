@@ -13,6 +13,7 @@ import FontStyles from '../constants/fonts';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { USER_DATA } from "../service/localStorage";
 import LinearGradient from 'react-native-linear-gradient';
+import { SCREEN_NAMES } from '../constants/screenNames';
 
 const SplashScreen = () => {
   const navigation = useNavigation();

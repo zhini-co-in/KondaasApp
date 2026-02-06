@@ -18,6 +18,8 @@ import Loader from "../components/Loader";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { USER_DATA } from "../service/localStorage";
 import LinearGradient from "react-native-linear-gradient";
+import { SCREEN_NAMES } from '../constants/screenNames';
+
 const SupportScreen = ({ route, navigation }) => {
     const { stationId } = route.params;
 

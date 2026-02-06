@@ -11,6 +11,7 @@ import {
   Modal,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
+import { SCREEN_NAMES } from '../constants/screenNames';
 
 const ProductDetailScreen = ({ navigation, route }) => {
   const [showModal, setShowModal] = useState(false);

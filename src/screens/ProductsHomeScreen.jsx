@@ -19,6 +19,8 @@ import Loader from "../components/Loader";
 import ProfileImg from "../../assets/images/Round.png";
 import { getStorageData, USER_DATA } from "../service/localStorage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { SCREEN_NAMES } from '../constants/screenNames';
+
 const ProductsHomeScreen = () => {
   const navigation = useNavigation();
   const [products, setProducts] = useState([]);

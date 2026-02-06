@@ -21,6 +21,7 @@ import NetInfo from "@react-native-community/netinfo";
 import messaging from "@react-native-firebase/messaging";
 import LinearGradient from "react-native-linear-gradient";
 import { PermissionsAndroid, Platform } from "react-native";
+import { SCREEN_NAMES } from '../constants/screenNames';
 
 const OtpScreen = ({ navigation, route }) => {
   const [loading, setLoading] = useState(false);

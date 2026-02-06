@@ -16,6 +16,7 @@ import Loader from "../components/Loader";
 import { getStorageData, USER_DATA } from "../service/localStorage";
 import NetInfo from '@react-native-community/netinfo';
 import firestore from "@react-native-firebase/firestore";
+import { SCREEN_NAMES } from '../constants/screenNames';
 
 const KondaasAssuredScreen = ({ navigation, route }) => {
   const { stationId } = route.params || {};

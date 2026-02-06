@@ -15,6 +15,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Linking, Alert } from "react-native";
 import { USER_DATA } from "../service/localStorage";
 import LinearGradient from "react-native-linear-gradient";
+import { SCREEN_NAMES } from '../constants/screenNames';
+
 const ReferAndEarnScreen = ({ navigation }) => {
   const [referrals, setReferrals] = useState([]);
   const [loading, setLoading] = useState(true);
