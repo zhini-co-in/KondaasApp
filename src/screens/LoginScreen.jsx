@@ -16,6 +16,7 @@ import NetInfo from "@react-native-community/netinfo";
 import Loader from "../components/Loader";
 import { storeData, getStorageData, USER_DATA } from "../service/localStorage";
 import LinearGradient from "react-native-linear-gradient";
+import { SCREEN_NAMES } from "../constants/screenNames";
 
 const LoginScreen = ({ navigation }) => {
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -86,7 +87,7 @@ const handleSendOTP = async () => {
 
           case auth.PhoneAuthState.CODE_SENT:
             setLoading(false);
-            navigation.navigate("OtpScreen", {
+            navigation.navigate(SCREEN_NAMES.OTP, {
               verificationId: snapshot.verificationId,
               phoneNumber: fullNumber,
             });
@@ -186,7 +187,7 @@ const handleSendOTP = async () => {
               By signing up you are accepting the{" "}
               <Text
                 style={styles.termsLink}
-                onPress={() => navigation.navigate("TermsConditionsScreen")}
+                onPress={() => navigation.navigate(SCREEN_NAMES.TERMS_CONDITIONS)}
               >
                 Terms & Conditions
               </Text>

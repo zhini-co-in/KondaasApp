@@ -30,7 +30,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
   const handleEnquire = () => setShowModal(true);
   const handleOk = () => {
     setShowModal(false);
-    navigation.navigate("ProductListScreen");
+    navigation.navigate(SCREEN_NAMES.PRODUCTS_LIST);
   };
 
   return (
@@ -72,7 +72,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
 
         <TouchableOpacity
           style={styles.referButton}
-          onPress={() => navigation.navigate("ReferandEarnScreen")}
+          onPress={() => navigation.navigate(SCREEN_NAMES.REFER_AND_EARN)}
         >
           <Text style={styles.referText}>Refer a Friend</Text>
         </TouchableOpacity>

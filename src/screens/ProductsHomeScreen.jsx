@@ -137,7 +137,7 @@ const [showLogoutPopup, setShowLogoutPopup] = useState(false);
                 key={item.id}
                 style={styles.productCard}
                 onPress={() =>
-                  navigation.navigate("ProductDetailScreen", { product: item })
+                  navigation.navigate(SCREEN_NAMES.PRODUCT_DETAIL, { product: item })
                 }
               >
                 <Image source={{ uri: item.imageURL }} style={styles.productImg} />

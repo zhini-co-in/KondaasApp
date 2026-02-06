@@ -107,9 +107,9 @@ const OtpScreen = ({ navigation, route }) => {
 
       // Navigate
       if (email && password) {
-        navigation.reset({ index: 0, routes: [{ name: "mainScreen" }] });
+        navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.MAIN }] });
       } else {
-        navigation.reset({ index: 0, routes: [{ name: "ProductsHomeScreen" }] });
+        navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }] });
       }
 
     } catch (err) {
@@ -267,7 +267,7 @@ const handleConfirm = async () => {
             </View>
             <TouchableOpacity
               style={styles.changeNumberContainer}
-              onPress={() => navigation.navigate("Login")}
+              onPress={() => navigation.navigate(SCREEN_NAMES.LOGIN)}
             >
               <Text style={styles.changeNumberText}>
                 Wrong number? <Text style={styles.changeLink}>Change Phone Number</Text>

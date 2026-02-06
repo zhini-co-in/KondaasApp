@@ -132,7 +132,7 @@ const ReferAndEarnScreen = ({ navigation }) => {
       </View>
       {/* Refer Now Button */}
       <TouchableOpacity
-        onPress={() => navigation.navigate("ReferFriendScreen")}
+        onPress={() => navigation.navigate(SCREEN_NAMES.REFER_FRIEND)}
       >
         <LinearGradient
           colors={["#F00001", "#B00100"]}

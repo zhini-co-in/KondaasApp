@@ -186,7 +186,7 @@ const ReferFriendScreen = ({ navigation }) => {
       setName("");
       setMobile("");
       setProduct("");
-      navigation.navigate("ReferandEarnScreen");
+      navigation.navigate(SCREEN_NAMES.REFER_AND_EARN);
 
     } catch (error) {
       Alert.alert("Error", "Something went wrong while submitting referral.");

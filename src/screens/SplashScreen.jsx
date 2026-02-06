@@ -26,7 +26,7 @@ const SplashScreen = () => {
 
         if (!storedData) {
           console.log("No USER_DATA found → Navigating to Intro");
-          navigation.replace("Intro");
+          navigation.replace(SCREEN_NAMES.INTRO);
           return;
         }
 
@@ -44,7 +44,7 @@ const SplashScreen = () => {
 
         if (!lastLogin) {
           console.log("lastLogin missing → Navigating to Intro");
-          navigation.replace("Intro");
+          navigation.replace(SCREEN_NAMES.INTRO);
           return;
         }
 
@@ -59,7 +59,7 @@ const SplashScreen = () => {
         if (diffInDays > 30) {
           console.log("🚫 Last login older than 30 days → Clearing storage & going to Intro");
           await AsyncStorage.removeItem(USER_DATA);
-          navigation.replace("Intro");
+          navigation.replace(SCREEN_NAMES.INTRO);
           return;
         }
 
@@ -67,18 +67,18 @@ const SplashScreen = () => {
           console.log("✅ Device ID found → Navigating to mainScreen");
           navigation.reset({
             index: 0,
-            routes: [{ name: "mainScreen" }],
+            routes: [{ name: SCREEN_NAMES.MAIN }],
           });
         } else {
           console.log("⚠️ No deviceId found → Navigating to ProductsHomeScreen");
           navigation.reset({
             index: 0,
-            routes: [{ name: "ProductsHomeScreen" }],
+            routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }],
           });
         }
       } catch (error) {
         console.log("❗ Error checking user data:", error);
-        navigation.replace("Intro");
+        navigation.replace(SCREEN_NAMES.INTRO);
       }
     };
 

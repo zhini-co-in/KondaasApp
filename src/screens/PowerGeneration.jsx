@@ -433,7 +433,7 @@ dataPoints.push(isFinite(value) ? value : 0);
         </View>
 
         <TouchableOpacity
-          onPress={() => navigation.navigate("KondaaAboutScreen")}
+          onPress={() => navigation.navigate(SCREEN_NAMES.KONDAAS_ABOUT)}
         >
           <Text style={styles.footerLink}>
   Know more about{" "}

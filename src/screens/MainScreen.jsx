@@ -24,6 +24,7 @@ import FontStyles from "../constants/fonts";
 import firestore from '@react-native-firebase/firestore';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Animated } from "react-native";
+import { SCREEN_NAMES } from "../constants/screenNames";
 const MainScreen = ({ navigation }) => {
   const [isDay, setIsDay] = useState(isDaytime());
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -338,7 +339,7 @@ const MainScreen = ({ navigation }) => {
           <View style={styles.leftSection}>
             <TouchableOpacity
               onPress={() =>
-                navigation.navigate("ProfileScreen", {
+                navigation.navigate(SCREEN_NAMES.PROFILE, {
                   stationId: selectedStationId,
                 })
               }
@@ -427,7 +428,7 @@ const MainScreen = ({ navigation }) => {
               style={styles.primaryButton}
               onPress={() => {
                 console.log(" Selected Station ID:", selectedStationId);
-                navigation.navigate("KondaasAssuredScreen", {
+                navigation.navigate(SCREEN_NAMES.KONDAAS_ASSURED, {
                   stationId: selectedStationId,
                 });
               }}
@@ -437,7 +438,7 @@ const MainScreen = ({ navigation }) => {
             <TouchableOpacity
               style={styles.secondaryButton}
               onPress={() =>
-                navigation.navigate("SupportScreen", {
+                navigation.navigate(SCREEN_NAMES.SUPPORT, {
                   stationId: selectedStationId,
                 })
               }
@@ -447,7 +448,7 @@ const MainScreen = ({ navigation }) => {
             <TouchableOpacity
               style={styles.grayButton}
               onPress={() =>
-                navigation.navigate("ReferandEarnScreen", {
+                navigation.navigate(SCREEN_NAMES.REFER_AND_EARN, {
                   // stationId: selectedStationId, 
                 })
               }

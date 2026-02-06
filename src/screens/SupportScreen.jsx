@@ -141,7 +141,7 @@ const SupportScreen = ({ route, navigation }) => {
 
                     <TouchableOpacity
                         onPress={() =>
-                            navigation.navigate("createticketScreen", {
+                            navigation.navigate(SCREEN_NAMES.CREATE_TICKET, {
                                 stationId: stationId,
                             })
                         }

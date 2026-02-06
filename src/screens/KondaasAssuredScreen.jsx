@@ -211,7 +211,7 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
           style={styles.reachUsButton}
           activeOpacity={0.8}
           onPress={() =>
-            navigation.navigate("PowerGenerationScreen", { stationId })
+            navigation.navigate(SCREEN_NAMES.POWER_GENERATION, { stationId })
           }
         >
        <Text style={styles.reachUsText}>
