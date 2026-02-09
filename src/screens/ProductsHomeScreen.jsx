@@ -11,6 +11,7 @@ import {
   Alert,
   Linking,
   Modal,
+  TextInput,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useNavigation } from "@react-navigation/native";
@@ -19,14 +20,17 @@ import Loader from "../components/Loader";
 import ProfileImg from "../../assets/images/Round.png";
 import { getStorageData, USER_DATA } from "../service/localStorage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { SCREEN_NAMES } from '../constants/screenNames';
+import CryptoJS from 'crypto-js';
 
 const ProductsHomeScreen = () => {
   const navigation = useNavigation();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState(null);
-const [showLogoutPopup, setShowLogoutPopup] = useState(false);
+  const [showLogoutPopup, setShowLogoutPopup] = useState(false);
+  const [showCredentialPopup, setShowCredentialPopup] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const handleCall = () => {
     const phoneNumber = "tel:9244414441";
@@ -45,7 +49,7 @@ const [showLogoutPopup, setShowLogoutPopup] = useState(false);
     }
   };
 
-  
+
   useEffect(() => {
     const loadUserData = async () => {
       try {
@@ -86,6 +90,47 @@ const [showLogoutPopup, setShowLogoutPopup] = useState(false);
     fetchProducts();
   }, []);
 
+  const closeCredentialPopup = () => {
+    setShowCredentialPopup(false);
+    setEmail("");
+    setPassword("");
+  };
+
+const handleSaveCredentials = async () => {
+  if (!email || !password) {
+    Alert.alert("Alert", "Please enter email and password");
+    return;
+  }
+
+  try {
+    const storedData = await AsyncStorage.getItem(USER_DATA);
+    const parsedData = storedData ? JSON.parse(storedData) : null;
+    const phoneNo = parsedData?.UserInfo?.phoneNo;
+
+    if (!phoneNo) {
+      Alert.alert("Error", "Phone number not found");
+      return;
+    }
+
+    const hashedPassword = CryptoJS.SHA256(password).toString();
+
+    await firestore()
+      .collection("userDetails")
+      .doc(phoneNo) // document id = phoneNo
+      .update({
+        "UserInfo.email": email,
+        "UserInfo.password": hashedPassword,
+      });
+
+    Alert.alert("Success", "Credentials saved successfully");
+    closeCredentialPopup();
+
+  } catch (error) {
+    console.log("Credential Save Error:", error);
+    Alert.alert("Error", "Failed to save credentials");
+  }
+};
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -103,12 +148,12 @@ const [showLogoutPopup, setShowLogoutPopup] = useState(false);
             </View>
           </View>
           <View style={styles.iconRow}>
-           <TouchableOpacity
-  style={styles.iconBox}
-  onPress={() => setShowLogoutPopup(true)}
->
-  <Ionicons name="log-out-outline" size={22} color="#000" />
-</TouchableOpacity>
+            <TouchableOpacity
+              style={styles.iconBox}
+              onPress={() => setShowLogoutPopup(true)}
+            >
+              <Ionicons name="log-out-outline" size={22} color="#000" />
+            </TouchableOpacity>
 
             {/* <TouchableOpacity style={styles.iconBox}>
               <Ionicons name="document-text-outline" size={22} color="#000" />
@@ -122,6 +167,12 @@ const [showLogoutPopup, setShowLogoutPopup] = useState(false);
           <Text style={styles.contactAdminText}>Contact Admin</Text>
           <TouchableOpacity style={styles.contactBtn} onPress={handleCall}>
             <Text style={styles.contactBtnText}>Contact</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.addCredentialBtn, { marginTop: 12 }]}
+            onPress={() => setShowCredentialPopup(true)}
+          >
+            <Text style={styles.addCredentialText}>Add Credentials</Text>
           </TouchableOpacity>
         </View>
 
@@ -139,7 +190,7 @@ const [showLogoutPopup, setShowLogoutPopup] = useState(false);
                 key={item.id}
                 style={styles.productCard}
                 onPress={() =>
-                  navigation.navigate(SCREEN_NAMES.PRODUCT_DETAIL, { product: item })
+                  navigation.navigate("ProductDetailScreen", { product: item })
                 }
               >
                 <Image source={{ uri: item.imageURL }} style={styles.productImg} />
@@ -156,43 +207,97 @@ const [showLogoutPopup, setShowLogoutPopup] = useState(false);
           )}
         </View>
         <Modal
-  transparent
-  visible={showLogoutPopup}
-  animationType="fade"
-  onRequestClose={() => setShowLogoutPopup(false)}
->
-  <View style={styles.modalOverlay}>
-    <View style={styles.popupBox}>
-      <Ionicons name="log-out-outline" size={45} color="#f15b5d" />
-      <Text style={styles.popupText}>Are you sure want to logout?</Text>
-
-      <View style={styles.popupButtons}>
-        <TouchableOpacity style={styles.yesButton} onPress={handleLogout}>
-          <Text style={styles.yesText}>Yes</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.noButton}
-          onPress={() => setShowLogoutPopup(false)}
+          transparent
+          visible={showLogoutPopup}
+          animationType="fade"
+          onRequestClose={() => setShowLogoutPopup(false)}
         >
-          <Text style={styles.noText}>No</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  </View>
-</Modal>
+          <View style={styles.modalOverlay}>
+            <View style={styles.popupBox}>
+              <Ionicons name="log-out-outline" size={45} color="#f15b5d" />
+              <Text style={styles.popupText}>Are you sure want to logout?</Text>
+
+              <View style={styles.popupButtons}>
+                <TouchableOpacity style={styles.yesButton} onPress={handleLogout}>
+                  <Text style={styles.yesText}>Yes</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.noButton}
+                  onPress={() => setShowLogoutPopup(false)}
+                >
+                  <Text style={styles.noText}>No</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+        <Modal
+          transparent
+          visible={showCredentialPopup}
+          animationType="fade"
+          onRequestClose={closeCredentialPopup}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.popupBox}>
+
+              {/* ICON ABOVE EMAIL */}
+              <Ionicons name="mail-outline" size={40} color="#4A90E2" />
+
+              <Text style={styles.popupTitle}>Add Credentials</Text>
+
+              {/* EMAIL INPUT */}
+              <View style={styles.inputContainer}>
+                <Ionicons name="mail-outline" size={18} color="#999" />
+                <TextInput
+                  placeholder="Email"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  style={styles.input}
+                />
+              </View>
+
+              {/* PASSWORD INPUT */}
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed-outline" size={18} color="#999" />
+                <TextInput
+                  placeholder="Password"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  style={styles.input}
+                />
+              </View>
+
+              {/* BUTTONS */}
+              <View style={styles.popupButtons}>
+
+
+                <TouchableOpacity style={styles.noButton} onPress={closeCredentialPopup}>
+                  <Text style={styles.noText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.yesButton} onPress={handleSaveCredentials}>
+                  <Text style={styles.yesText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+
+            </View>
+          </View>
+        </Modal>
 
       </ScrollView>
       {loading && <Loader />}
     </SafeAreaView>
   );
 };
-
 export default ProductsHomeScreen;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
   loader: { flex: 1, justifyContent: "center", alignItems: "center" },
+
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -210,7 +315,6 @@ const styles = StyleSheet.create({
   iconRow: { flexDirection: "row" },
   iconBox: { marginLeft: 10 },
 
-  // No Device Section
   noDeviceContainer: {
     backgroundColor: "#fff",
     alignItems: "center",
@@ -277,44 +381,82 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
   },
-   modalOverlay: {
-        flex: 1,
-        backgroundColor: "rgba(0,0,0,0.4)",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    popupBox: {
-        width: "80%",
-        backgroundColor: "#fff",
-        borderRadius: 12,
-        paddingVertical: 25,
-        paddingHorizontal: 20,
-        alignItems: "center",
-        elevation: 10,
-    },
-    popupText: {
-        fontSize: 16,
-        color: "#333",
-        marginVertical: 15,
-        textAlign: "center",
-    },
-    popupButtons: {
-        flexDirection: "row",
-        justifyContent: "space-around",
-        width: "100%",
-    },
-    yesButton: {
-        backgroundColor: "#f15b5d",
-        paddingVertical: 10,
-        paddingHorizontal: 50,
-        borderRadius: 8,
-    },
-    noButton: {
-        backgroundColor: "#888",
-        paddingVertical: 10,
-        paddingHorizontal: 50,
-        borderRadius: 8,
-    },
-    yesText: { color: "#fff", fontWeight: "700" },
-    noText: { color: "#fff", fontWeight: "700" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  popupBox: {
+    width: "80%",
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    paddingVertical: 25,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    elevation: 10,
+  },
+  popupText: {
+    fontSize: 16,
+    color: "#333",
+    marginVertical: 15,
+    textAlign: "center",
+  },
+  popupButtons: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    width: "100%",
+    marginTop: 20,
+  },
+  yesButton: {
+    backgroundColor: "#f15b5d",
+    paddingVertical: 10,
+    paddingHorizontal: 50,
+    borderRadius: 8,
+  },
+  noButton: {
+    backgroundColor: "#888",
+    paddingVertical: 10,
+    paddingHorizontal: 50,
+    borderRadius: 8,
+  },
+  addCredentialBtn: {
+    marginTop: 15,
+    backgroundColor: "#e60000",
+    paddingVertical: 10,
+    paddingHorizontal: 120,
+    borderRadius: 6,
+  },
+  addCredentialText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  popupTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginVertical: 10,
+  },
+
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginTop: 12,
+    width: "100%",
+
+  },
+
+  input: {
+    flex: 1,
+    height: 45,
+    marginLeft: 8,
+
+  },
+
+  yesText: { color: "#fff", fontWeight: "700" },
+  noText: { color: "#fff", fontWeight: "700" },
 });
