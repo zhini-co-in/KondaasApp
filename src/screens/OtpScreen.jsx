@@ -6,10 +6,10 @@ import {
   TouchableOpacity,
   Image,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   Alert,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import DeviceInfo from "react-native-device-info";
 import firestore from "@react-native-firebase/firestore";
 import auth from "@react-native-firebase/auth";
@@ -191,13 +191,13 @@ const handleConfirm = async () => {
     console.log("📩 FCM permission status:", authStatus);
   };
   return (
-    <LinearGradient
-      colors={['#F00001', '#B00100']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 0 }}
-      style={styles.safeArea}
-    >
-      <SafeAreaView style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
+      <LinearGradient
+        colors={['#F00001', '#B00100']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={{ flex: 1 }}
+      >
         <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
           <LinearGradient
             colors={['#F00001', '#B00100']}
@@ -278,8 +278,8 @@ const handleConfirm = async () => {
           </View>
         </ScrollView>
         {loading && <Loader />}
-      </SafeAreaView>
-    </LinearGradient>
+      </LinearGradient>
+    </SafeAreaView>
   );
 };
 

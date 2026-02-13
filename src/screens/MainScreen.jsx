@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  SafeAreaView,
   View,
   Text,
   Image,
@@ -10,6 +9,7 @@ import {
   Modal,
   ScrollView,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from "react-native-vector-icons/Ionicons";
 import LightBg from "../../assets/images/Lightmode.png";
 import DarkBg from "../../assets/images/Darkmode.png";
@@ -90,14 +90,37 @@ const MainScreen = ({ navigation }) => {
     fetchUserInfo();
   }, []);
   async function requestPermission() {
-    const authStatus = await messaging().requestPermission();
-    const enabled =
-      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+try {
+    if (Platform.OS === 'ios') {
+      const authStatus = await messaging().requestPermission();
+      const enabled =
+        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
-    if (enabled) {
-      console.log("Push Permission Granted");
+      if (enabled) {
+        console.log('iOS Push Permission Granted');
+        return true;
+      }
+      return false;
+    } else {
+      // Android 13+ requires runtime permission
+      if (Platform.Version >= 33) {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+        );
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          console.log('Android Push Permission Granted');
+          return true;
+        }
+        return false;
+      }
+      // Android 12 and below - no runtime permission needed
+      return true;
     }
+  } catch (error) {
+    console.error('Permission request error:', error);
+    return false;
+  }
   }
   useEffect(() => {
     requestPermission();

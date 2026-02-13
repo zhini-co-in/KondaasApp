@@ -6,11 +6,11 @@ import {
   TouchableOpacity,
   Image,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   Alert,
   Animated,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import auth from "@react-native-firebase/auth";
 import NetInfo from "@react-native-community/netinfo";
 import Loader from "../components/Loader";
@@ -115,13 +115,13 @@ const handleSendOTP = async () => {
 };
 
   return (
-    <LinearGradient
-      colors={['#F00001', '#B00100']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 0 }}
-      style={styles.safeArea}
-    >
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
+        <LinearGradient
+          colors={['#F00001', '#B00100']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.safeArea}
+        >
         <Animated.View
           style={[styles.netBanner, { transform: [{ translateY: slideAnim }] }]}
         >
@@ -196,8 +196,8 @@ const handleSendOTP = async () => {
         </ScrollView>
 
         {loading && <Loader />}
-      </SafeAreaView>
-    </LinearGradient>
+      </LinearGradient>
+    </SafeAreaView>
   );
 };
 export default LoginScreen;
