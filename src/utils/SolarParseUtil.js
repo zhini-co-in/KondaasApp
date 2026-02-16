@@ -160,6 +160,7 @@ class SolarParseUtil {
    */
   static async clear() {
     await AsyncStorage.removeItem('@SolarApp:station_parsed');
+    await MonthlyDataManager.clear();
   }
 }
 

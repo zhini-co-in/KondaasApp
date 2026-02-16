@@ -66,6 +66,7 @@ const ProfileScreen = ({ route, navigation }) => {
             if (selected) {
                 console.log("✅ Selected Station:", selected);
                 setStationData(selected); // Store in state
+                await SolarParseUtil.clear();
                 const parsed = SolarParseUtil.parseAndSave(selected);
             } else {
                 console.log("⚠️ No station found for ID:", stationId);

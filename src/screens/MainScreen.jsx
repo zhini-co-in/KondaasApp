@@ -361,6 +361,7 @@ try {
         const firstStation = stationArray[0];
         setSelectedStation(0);
         setSelectedStationId(firstStation.id);
+        await SolarParseUtil.clear();
         const parsed = SolarParseUtil.parseAndSave(firstStation);
       }
     } catch (error) {
@@ -540,6 +541,7 @@ try {
                       setSelectedStation(index);
                       setSelectedStationId(item.id);
                       setVisible(false);
+                      await SolarParseUtil.clear();
                       const parsed = SolarParseUtil.parseAndSave(item);
                     }}
                   >
