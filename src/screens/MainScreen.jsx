@@ -25,6 +25,10 @@ import firestore from '@react-native-firebase/firestore';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Animated } from "react-native";
 import { SCREEN_NAMES } from "../constants/screenNames";
+import MonthlyDataManager from '../utils/MonthlyDataManager';
+import SlabsSyncManager from '../utils/SlabsSyncManager';
+import SolarParseUtil from '../utils/SolarParseUtil';
+
 const MainScreen = ({ navigation }) => {
   const [isDay, setIsDay] = useState(isDaytime());
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -35,6 +39,7 @@ const MainScreen = ({ navigation }) => {
   const [selectedStationId, setSelectedStationId] = useState(null);
   const [todayGeneration, setTodayGeneration] = useState(0);
   const [lifeTimeGeneration, setLifetimeGeneration] = useState(0);
+  const [totalCost, setTotalCost] = useState('---');
   const [userInfo, setUserInfo] = useState(null);
   const [updatedTime, setUpdatedTime] = useState("");
   const [installationAmount, setInstallationAmount] = useState(0);
@@ -46,6 +51,10 @@ const MainScreen = ({ navigation }) => {
     inputRange: [0, 100],
     outputRange: ["0%", "100%"],
   });
+  useEffect(() => {
+  // Non-blocking initial full sync
+    SlabsSyncManager.syncAllFromFirestore().catch(console.error);
+  }, []);
   useEffect(() => {
     if (selectedStationId) {
       loadTodayGeneration(selectedStationId);
@@ -166,7 +175,20 @@ try {
       name: 'Default Notifications',
     });
   }, []);
-
+  useEffect(() => {
+    MonthlyDataManager.getAll().then(data => {
+      if (data?.cumulativeCost != null) {
+        const formatted = Number(data.cumulativeCost).toLocaleString('en-IN', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+        setTotalCost(`₹ ${formatted}`);
+      }
+    }).catch(() => {
+      setTotalCost('₹ ---');
+    });
+  }, []);
+    
   const unitRate = parseFloat(userInfo?.UserInfo?.unitsrupees || 0);
   const totalSavings = (lifeTimeGeneration * unitRate).toFixed(2);
 
@@ -337,10 +359,9 @@ try {
       setStations(stationArray);
       if (stationArray.length > 0) {
         const firstStation = stationArray[0];
-        console.log("Default Station ID:", firstStation.id);
-        console.log("Default Station Name:", firstStation.name);
         setSelectedStation(0);
         setSelectedStationId(firstStation.id);
+        const parsed = SolarParseUtil.parseAndSave(firstStation);
       }
     } catch (error) {
       console.log(" Error fetching stations:", error);
@@ -442,7 +463,7 @@ try {
               <Text style={styles.markerText}>Kick Off</Text>
               <Text style={styles.markerText}>Solar Freedom</Text>
             </View>
-            <Text style={styles.profitText}>₹ {totalSavings}
+            <Text style={styles.profitText}>{totalCost}
             </Text>
           </View>
           {/* Buttons */}
@@ -515,14 +536,11 @@ try {
                       styles.familyItem,
                       selectedStation === index && { backgroundColor: "#e6f0ff" },
                     ]}
-                    onPress={() => {
+                    onPress={async () => {
                       setSelectedStation(index);
                       setSelectedStationId(item.id);
                       setVisible(false);
-                      console.log("🟢 Station clicked:");
-                      console.log("➡️ Index:", index);
-                      console.log("🏠 Name:", item.name);
-                      console.log("🆔 ID:", item.id);
+                      const parsed = SolarParseUtil.parseAndSave(item);
                     }}
                   >
                     <Image source={LightBg} style={styles.familyImg} />

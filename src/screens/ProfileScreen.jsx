@@ -17,6 +17,7 @@ import Loader from "../components/Loader";
 import { getStorageData, USER_DATA } from "../service/localStorage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import LinearGradient from "react-native-linear-gradient";
+import SolarParseUtil from '../utils/SolarParseUtil';
 const ProfileScreen = ({ route, navigation }) => {
     const { stationId } = route.params || {};
     const [showLogoutPopup, setShowLogoutPopup] = useState(false);
@@ -65,6 +66,7 @@ const ProfileScreen = ({ route, navigation }) => {
             if (selected) {
                 console.log("✅ Selected Station:", selected);
                 setStationData(selected); // Store in state
+                const parsed = SolarParseUtil.parseAndSave(selected);
             } else {
                 console.log("⚠️ No station found for ID:", stationId);
             }
@@ -79,7 +81,8 @@ const ProfileScreen = ({ route, navigation }) => {
     const handleLogout = async () => {
         try {
             await AsyncStorage.removeItem(USER_DATA);
-            console.log(" USER_DATA cleared successfully.");
+            await SolarParseUtil.clear();
+            console.log(" USER_DATA  cleared successfully.");
             setShowLogoutPopup(false);
             navigation.reset({
                 index: 0,

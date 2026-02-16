@@ -23,7 +23,6 @@ export const setAuthToken = async () => {
 
     if (token) {
       api.defaults.headers.common.Authorization = `Bearer ${token}`;
-      console.log(" Token added to header:", token);
     } else {
       console.warn(" No token found in USER_DATA:", parsed);
     }
@@ -88,7 +87,10 @@ export const fetchStationDevices = async (stationId) => {
 
 export const fetchHistoricalData = async (body) => {
   try {
+    await setAuthToken();
+    console.log(" Ezhil Historical Data Request:", body);
     const res = await api.post("station/v1.0/history?language=en", body);
+    console.log(" Ezhil Historical Data Response:", JSON.stringify(res.data));
     return res.data;
   } catch (err) {
     console.error("🚨 API fetch error:", err.response?.data || err.message);
