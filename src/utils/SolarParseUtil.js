@@ -126,7 +126,7 @@ class SolarParseUtil {
       
       // Trigger background monthly sync (non-blocking)
     // Automatically start monthly sync in background
-      console.log('Triggering background monthly data sync...');
+      console.log('Triggering background monthly data sync...', parsed);
       MonthlyDataManager.sync(parsed.stationId).catch(err => {
         console.error('Background monthly sync failed:', err);
       });
@@ -160,7 +160,7 @@ class SolarParseUtil {
    */
   static async clear() {
     await AsyncStorage.removeItem('@SolarApp:station_parsed');
-    await MonthlyDataManager.clear();
+    await AsyncStorage.removeItem('@SolarApp:monthly_generation');
   }
 }
 

@@ -102,13 +102,16 @@ class MonthlyDataManager {
         console.error(`Fetch failed for ${monthKey}:`, err);
       }
 
-      // Get slabs
-      const slabs = await SlabsSyncManager.getSlabsForState(stored.state) || [
-        { from: 0, to: 'above', rate: 2.55 }
-      ];
+      const template = await SlabsSyncManager.getSlabsForState(stored.state);
 
-      calculator.addSlabs(monthKey, slabs);
-      const cost = calculator.calculateMonthlyCredit(units, monthKey);
+      if (template) {
+        template.state = stored.state;
+        calculator.addConfig(monthKey, template);
+      } else {
+        calculator.addConfig(monthKey, [{ from: 0, to: 'above', rate: 2.55 }], stored.state);
+      }
+
+      const cost = calculator.calculateMonthlyCredit(units, monthKey);      console.log('Ezhil MonthlySync cost for ', monthKey, cost);
 
       updatedRecords[monthKey] = {
         units: Number(units.toFixed(2)),
@@ -136,8 +139,9 @@ class MonthlyDataManager {
       state: stored.state
     };
 
+
     await this._saveData(finalData);
-    console.log('Monthly sync completed ', finalData);
+    console.log('Ezhil Monthly sync completed ', finalData);
 
     return finalData;
   }

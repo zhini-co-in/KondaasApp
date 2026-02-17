@@ -108,8 +108,7 @@ class SlabsSyncManager {
       this.syncAllFromFirestore().catch(() => {}); // background refresh
     }
 
-    const stateData = allCached[stateId.toLowerCase()];
-    return stateData?.slabs || DEFAULT_FALLBACK[stateId.toLowerCase()] || [];
+    return allCached[stateId.toLowerCase()]?.slabs || DEFAULT_FALLBACK[stateId.toLowerCase()] || [];
   }
 
   /**
