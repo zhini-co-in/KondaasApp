@@ -59,7 +59,7 @@ const OtpScreen = ({ navigation, route }) => {
       setLoading(true);
 
       const result = await auth().signInWithCredential(credential);
-      Alert.alert("Login Successful", "Your phone number has been verified automatically.");
+
 
       const cleanPhone = phone.replace("+91", "");
 
@@ -237,6 +237,16 @@ const handleConfirm = async () => {
                   keyboardType="number-pad"
                   maxLength={1}
                   returnKeyType="next"
+                   onKeyPress={({ nativeEvent }) => {
+        if (nativeEvent.key === "Backspace") {
+          if (otp[index] === "" && index > 0) {
+            const newOtp = [...otp];
+            newOtp[index - 1] = "";
+            setOtp(newOtp);
+            inputs.current[index - 1].focus();
+          }
+        }
+      }}
                 />
               ))}
             </View>

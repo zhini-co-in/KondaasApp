@@ -32,6 +32,7 @@ const [showLogoutPopup, setShowLogoutPopup] = useState(false);
  const [showCredentialPopup, setShowCredentialPopup] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleCall = () => {
     const phoneNumber = "tel:9244414441";
@@ -94,6 +95,7 @@ const closeCredentialPopup = () => {
     setShowCredentialPopup(false);
     setEmail("");
     setPassword("");
+    setShowPassword(false);
   };
 
 const handleSaveCredentials = async () => {
@@ -261,15 +263,24 @@ const handleSaveCredentials = async () => {
 
               {/* PASSWORD INPUT */}
               <View style={styles.inputContainer}>
-                <Ionicons name="lock-closed-outline" size={18} color="#999" />
-                <TextInput
-                  placeholder="Password"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  style={styles.input}
-                />
-              </View>
+                 <Ionicons name="lock-closed-outline" size={18} color="#999" />
+
+  <TextInput
+    placeholder="Password"
+    value={password}
+    onChangeText={setPassword}
+    secureTextEntry={!showPassword}
+    style={styles.input}
+  />
+
+  <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+    <Ionicons
+      name={showPassword ? "eye-off-outline" : "eye-outline"}
+      size={20}
+      color="#666"
+    />
+  </TouchableOpacity>
+</View>
 
               {/* BUTTONS */}
               <View style={styles.popupButtons}>
