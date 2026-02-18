@@ -3,7 +3,6 @@ require_relative '../node_modules/react-native/scripts/react_native_pods'
 platform :ios, '16.0'
 prepare_react_native_project!
 
-<<<<<<< Updated upstream
 use_modular_headers!
 
 # Force static framework linkage to avoid duplicate module / header clashes
@@ -14,9 +13,6 @@ if linkage != nil
   Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
   use_frameworks! :linkage => linkage.to_sym
 end
-=======
-use_frameworks! :linkage => :static
->>>>>>> Stashed changes
 
 target 'KondaasApp' do
   config = use_native_modules!

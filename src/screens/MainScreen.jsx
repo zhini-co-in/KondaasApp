@@ -25,9 +25,10 @@ import firestore from '@react-native-firebase/firestore';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Animated } from "react-native";
 import { SCREEN_NAMES } from "../constants/screenNames";
-import MonthlyDataManager from '../utils/MonthlyDataManager';
+// import MonthlyDataManager from '../utils/MonthlyDataManager';
 import SlabsSyncManager from '../utils/SlabsSyncManager';
 import SolarParseUtil from '../utils/SolarParseUtil';
+import { useMonthlyData } from '../hooks/useMonthlyData';
 
 const MainScreen = ({ navigation }) => {
   const [isDay, setIsDay] = useState(isDaytime());
@@ -39,13 +40,14 @@ const MainScreen = ({ navigation }) => {
   const [selectedStationId, setSelectedStationId] = useState(null);
   const [todayGeneration, setTodayGeneration] = useState(0);
   const [lifeTimeGeneration, setLifetimeGeneration] = useState(0);
-  const [totalCost, setTotalCost] = useState('---');
+  // const [totalCost, setTotalCost] = useState('---');
   const [userInfo, setUserInfo] = useState(null);
   const [updatedTime, setUpdatedTime] = useState("");
   const [installationAmount, setInstallationAmount] = useState(0);
   const [todaySavings, setTodaySavings] = useState(0);
   const [progressPercent, setProgressPercent] = useState(0);
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const { monthlyData, monthlyDataLoading } = useMonthlyData();
 
   const widthInterpolate = progressAnim.interpolate({
     inputRange: [0, 100],
@@ -175,22 +177,26 @@ try {
       name: 'Default Notifications',
     });
   }, []);
-  useEffect(() => {
-    MonthlyDataManager.getAll().then(data => {
-      if (data?.cumulativeCost != null) {
-        const formatted = Number(data.cumulativeCost).toLocaleString('en-IN', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        });
-        setTotalCost(`₹ ${formatted}`);
-      }
-    }).catch(() => {
-      setTotalCost('₹ ---');
-    });
-  }, []);
+  // useEffect(() => {
+  //   MonthlyDataManager.getAll().then(data => {
+  //     if (data?.cumulativeCost != null) {
+  //       const formatted = Number(data.cumulativeCost).toLocaleString('en-IN', {
+  //         minimumFractionDigits: 2,
+  //         maximumFractionDigits: 2,
+  //       });
+  //       setTotalCost(`₹ ${formatted}`);
+  //     }
+  //   }).catch(() => {
+  //     setTotalCost('₹ ---');
+  //   });
+  // }, []);
     
   const unitRate = parseFloat(userInfo?.UserInfo?.unitsrupees || 0);
   const totalSavings = (lifeTimeGeneration * unitRate).toFixed(2);
+  const totalCost = monthlyDataLoading ? '₹  ---' : '₹ ' + Number(monthlyData?.cumulativeCost || 0).toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
   function isDaytime() {
     const hour = new Date().getHours();
