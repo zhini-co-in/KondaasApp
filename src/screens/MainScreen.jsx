@@ -25,33 +25,48 @@ import firestore from '@react-native-firebase/firestore';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Animated } from "react-native";
 import { SCREEN_NAMES } from "../constants/screenNames";
-// import MonthlyDataManager from '../utils/MonthlyDataManager';
+import MonthlyDataManager from '../utils/MonthlyDataManager';
 import SlabsSyncManager from '../utils/SlabsSyncManager';
 import SolarParseUtil from '../utils/SolarParseUtil';
 import { useMonthlyData } from '../hooks/useMonthlyData';
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback } from "react";
 
 const MainScreen = ({ navigation }) => {
+  const [selectedStationId, setSelectedStationId] = useState(null);
   const [isDay, setIsDay] = useState(isDaytime());
   const [currentTime, setCurrentTime] = useState(new Date());
   const [visible, setVisible] = useState(false);
   const [stations, setStations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedStation, setSelectedStation] = useState(0);
-  const [selectedStationId, setSelectedStationId] = useState(null);
   const [todayGeneration, setTodayGeneration] = useState(0);
   const [lifeTimeGeneration, setLifetimeGeneration] = useState(0);
   // const [totalCost, setTotalCost] = useState('---');
   const [userInfo, setUserInfo] = useState(null);
+  const { monthlyData, monthlyDataLoading } =
+  useMonthlyData(selectedStationId, userInfo?.UserInfo?.phoneNo);
   const [updatedTime, setUpdatedTime] = useState("");
   const [installationAmount, setInstallationAmount] = useState(0);
   const [todaySavings, setTodaySavings] = useState(0);
   const [progressPercent, setProgressPercent] = useState(0);
+const [progressColor, setProgressColor] = useState("#f39c12");
   const progressAnim = useRef(new Animated.Value(0)).current;
-  const { monthlyData, monthlyDataLoading } = useMonthlyData();
+const costValue = Number(monthlyData?.cumulativeCost ?? 0);
+
+const totalCost = monthlyDataLoading
+  ? "₹ Loading..."
+  : `₹ ${costValue.toLocaleString("en-IN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+
+console.log("MonthlyData:", monthlyData);
 
   const widthInterpolate = progressAnim.interpolate({
     inputRange: [0, 100],
     outputRange: ["0%", "100%"],
+    extrapolate: "clamp",
   });
   useEffect(() => {
   // Non-blocking initial full sync
@@ -71,35 +86,77 @@ const MainScreen = ({ navigation }) => {
       useNativeDriver: false,
     }).start();
   }, [progressPercent]);
-  useEffect(() => {
-    if (todayGeneration > 0) {
-      const units = todayGeneration * 4;
-      const rupees = units * 5;
-      setTodaySavings(rupees.toFixed(0));
-      if (installationAmount > 0) {
-        const percent = Math.min((rupees / installationAmount) * 100, 100);
-        setProgressPercent(percent);
-      }
-    }
-  }, [todayGeneration, installationAmount]);
-  useEffect(() => {
-    const fetchUserInfo = async () => {
-      try {
-        const data = await getStorageData(USER_DATA);
-        if (data) {
-          const parsed = JSON.parse(data);
-          setUserInfo(parsed);
-          console.log(" Loaded User Info:", parsed);
-        } else {
-          console.warn(" No User Info found in storage");
-        }
-      } catch (err) {
-        console.error(" Error loading user info:", err);
+  function calculateCommittedUnits(item) {
+  const capacity =
+    item.installedCapacity > 100
+      ? item.installedCapacity / 1000
+      : item.installedCapacity;
+
+  const startTime = item.startOperatingTime || item.createdDate;
+
+  const startDate = new Date(startTime * 1000);
+  const today = new Date();
+
+  const diffTime = today - startDate;
+  const noOfDays = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+
+  return capacity * 4 * noOfDays;
+}
+
+function processStations(data) {
+  if (!Array.isArray(data) || data.length === 0) return [];
+
+  const withUnits = data.map(item => {
+    const units = calculateCommittedUnits(item);
+
+    console.log("CALC →", item.name, units);
+
+    return {
+      ...item,
+      committedUnits: units
+    };
+  });
+
+  const maxValue = Math.max(...withUnits.map(x => x.committedUnits || 0));
+
+  console.log("MAX VALUE:", maxValue);
+
+  return withUnits.map(item => {
+    const percent = maxValue ? (item.committedUnits / maxValue) * 100 : 0;
+
+    console.log("PERCENT →", item.name, percent);
+
+    return {
+      ...item,
+      progressPercent: percent,
+      progressColor:
+        item.committedUnits === maxValue ? "green" : "orange"
+    };
+  });
+}
+  useFocusEffect(
+  useCallback(() => {
+    const loadUser = async () => {
+      const data = await getStorageData(USER_DATA);
+
+      if (data) {
+        const parsed = JSON.parse(data);
+
+        setStations([]);
+        setSelectedStationId(null);
+        setSelectedStation(0);
+
+        setUserInfo(parsed);
+
+        setTimeout(() => {
+          loadStations();
+        }, 100);
       }
     };
 
-    fetchUserInfo();
-  }, []);
+    loadUser();
+  }, [])
+);
   async function requestPermission() {
 try {
     if (Platform.OS === 'ios') {
@@ -193,10 +250,7 @@ try {
     
   const unitRate = parseFloat(userInfo?.UserInfo?.unitsrupees || 0);
   const totalSavings = (lifeTimeGeneration * unitRate).toFixed(2);
-  const totalCost = monthlyDataLoading ? '₹  ---' : '₹ ' + Number(monthlyData?.cumulativeCost || 0).toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+
 
   function isDaytime() {
     const hour = new Date().getHours();
@@ -329,9 +383,11 @@ try {
   }, []);
 
   useEffect(() => {
+  if (userInfo?.UserInfo?.phoneNo) {
     loadStations();
     saveStationsToFirestore();
-  }, []);
+  }
+}, [userInfo?.UserInfo?.phoneNo]);
 
   const convertUnits = (value) => {
     if (!value) return "0 Units";
@@ -362,7 +418,27 @@ try {
         console.log(" No valid station list found in response");
       }
 
-      setStations(stationArray);
+      const processed = processStations(stationArray);
+      console.log("Processed Stations:", processed);
+      processed.forEach(s => {
+  console.log(
+    "Station:", s.name,
+    "Units:", s.committedUnits,
+    "Percent:", s.progressPercent,
+    "Color:", s.progressColor
+  );
+});
+setStations(processed);
+
+if (processed.length > 0) {
+  setSelectedStation(0);
+  setSelectedStationId(processed[0].id);
+
+  setProgressPercent(processed[0].progressPercent || 0);
+  setProgressColor(
+    processed[0].progressColor === "green" ? "#2ecc71" : "#f39c12"
+  );
+}
       if (stationArray.length > 0) {
         const firstStation = stationArray[0];
         setSelectedStation(0);
@@ -459,11 +535,14 @@ try {
             </Text>
             <View style={styles.progressBar}>
               <Animated.View
-                style={[
-                  styles.progressFill,
-                  { width: widthInterpolate },
-                ]}
-              />
+  style={[
+    styles.progressFill,
+    {
+      width: widthInterpolate,
+      backgroundColor: progressColor,
+    },
+  ]}
+/>
             </View>
             <View style={styles.progressMarkers}>
               {/* <Text style={styles.markerText}>Invested</Text> */}
@@ -484,7 +563,9 @@ try {
                 });
               }}
             >
-              <Text style={styles.primaryButtonText}>View Insights →</Text>
+              <View style={styles.buttonContent}>
+                <Text style={styles.primaryButtonText}>View Insights</Text>
+              </View>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.secondaryButton}
@@ -543,16 +624,23 @@ try {
                       styles.familyItem,
                       selectedStation === index && { backgroundColor: "#e6f0ff" },
                     ]}
-                    onPress={async () => {
-                      setSelectedStation(index);
-                      setSelectedStationId(item.id);
-                      setVisible(false);
-                      await SolarParseUtil.clear();
-                      const parsed = SolarParseUtil.parseAndSave(item);
-                    }}
+                   onPress={async () => {
+  await MonthlyDataManager.clear?.();
+  await SolarParseUtil.clear?.();
+
+  setSelectedStation(index);
+  setSelectedStationId(item.id);
+
+  setProgressPercent(item.progressPercent || 0);
+  setProgressColor(
+    item.progressColor === "green" ? "#2ecc71" : "#f39c12"
+  );
+
+  setVisible(false);
+}}  
                   >
                     <Image source={LightBg} style={styles.familyImg} />
-                    <View>
+                    <View style={styles.container}>
                       <Text style={styles.familyName}>{item.name}</Text>
                       <Text style={styles.familyAddress}>{item.locationAddress}</Text>
                     </View>
@@ -821,7 +909,11 @@ const styles = StyleSheet.create({
     padding: 15,
 
   },
-
+  buttonContent: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+},
   grayButtonText: { color: "#333", fontWeight: "600", fontSize: 14 },
 });
 

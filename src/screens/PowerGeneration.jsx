@@ -13,6 +13,7 @@ import { Dimensions } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { setAuthToken, fetchHistoricalData } from "../api/api";
 import NetInfo from '@react-native-community/netinfo';
+import MonthlyDataManager from "../utils/MonthlyDataManager";
 import { USER_DATA, getStorageData } from "../service/localStorage";
 import firestore from "@react-native-firebase/firestore";
 import LinearGradient from "react-native-linear-gradient";
@@ -196,75 +197,87 @@ const PowerGenerationScreen = ({ navigation, route }) => {
   };
 
   const fetchGenerationData = async (tab) => {
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) {
-      alert("No network connection available");
-      return;
-    }
-    setLoading(true);
-    try {
-      await setAuthToken();
+  const net = await NetInfo.fetch();
+  if (!net.isConnected && tab !== "Month") {
+    alert("No network connection available");
+    return;
+  }
 
-      const { start, end } = getDateRange(tab);
-      setWeekStart(start);
-      setWeekEnd(end);
-      const timeType =
-        tab === "Day" ? 2 :
-          tab === "Week" ? 2 :
-            tab === "Month" ? 3 :
-              tab === "Year" ? 4 : null;
+  setLoading(true);
+  try {
 
-      const payload = {
-        stationId,
-        timeType,
-        startTime: start,
-        endTime: end,
-      };
+    // ✅ MONTH TAB → AsyncStorage ONLY
+    if (tab === "Month") {
+      const monthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
 
-      console.log("📤 Payload:", payload);
-      const data = await fetchHistoricalData(payload);
+      const localData = await MonthlyDataManager.getAll(stationId);
+      const monthData = localData?.monthlyRecords?.[monthKey];
 
-      const items = data.stationDataItems || [];
-      const labels = [];
-      const dataPoints = [];
+      console.log("📦 petchi Monthly Data:", monthData);
 
-      const monthNames = [
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-      ];
+      if (monthData) {
+        setTotalGenerated(monthData.units);
+        setChartData({
+          labels: [monthKey],
+          datasets: [{ data: [monthData.units] }],
+        });
+        await loadCommittedUnits(monthData.units);
+      } else {
+        console.log("No local data for month", monthKey);
+        setTotalGenerated(0);
+        setChartData(null);
+      }
 
-      items.forEach((item, index) => {
-        if (tab === "Day") {
-          labels.push(item.hour?.toString() || `${index + 1}`);
-        } else if (tab === "Week" || tab === "Month") {
-          labels.push(item.day?.toString() || `${index + 1}`);
-        } else if (tab === "Year") {
-          labels.push(monthNames[item.month - 1] || `M${index + 1}`);
-        }
-
-        const value = Number(item.generationValue);
-dataPoints.push(isFinite(value) ? value : 0);
-
-      });
-
-      const total = dataPoints.reduce((sum, val) => sum + val, 0);
-      setTotalGenerated(Number(total.toFixed(1)));
-
-      await loadCommittedUnits(total);
-
-      setChartData({
-        labels,
-        datasets: [{ data: dataPoints }],
-      });
-
-      setSelectedDate(`${start}`);
-    } catch (error) {
-      console.error(" API Error:", error);
-      console.log("Response:", error?.response?.data);
-    } finally {
       setLoading(false);
+      return; // 🔥 STOP API CALL
     }
-  };
+
+    // ================= API FLOW FOR DAY / WEEK / YEAR ==================
+    await setAuthToken();
+
+    const { start, end } = getDateRange(tab);
+    setWeekStart(start);
+    setWeekEnd(end);
+
+    const timeType =
+      tab === "Day" ? 2 :
+      tab === "Week" ? 2 :
+      tab === "Year" ? 4 : null;
+
+    const payload = {
+      stationId,
+      timeType,
+      startTime: start,
+      endTime: end,
+    };
+
+    const data = await fetchHistoricalData(payload);
+    const items = data.stationDataItems || [];
+
+    const labels = [];
+    const dataPoints = [];
+
+    items.forEach((item, index) => {
+      labels.push(item.day || item.hour || index + 1);
+      dataPoints.push(Number(item.generationValue) || 0);
+    });
+
+    const total = dataPoints.reduce((a, b) => a + b, 0);
+    setTotalGenerated(total.toFixed(1));
+
+    await loadCommittedUnits(total);
+
+    setChartData({
+      labels,
+      datasets: [{ data: dataPoints }],
+    });
+
+  } catch (err) {
+    console.log("Error:", err);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     if (stationId) fetchGenerationData(selectedTab);

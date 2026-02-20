@@ -3,13 +3,18 @@ import { useState, useEffect } from 'react';
 import { AppState } from 'react-native';
 import MonthlyDataManager from '../utils/MonthlyDataManager';
 
-export function useMonthlyData() {
+export function useMonthlyData(stationId) {
   const [monthlyData, setMonthlyData] = useState(null);
   const [monthlyDataLoading, setMonthlyDataLoading] = useState(true);
 
   const refreshData = async () => {
-    try {
-      const result = await MonthlyDataManager.getAll();
+  if (!stationId) {
+  console.log("Waiting for station...");
+}
+
+  try {
+    await MonthlyDataManager.sync(stationId);   // 🔥 ADD THIS
+    const result = await MonthlyDataManager.getAll(stationId);
       setMonthlyData(result);
       setMonthlyDataLoading(false);
     } catch (err) {
@@ -19,25 +24,26 @@ export function useMonthlyData() {
   };
 
   useEffect(() => {
-    refreshData(); // initial load
+  setMonthlyData(null);
+  setMonthlyDataLoading(true);
 
-    // Poll every 4 seconds while loading (stops after data arrives)
-    const pollInterval = setInterval(() => {
-      if (monthlyDataLoading) refreshData();
-    }, 4000);
+  refreshData();
 
-    // Refresh on app foreground
-    const appStateSub = AppState.addEventListener('change', nextAppState => {
-      if (nextAppState === 'active') {
-        refreshData();
-      }
-    });
+  const pollInterval = setInterval(() => {
+    if (monthlyDataLoading) refreshData();
+  }, 4000);
 
-    return () => {
-      clearInterval(pollInterval);
-      appStateSub.remove();
-    };
-  }, [monthlyDataLoading]);
+  const appStateSub = AppState.addEventListener('change', nextAppState => {
+    if (nextAppState === 'active') {
+      refreshData();
+    }
+  });
+
+  return () => {
+    clearInterval(pollInterval);
+    appStateSub.remove();
+  };
+}, [stationId]);
 
   return { monthlyData, monthlyDataLoading };
 }
