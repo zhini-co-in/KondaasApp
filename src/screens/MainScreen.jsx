@@ -27,6 +27,7 @@ import { Animated } from "react-native";
 import { SCREEN_NAMES } from "../constants/screenNames";
 import MonthlyDataManager from '../utils/MonthlyDataManager';
 import SlabsSyncManager from '../utils/SlabsSyncManager';
+import { saveStationId } from "../utils/stationId";
 import SolarParseUtil from '../utils/SolarParseUtil';
 import { useMonthlyData } from '../hooks/useMonthlyData';
 import { useFocusEffect } from "@react-navigation/native";
@@ -434,6 +435,8 @@ if (processed.length > 0) {
   setSelectedStation(0);
   setSelectedStationId(processed[0].id);
 
+  await saveStationId(processed[0].id);
+
   setProgressPercent(processed[0].progressPercent || 0);
   setProgressColor(
     processed[0].progressColor === "green" ? "#2ecc71" : "#f39c12"
@@ -565,6 +568,12 @@ if (processed.length > 0) {
             >
               <View style={styles.buttonContent}>
                 <Text style={styles.primaryButtonText}>View Insights</Text>
+                 <Ionicons
+      name="arrow-forward"
+      size={26}   
+      color="#fff"
+      style={{ marginLeft: 6 }}
+    />
               </View>
             </TouchableOpacity>
             <TouchableOpacity
@@ -630,14 +639,13 @@ if (processed.length > 0) {
 
   setSelectedStation(index);
   setSelectedStationId(item.id);
+  await saveStationId(item.id);
 
   setProgressPercent(item.progressPercent || 0);
-  setProgressColor(
-    item.progressColor === "green" ? "#2ecc71" : "#f39c12"
-  );
+  setProgressColor(item.progressColor === "green" ? "#2ecc71" : "#f39c12");
 
   setVisible(false);
-}}  
+}}
                   >
                     <Image source={LightBg} style={styles.familyImg} />
                     <View style={styles.container}>

@@ -14,6 +14,7 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import { setAuthToken, fetchHistoricalData } from "../api/api";
 import NetInfo from '@react-native-community/netinfo';
 import MonthlyDataManager from "../utils/MonthlyDataManager";
+import { getStationId } from "../utils/stationId";
 import { USER_DATA, getStorageData } from "../service/localStorage";
 import firestore from "@react-native-firebase/firestore";
 import LinearGradient from "react-native-linear-gradient";
@@ -28,6 +29,7 @@ const PowerGenerationScreen = ({ navigation, route }) => {
   const [chartData, setChartData] = useState(null);
   const [totalGenerated, setTotalGenerated] = useState(0);
   const [weekStart, setWeekStart] = useState("");
+const [globalStationId, setGlobalStationId] = useState(null); 
   const [weekEnd, setWeekEnd] = useState("");
   const [userData, setUserData] = useState(null);
   const [committedUnits, setCommittedUnits] = useState(0);
@@ -278,6 +280,14 @@ const PowerGenerationScreen = ({ navigation, route }) => {
     setLoading(false);
   }
 };
+useEffect(() => {
+  const loadStation = async () => {
+    const id = await getStationId();
+    console.log("GLOBAL Station ID:", id);
+    setGlobalStationId(id);
+  };
+  loadStation();
+}, []);
 
   useEffect(() => {
     if (stationId) fetchGenerationData(selectedTab);
