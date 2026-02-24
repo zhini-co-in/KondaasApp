@@ -12,7 +12,20 @@
           "package_name": "com.trisentrix.kondaas"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "833207375451-ebcm11u0krsu48hn787nqjicdtdoh2aa.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.trisentrix.kondaas",
+            "certificate_hash": "d44b369a87b5dadf1c324e8a7278474b768b466e"
+          }
+        },
+        {
+          "client_id": "833207375451-p8t0r2q7hqrtttbb81ch93hpkgd5adca.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBG6yC2grYZxIHAobrZiAK38ZMGaTY-buM"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "833207375451-p8t0r2q7hqrtttbb81ch93hpkgd5adca.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "833207375451-eipirgpkbqlpv9s9q2aqc0bahm2spfo9.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.trisentrix.kondaas"
+              }
+            }
+          ]
         }
       }
     }
