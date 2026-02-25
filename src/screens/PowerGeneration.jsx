@@ -209,30 +209,79 @@ const [globalStationId, setGlobalStationId] = useState(null);
   try {
 
     // ✅ MONTH TAB → AsyncStorage ONLY
-    if (tab === "Month") {
-      const monthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
+    // ✅ MONTH + YEAR → AsyncStorage ONLY
+if (tab === "Month" || tab === "Year") {
 
-      const localData = await MonthlyDataManager.getAll(stationId);
-      const monthData = localData?.monthlyRecords?.[monthKey];
+  const localData = await MonthlyDataManager.getAll(stationId);
+  const records = localData?.monthlyRecords || {};
 
-      console.log("📦 petchi Monthly Data:", monthData);
+  // ===== MONTH TAB =====
+  if (tab === "Month") {
+    const monthKey = `${currentDate.getFullYear()}-${String(
+      currentDate.getMonth() + 1
+    ).padStart(2, "0")}`;
 
-      if (monthData) {
-        setTotalGenerated(monthData.units);
-        setChartData({
-          labels: [monthKey],
-          datasets: [{ data: [monthData.units] }],
-        });
-        await loadCommittedUnits(monthData.units);
-      } else {
-        console.log("No local data for month", monthKey);
-        setTotalGenerated(0);
-        setChartData(null);
-      }
+    const monthData = records[monthKey];
 
-      setLoading(false);
-      return; // 🔥 STOP API CALL
+    if (monthData) {
+      setTotalGenerated(monthData.units);
+      setChartData({
+  labels: [monthKey],
+  datasets: [
+    {
+      data: [monthData.units],
+      colors: [() => "#B8C7FF"],
+    },
+  ],
+});
+
+      await loadCommittedUnits(monthData.units);
+    } else {
+      setTotalGenerated(0);
+      setChartData(null);
     }
+
+    setLoading(false);
+    return;
+  }
+
+ if (tab === "Year") {
+  const selectedYear = currentDate.getFullYear();
+  const labels = [];
+  const dataPoints = [];
+
+  Object.keys(records)
+    .filter(key => key.startsWith(selectedYear.toString()))
+    .sort((a, b) => new Date(a) - new Date(b))
+    .forEach(key => {
+      labels.push(new Date(key + "-01").toLocaleString("en", { month: "short" }));
+      dataPoints.push(records[key].units || 0);
+    });
+
+  const maxValue = Math.max(...dataPoints);
+  const maxIndex = dataPoints.indexOf(maxValue);
+
+  const chartData = {
+    labels,
+    datasets: [
+      {
+        data: dataPoints,
+        colors: dataPoints.map((v, i) => () =>
+          i === maxIndex ? "#1F4FFF" : "#B8C7FF"
+        ),
+      },
+    ],
+  };
+
+  const total = dataPoints.reduce((a, b) => a + b, 0);
+  setTotalGenerated(total.toFixed(1));
+  await loadCommittedUnits(total);
+
+  setChartData(chartData);
+  setLoading(false);
+  return;
+}
+}
 
     // ================= API FLOW FOR DAY / WEEK / YEAR ==================
     await setAuthToken();
@@ -269,10 +318,20 @@ const [globalStationId, setGlobalStationId] = useState(null);
 
     await loadCommittedUnits(total);
 
-    setChartData({
-      labels,
-      datasets: [{ data: dataPoints }],
-    });
+    const maxValue = Math.max(...dataPoints);
+const maxIndex = dataPoints.indexOf(maxValue);
+
+setChartData({
+  labels,
+  datasets: [
+    {
+      data: dataPoints,
+      colors: dataPoints.map((v, i) => () =>
+        i === maxIndex ? "#1F4FFF" : "#B8C7FF"
+      ),
+    },
+  ],
+});
 
   } catch (err) {
     console.log("Error:", err);
@@ -370,63 +429,36 @@ useEffect(() => {
 
          {!loading && hasValidData && (
   <View style={{ alignItems: "center" }}>
-    
-    {/* BAR CHART */}
-    <BarChart
-      data={chartData}
-      width={screenWidth - 30}
-      height={240}
-      fromZero
-      withHorizontalLabels={true}
-      showValuesOnTopOfBars={true}
-      chartConfig={{
-        backgroundColor: "#fff",
-        backgroundGradientFrom: "#fff",
-        backgroundGradientTo: "#fff",
-        decimalPlaces: 1,
-        color: () => "#2F5FB3",    
-        labelColor: () => "#000",
-        barPercentage: 0.6,
-        propsForLabels: {
-          fontSize: 11,
-          fontWeight: "600",
-        },
-      }}
-      style={{
-        borderRadius: 12,
-      }}
-    />
 
-    {/* LINE CHART (OVERLAY) */}
-    <LineChart
-      data={{
-        labels: chartData.labels,
-        datasets: [
-          {
-            data: chartData.datasets[0].data,
-          },
-        ],
-      }}
-      width={screenWidth - 30}
-      height={240}
-      withDots={true}
-      withInnerLines={false}
-      withOuterLines={false}
-      withHorizontalLabels={false}
-      withVerticalLabels={false}
-      transparent
-      chartConfig={{
-        backgroundGradientFrom: "transparent",
-        backgroundGradientTo: "transparent",
-        color: () => "#f5ae68ff",   
-        strokeWidth: 3,
-      }}
-      style={{
-        position: "absolute",  
-        top: 0,
-        left: 0,
-      }}
-    />
+    
+    <BarChart
+  data={chartData}
+  width={screenWidth - 30}
+  height={selectedTab === "Year" ? 300 : 220}   // Year-ku height அதிகம்
+  fromZero
+  withInnerLines={false}
+  withOuterLines={false}
+  showValuesOnTopOfBars={false}
+
+  flatColor
+  withCustomBarColorFromData
+
+  // ✅ ONLY YEAR TAB LABEL ROTATE
+  verticalLabelRotation={selectedTab === "Year" ? 270 : 0}
+  xLabelsOffset={selectedTab === "Year" ? +2 : 0}
+
+  chartConfig={{
+    backgroundColor: "#fff",
+    backgroundGradientFrom: "#fff",
+    backgroundGradientTo: "#fff",
+    decimalPlaces: 0,
+    barPercentage: 0.5,
+    color: (opacity = 1) => `rgba(184,199,255,${opacity})`,
+    labelColor: () => "#444",
+    propsForBackgroundLines: { stroke: "transparent" },
+  }}
+  style={{ borderRadius: 12 }}
+/>
   </View>
 )}
 

@@ -73,7 +73,18 @@ class MonthlyDataManager {
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
     stored.startMonth = startMonth;
-    stored.state = parsed.state || 'tamil-nadu';
+    const normalizeState = (s) => {
+  if (!s) return "tamil-nadu";
+  s = s.toLowerCase();
+
+  if (s.includes("tamil")) return "tamil-nadu";
+  if (s.includes("kerala")) return "kerala";
+
+  return s;
+};
+
+stored.state = normalizeState(parsed.state);
+console.log("STATE USED FOR SLAB:", stored.state);
 
     // Build month list
     const monthsToFetch = [];
@@ -127,12 +138,18 @@ while (cursor <= now) {
 
       const template = await SlabsSyncManager.getSlabsForState(stored.state);
 
-      if (template) {
-        template.state = stored.state;
-        calculator.addConfig(monthKey, template);
-      } else {
-        calculator.addConfig(monthKey, [{ from: 0, to: 'above', rate: 2.55 }], stored.state);
-      }
+if (template) {
+  template.state = stored.state;
+
+  // ✅ FIXED
+  calculator.addConfig(monthKey, template, stored.state);
+} else {
+  calculator.addConfig(
+    monthKey,
+    [{ from: 0, to: 'above', rate: 2.55 }],
+    stored.state
+  );
+}
 
       const cost = calculator.calculateMonthlyCredit(units, monthKey);      console.log('Ezhil MonthlySync cost for ', monthKey, cost);
 
