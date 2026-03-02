@@ -23,6 +23,11 @@ const screenWidth = Dimensions.get("window").width;
 
 const PowerGenerationScreen = ({ navigation, route }) => {
   const { stationId } = route.params || {};
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const [totalInstalledCapacity, setTotalInstalledCapacity] = useState(0);
+  const [potentialUnits, setPotentialUnits] = useState(0);
+  const [statusColor, setStatusColor] = useState("#FF9800"); // default orange
   const [selectedTab, setSelectedTab] = useState("Day");
   const [selectedDate, setSelectedDate] = useState("");
   const [loading, setLoading] = useState(false);
@@ -35,8 +40,83 @@ const [globalStationId, setGlobalStationId] = useState(null);
   const [committedUnits, setCommittedUnits] = useState(0);
   const [percentGenerated, setPercentGenerated] = useState(0);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const today = new Date();
+  const [totalSaved, setTotalSaved] = useState(0);
+  const rate = Number(userData?.unitsrupees || 0);  
+  const calculateCommittedUnits = (installedCapacity, selectedTab, currentDate) => {
+  const capacityInKW = installedCapacity > 100 ? installedCapacity / 1000 : installedCapacity;
+  const noOfDays = getNumberOfDaysInPeriod(selectedTab, currentDate);
+  const dailyKwhPerKw = 4; // South India average — can change later if needed
+  return Number((capacityInKW * dailyKwhPerKw * noOfDays).toFixed(1));
+};
 
+const getNumberOfDaysInPeriod = (tab, currentDate) => {
+  // today is now available from outer scope
+  // today.setHours(0,0,0,0);   ← if you didn't do it above, do it here once
+
+  const selected = new Date(currentDate);
+  selected.setHours(0, 0, 0, 0);
+
+  if (tab === "Day") return 1;
+
+  if (tab === "Week") {
+    const dayOfWeek = selected.getDay();
+    const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(selected);
+    monday.setDate(selected.getDate() - diffToMonday);
+
+    const endOfWeek = new Date(monday);
+    endOfWeek.setDate(monday.getDate() + 6);
+
+    if (endOfWeek > today) {
+      return Math.floor((today - monday) / 86400000) + 1;
+    }
+    return 7;
+  }
+
+
+  if (tab === "Month") {
+    const y = selected.getFullYear();
+    const m = selected.getMonth();
+    const lastDay = new Date(y, m + 1, 0).getDate();
+
+    if (y === today.getFullYear() && m === today.getMonth()) {
+      return today.getDate();
+    }
+    return lastDay;
+  }
+
+  if (tab === "Year") {
+    const y = selected.getFullYear();
+    if (y === today.getFullYear()) {
+      const start = new Date(y, 0, 1);
+      return Math.floor((today - start) / 86400000) + 1;
+    }
+    const isLeap = (y % 4 === 0 && y % 100 !== 0) || (y % 400 === 0);
+    return isLeap ? 366 : 365;
+  }
+
+  return 0;
+};
+useEffect(() => {
+  const loadInstalledCapacity = async () => {
+    try {
+      await setAuthToken();
+      const totalCapacity = 18.8; 
+
+      setTotalInstalledCapacity(totalCapacity);
+      console.log(`Station ID: ${stationId} → Installed Capacity: ${totalCapacity}`);
+
+    } catch (err) {
+      console.warn("Capacity load fail:", err.message);
+      setTotalInstalledCapacity(18.8); // fallback
+    }
+  };
+
+  if (stationId) {   
+    loadInstalledCapacity();
+  }
+}, [stationId]);   
+  
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -56,11 +136,10 @@ const [globalStationId, setGlobalStationId] = useState(null);
 
     fetchUserData();
   }, []);
-  const unitsRupees = parseFloat(userData?.unitsrupees || 0);
-  const totalSaved = (totalGenerated * unitsRupees).toFixed(0);
+
 
   console.log(" Units:", totalGenerated);
-  console.log(" Per Unit Rate:", unitsRupees);
+  console.log(" Per Unit Rate:", rate);
   console.log(" Total Saved:", totalSaved);
 
   const formatDate = (date) => {
@@ -176,112 +255,209 @@ const [globalStationId, setGlobalStationId] = useState(null);
     return { start, end };
   };
 
-  const loadCommittedUnits = async (generated) => {
-    try {
-      const snapshot = await firestore().collection("comittedUnits").get();
-      let committed = 0;
+  const loadCommittedUnits = (generated) => {
+  if (totalInstalledCapacity <= 0) {
+    console.warn("Installed capacity not set yet");
+    setPotentialUnits(0);
+    setPercentGenerated(0);
+    return;
+  }
 
-      if (!snapshot.empty) {
-        snapshot.forEach((doc) => {
-          committed = Number(doc.data().Comitted);
-        });
-        setCommittedUnits(committed);
-         const percent =
-        committed > 0 && generated > 0
-          ? Number(((generated / committed) * 100).toFixed(1))
-          : 0;
+  const potential = calculateCommittedUnits(
+    totalInstalledCapacity,
+    selectedTab,
+    currentDate
+  );
 
-      setPercentGenerated(percent);
-      }
-    } catch (error) {
-      console.log("Error fetching committed units:", error);
-    }
-  };
+  setPotentialUnits(potential);
+
+  const percent = potential > 0
+    ? Number(((generated / potential) * 100).toFixed(1))
+    : 0;
+
+  setPercentGenerated(percent);
+
+  const color = "#4CAF50";
+  setStatusColor(color);
+};
 
   const fetchGenerationData = async (tab) => {
   const net = await NetInfo.fetch();
-  if (!net.isConnected && tab !== "Month") {
-    alert("No network connection available");
-    return;
-  }
+  if (!net.isConnected) {
+  alert("No network connection available");
+  return;
+}
 
   setLoading(true);
   try {
 
     // ✅ MONTH TAB → AsyncStorage ONLY
     // ✅ MONTH + YEAR → AsyncStorage ONLY
-if (tab === "Month" || tab === "Year") {
+// ================= MONTH TAB =================
+// ================= MONTH TAB =================
+if (tab === "Month") {
+  await setAuthToken();
 
+  const year  = currentDate.getFullYear();
+  const month = String(currentDate.getMonth() + 1).padStart(2, "0");
+
+  const todayObj = new Date();
+  const isCurrentMonth = (
+    year === todayObj.getFullYear() &&
+    Number(month) === todayObj.getMonth() + 1
+  );
+
+  let lastDay = new Date(year, Number(month), 0).getDate();
+  if (isCurrentMonth) {
+    lastDay = todayObj.getDate();           // ← up to today
+  }
+
+  const payload = {
+    stationId,
+    timeType: 2, // daily
+    startTime: `${year}-${month}-01`,
+    endTime:   `${year}-${month}-${lastDay.toString().padStart(2,"0")}`,
+  };
+
+  let apiData;
+  try {
+    apiData = await fetchHistoricalData(payload);
+    console.log("Month API response:", apiData); // ← very important log
+  } catch (err) {
+    console.error("Month fetch failed:", err);
+    apiData = { stationDataItems: [] };
+  }
+
+  const items = apiData?.stationDataItems || [];
+
+  // Create map: day number → generation
+  const dayMap = {};
+  items.forEach(item => {
+    const d = Number(item.day);
+    if (d >= 1 && d <= lastDay) {
+      dayMap[d] = Number(item.generationValue) || 0;
+    }
+  });
+
+  // Build chart data — fill missing days with 0
+  const labels = [];
+  const dataPoints = [];
+
+  for (let d = 1; d <= lastDay; d++) {
+    labels.push(d.toString());
+    dataPoints.push(dayMap[d] ?? 0);
+  }
+
+  const totalThisMonth = dataPoints.reduce((sum, v) => sum + v, 0);
+  setTotalGenerated(Number(totalThisMonth.toFixed(1)));
+
+  // ── Money saved ──
+  let savedMoney = 0;
+  const localData = await MonthlyDataManager.getAll(stationId);
+  const monthKey = `${year}-${month}`;
+  const stored = localData?.monthlyRecords?.[monthKey];
+
+  if (stored?.cost != null) {
+    savedMoney = stored.cost;
+  } else {
+    savedMoney = totalThisMonth * Number(userData?.unitsrupees || 0);
+  }
+  setTotalSaved(Number(savedMoney.toFixed(0)));
+
+  // ── Potential & percentage ──
+  let potential = calculateCommittedUnits(
+    totalInstalledCapacity,
+    selectedTab,
+    currentDate
+  );
+
+  // Optional: make today pro-rated (realistic UX)
+  // if (isCurrentMonth) {
+  //   const hoursSoFar = todayObj.getHours() + todayObj.getMinutes()/60;
+  //   const todayFraction = hoursSoFar / 24;
+  //   const lastDayPotential = (totalInstalledCapacity / 1000) * 4 * todayFraction;
+  //   potential = potential - ((totalInstalledCapacity / 1000) * 4) + lastDayPotential;
+  // }
+
+  setPotentialUnits(Number(potential.toFixed(1)));
+
+  const percent = potential > 0
+    ? Number((totalThisMonth / potential * 100).toFixed(1))
+    : 0;
+  setPercentGenerated(percent);
+
+  setStatusColor(totalThisMonth >= potential * 0.9 ? "#4CAF50" : "#4CAF50");
+
+  // ── Chart ──
+  const maxVal = dataPoints.length ? Math.max(...dataPoints) : 0;
+  const maxIdx = dataPoints.indexOf(maxVal);
+
+  setChartData({
+    labels,
+    datasets: [{
+      data: dataPoints,
+      colors: dataPoints.map((_, i) => () =>
+        i === maxIdx ? "#1F4FFF" : "#B8C7FF"
+      ),
+    }],
+  });
+
+  setLoading(false);
+  return; // ← prevent falling into day/week code
+}
+
+
+// ================= YEAR TAB =================
+if (tab === "Year") {
   const localData = await MonthlyDataManager.getAll(stationId);
   const records = localData?.monthlyRecords || {};
 
-  // ===== MONTH TAB =====
-  if (tab === "Month") {
-    const monthKey = `${currentDate.getFullYear()}-${String(
-      currentDate.getMonth() + 1
-    ).padStart(2, "0")}`;
-
-    const monthData = records[monthKey];
-
-    if (monthData) {
-      setTotalGenerated(monthData.units);
-      setChartData({
-  labels: [monthKey],
-  datasets: [
-    {
-      data: [monthData.units],
-      colors: [() => "#B8C7FF"],
-    },
-  ],
-});
-
-      await loadCommittedUnits(monthData.units);
-    } else {
-      setTotalGenerated(0);
-      setChartData(null);
-    }
-
-    setLoading(false);
-    return;
-  }
-
- if (tab === "Year") {
   const selectedYear = currentDate.getFullYear();
   const labels = [];
   const dataPoints = [];
 
+  let totalUnits = 0;
+  let totalCost = 0;
+
   Object.keys(records)
-    .filter(key => key.startsWith(selectedYear.toString()))
-    .sort((a, b) => new Date(a) - new Date(b))
-    .forEach(key => {
-      labels.push(new Date(key + "-01").toLocaleString("en", { month: "short" }));
-      dataPoints.push(records[key].units || 0);
-    });
+  .filter(key => key.startsWith(selectedYear.toString()))
+  .sort((a, b) => new Date(a + "-01") - new Date(b + "-01"))
+  .forEach(key => {
+    const rec = records[key] || {};
+    const units = rec.units || 0;
+    const saved = rec.cost || 0; // ✅ use cost, not saved
+
+    labels.push(new Date(key + "-01").toLocaleString("en", { month: "short" }));
+    dataPoints.push(units);
+
+    totalUnits += units;
+    totalCost += saved; // ✅ now it accumulates correctly
+  });
+
+  setTotalGenerated(Number(totalUnits.toFixed(1)));
+  setTotalSaved(Number(totalCost.toFixed(0)));
+
+  await loadCommittedUnits(totalUnits);
 
   const maxValue = Math.max(...dataPoints);
-  const maxIndex = dataPoints.indexOf(maxValue);
+const maxIndex = dataPoints.indexOf(maxValue);
 
-  const chartData = {
-    labels,
-    datasets: [
-      {
-        data: dataPoints,
-        colors: dataPoints.map((v, i) => () =>
-          i === maxIndex ? "#1F4FFF" : "#B8C7FF"
-        ),
-      },
-    ],
-  };
+setChartData({
+  labels,
+  datasets: [
+    {
+      data: dataPoints,
+      colors: dataPoints.map((v, i) => () =>
+        i === maxIndex ? "#1F4FFF" : "#B8C7FF"
+      ),
+    },
+  ],
+})
 
-  const total = dataPoints.reduce((a, b) => a + b, 0);
-  setTotalGenerated(total.toFixed(1));
-  await loadCommittedUnits(total);
-
-  setChartData(chartData);
   setLoading(false);
   return;
 }
-}
+
 
     // ================= API FLOW FOR DAY / WEEK / YEAR ==================
     await setAuthToken();
@@ -314,12 +490,40 @@ if (tab === "Month" || tab === "Year") {
     });
 
     const total = dataPoints.reduce((a, b) => a + b, 0);
-    setTotalGenerated(total.toFixed(1));
 
-    await loadCommittedUnits(total);
+setTotalGenerated(Number(total.toFixed(1)));
+setTotalSaved(Number((total * rate).toFixed(0)));
 
-    const maxValue = Math.max(...dataPoints);
-const maxIndex = dataPoints.indexOf(maxValue);
+const loadPotentialAndPercent = (generatedUnits) => {
+  if (totalInstalledCapacity <= 0) {
+    console.warn("Installed capacity not loaded yet");
+    setPotentialUnits(0);
+    setPercentGenerated(0);
+    setStatusColor("#FF9800");
+    return;
+  }
+
+  const potential = calculateCommittedUnits(
+    totalInstalledCapacity,
+    selectedTab,
+    currentDate
+  );
+
+  setPotentialUnits(potential);
+  setCommittedUnits(potential); // old name வேணும்னா வைங்க
+
+  const percent = potential > 0
+    ? Number(((generatedUnits / potential) * 100).toFixed(1))
+    : 0;
+
+  setPercentGenerated(percent);
+
+  const color = "#4CAF50";
+  setStatusColor(color);
+};
+
+    const maxValue = dataPoints.length ? Math.max(...dataPoints) : 0;
+const maxIndex = dataPoints.length ? dataPoints.indexOf(maxValue) : -1;
 
 setChartData({
   labels,
@@ -353,11 +557,16 @@ useEffect(() => {
   }, [selectedTab, currentDate]);
 
   const hasValidData =
-    chartData && chartData.datasets[0].data.some((v) => v > 0);
+  
+  chartData &&
+  chartData.datasets &&
+  chartData.datasets[0] &&
+  chartData.datasets[0].data &&
+  chartData.datasets[0].data.length > 0;
   return (
     <SafeAreaView style={styles.container}>
 
-      <ScrollView>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 0 }}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -427,14 +636,18 @@ useEffect(() => {
           />
         )}
 
-         {!loading && hasValidData && (
+         {!loading && hasValidData && chartData.labels.length > 0 && (
   <View style={{ alignItems: "center" }}>
 
     
     <BarChart
   data={chartData}
-  width={screenWidth - 30}
-  height={selectedTab === "Year" ? 300 : 220}   // Year-ku height அதிகம்
+  width={
+  selectedTab === "Month"
+    ? screenWidth
+    : Math.max(screenWidth - 1, (chartData?.labels?.length || 1) * 28)
+}
+  height={selectedTab === "Year" ? 300 : 220}   // Year
   fromZero
   withInnerLines={false}
   withOuterLines={false}
@@ -444,15 +657,17 @@ useEffect(() => {
   withCustomBarColorFromData
 
   // ✅ ONLY YEAR TAB LABEL ROTATE
-  verticalLabelRotation={selectedTab === "Year" ? 270 : 0}
-  xLabelsOffset={selectedTab === "Year" ? +2 : 0}
+  verticalLabelRotation={selectedTab === "Month" || selectedTab === "Year" ? 270 : 0}
+  xLabelsOffset={selectedTab === "Year" ? +1 : 0}
 
   chartConfig={{
     backgroundColor: "#fff",
     backgroundGradientFrom: "#fff",
     backgroundGradientTo: "#fff",
     decimalPlaces: 0,
-    barPercentage: 0.5,
+    barPercentage: selectedTab === "Month" ? 0.15 : 0.3,
+    paddingLeft: 0,
+  paddingRight: 0,
     color: (opacity = 1) => `rgba(184,199,255,${opacity})`,
     labelColor: () => "#444",
     propsForBackgroundLines: { stroke: "transparent" },
@@ -471,9 +686,12 @@ useEffect(() => {
             style={{ marginRight: 8 }}
           />
           <Text style={styles.energyText}>
-            Your solar home generated{" "}
-            <Text style={styles.highlight}>{percentGenerated}%</Text> of the potential energy
-          </Text>
+  Your solar home generated{" "}
+  <Text style={[styles.highlight, { color: statusColor }]}>
+    {percentGenerated}%
+  </Text>{" "}
+  of the potential energy
+</Text>
         </View>
         <View style={styles.summaryContainer}>
           <View style={styles.summaryItem}>
