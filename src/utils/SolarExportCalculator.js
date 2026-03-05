@@ -19,7 +19,7 @@ class SolarExportCalculator {
    * @param {string} [state='tamil-nadu'] - 'tamil-nadu' or 'kerala'
    * @param {number} [fixedCharge=0] - monthly fixed charge
    */
-  addConfig(monthKey, template, stateOverride = null, overrideFixedCharge = 0) {
+  addConfig(monthKey, template, overrideFixedCharge = 0) {
     if (!template || typeof template !== 'object') {
       console.warn(`Invalid template for ${monthKey}`);
       this.configByMonth[monthKey] = {
@@ -32,7 +32,7 @@ class SolarExportCalculator {
       return;
     }
 
-    const state = (stateOverride || template.state || 'tamil-nadu').toLowerCase();
+    const state = (template.state || 'tamil-nadu').toLowerCase();
     const type = template.type || 'progressive';
     let slabs = [];
     let fixedCharge = overrideFixedCharge || template.fixedCharge || 0;
@@ -51,7 +51,7 @@ class SolarExportCalculator {
 let slabsArray = template.slabs;
 
   // If no 'slabs' key → assume the object itself is the slabs (TN style)
-  if (!slabsArray && !template.slabs?.telescopic_up_to_250) {
+  if (!slabsArray) {
     slabsArray = Object.entries(template)
       .filter(([key]) => key !== 'state') // remove state key
       .map(([_, slab]) => slab);           // take values as slab objects
@@ -111,12 +111,9 @@ calculateMonthlyCredit(units, monthKey = 'default') {
       // Telescopic - progressive
       let remaining = units;
       for (const slab of telescopic) {
-        if (remaining <= 0) {
-  break;
-}
-        const slabEnd = slab.to == null ? Infinity : Number(slab.to);
-        const eligibleUnits = Math.max(0, Math.min(units, slabEnd) - slab.from + 1);
-const slabUnits = Math.min(remaining, eligibleUnits);
+        if (remaining <= 0) break;
+        const slabEnd = slab.to === 'above' || slab.to == null ? Infinity : slab.to;
+        const slabUnits = Math.min(remaining, slabEnd - slab.from + 1);
         cost += slabUnits * slab.rate;
         remaining -= slabUnits;
       }
@@ -126,7 +123,7 @@ const slabUnits = Math.min(remaining, eligibleUnits);
       for (const slab of nonTelescopic) {
         const from = Number(slab.from || 0);
         const to = slab.to === 'above' || slab.to == null ? Infinity : Number(slab.to);
-        if (units <= to) {
+        if (units >= from && units <= to) {
           rate = Number(slab.rate);
           break;
         }
@@ -138,22 +135,14 @@ const slabUnits = Math.min(remaining, eligibleUnits);
     const slabs = config.slabs || [];
     let remaining = units;
     for (const slab of slabs) {
-  if (remaining <= 0) {
-    break;
-  }
-
-  const slabEnd = slab.to == null ? Infinity : Number(slab.to);
-
-  const eligibleUnits =
-    Math.max(0, Math.min(units, slabEnd) - slab.from + 1);
-
-  const slabUnits = Math.min(remaining, eligibleUnits);
-
-  if (slabUnits > 0) {
-    cost += slabUnits * slab.rate;
-    remaining -= slabUnits;
-  }
-}
+      if (remaining <= 0) break;
+      const slabEnd = slab.to === 'above' || slab.to == null ? Infinity : slab.to;
+      const slabUnits = Math.min(remaining, slabEnd - slab.from + 1);
+      if (slabUnits > 0) {
+        cost += slabUnits * slab.rate;
+        remaining -= slabUnits;
+      }
+    }
     if (remaining > 0) {
       const lastRate = slabs[slabs.length - 1]?.rate || 0;
       cost += remaining * lastRate;

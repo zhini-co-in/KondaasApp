@@ -503,10 +503,7 @@ if (processed.length > 0) {
                 </TouchableOpacity>
               </View>
 
-              <View style={styles.liveRow}>
-                <View style={styles.liveDot} />
-                <Text style={styles.liveText}>Live</Text>
-              </View>
+
             </View>
           </View>
         </View>
@@ -697,23 +694,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#000",
   },
-  liveRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 2,
-  },
-  liveDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: "#2ecc71",
-    marginRight: 5,
-  },
-  liveText: {
-    color: "#2ecc71",
-    fontSize: 12,
-    fontWeight: "500",
-  },
+  
   iconRow: {
     flexDirection: "row",
     alignItems: "center",

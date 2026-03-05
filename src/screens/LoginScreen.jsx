@@ -9,6 +9,7 @@ import {
   ScrollView,
   Alert,
   Animated,
+  StatusBar,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import auth from "@react-native-firebase/auth";
@@ -114,36 +115,41 @@ const handleSendOTP = async () => {
   }
 };
 
-  return (
-      <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
-        <LinearGradient
-          colors={['#F00001', '#B00100']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.safeArea}
-        >
-        <Animated.View
-          style={[styles.netBanner, { transform: [{ translateY: slideAnim }] }]}
-        >
-          <Text style={styles.netBannerText}>No Internet Connection</Text>
-        </Animated.View>
+ return (
+    <View style={{ flex: 1 }}>
+      {/* 2. TRANSLUCENT STATUS BAR: This allows the gradient to sit underneath the clock */}
+      <StatusBar 
+        translucent 
+        backgroundColor="transparent" 
+        barStyle="light-content" 
+      />
 
-        <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-
-          {/* HEADER WITH GRADIENT */}
-          <LinearGradient
-            colors={['#F00001', '#B00100']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.header}
+      {/* 3. WRAP EVERYTHING IN THE GRADIENT SO IT COVERS THE TOP AREA */}
+      <LinearGradient
+        colors={['#F00001', '#B00100']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={{ flex: 1 }}
+      >
+        <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+          <Animated.View
+            style={[styles.netBanner, { transform: [{ translateY: slideAnim }] }]}
           >
-            <Image
-              source={require("../../assets/images/kondass.png")}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-          </LinearGradient>
+            <Text style={styles.netBannerText}>No Internet Connection</Text>
+          </Animated.View>
 
+          <ScrollView 
+            contentContainerStyle={{ flexGrow: 1 }} 
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* 4. HEADER: Removed extra LinearGradient here since parent already has it */}
+            <View style={styles.header}>
+              <Image
+                source={require("../../assets/images/kondass.png")}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            </View>
           {/* WHITE CONTAINER */}
           <View style={styles.bottomContainer}>
             <View style={styles.indicatorWrapper}>
@@ -196,8 +202,10 @@ const handleSendOTP = async () => {
         </ScrollView>
 
         {loading && <Loader />}
+      </SafeAreaView>
       </LinearGradient>
-    </SafeAreaView>
+      </View>
+
   );
 };
 export default LoginScreen;
@@ -224,8 +232,8 @@ const styles = StyleSheet.create({
   header: {
     justifyContent: "center",
     alignItems: "center",
-
-    paddingVertical: 40,
+    paddingTop: 60,
+    paddingBottom:40,
   },
   logo: {
     width: 200,

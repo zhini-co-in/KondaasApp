@@ -467,7 +467,7 @@ setChartData({
     setWeekEnd(end);
 
     const timeType =
-      tab === "Day" ? 2 :
+      tab === "Day" ? 1 :
       tab === "Week" ? 2 :
       tab === "Year" ? 4 : null;
 
@@ -484,15 +484,100 @@ setChartData({
     const labels = [];
     const dataPoints = [];
 
-    items.forEach((item, index) => {
-      labels.push(item.day || item.hour || index + 1);
-      dataPoints.push(Number(item.generationValue) || 0);
-    });
+    if (tab === "Day") {
 
-    const total = dataPoints.reduce((a, b) => a + b, 0);
+  // 🔹 1️⃣ Get hourly graph data
+  const hourlyPayload = {
+    stationId,
+    timeType: 1,  // hourly
+    startTime: start,
+    endTime: end,
+  };
 
-setTotalGenerated(Number(total.toFixed(1)));
-setTotalSaved(Number((total * rate).toFixed(0)));
+  const hourlyData = await fetchHistoricalData(hourlyPayload);
+  const hourlyItems = hourlyData.stationDataItems || [];
+
+  const hourMap = {};
+  const labels = [];
+  const dataPoints = [];
+
+  const INTERVAL_MINUTES = 5; // 🔥 change if API interval different
+
+hourlyItems.forEach((item) => {
+  if (item.dateTime && item.generationPower != null) {
+
+    const date = new Date(item.dateTime * 1000);
+    const hour = date.getHours();
+
+    if (!hourMap[hour]) {
+      hourMap[hour] = 0;
+    }
+
+    // 🔥 Convert W → kWh
+    const units =
+      (Number(item.generationPower) * INTERVAL_MINUTES) / (60 * 1000);
+
+    hourMap[hour] += units;
+  }
+});
+
+  for (let i = 0; i < 24; i++) {
+
+  // Convert to 12 hour format
+  const hour12 = i % 12 === 0 ? 12 : i % 12;
+  const ampm = i < 12 ? "AM" : "PM";
+
+  // Make 2 digit format (01, 02, 03...)
+  const hourLabel = hour12.toString().padStart(2, "0");
+
+  // Show label every 2 hours
+  if (i % 2 === 0) {
+    labels.push(`${hourLabel} ${ampm}`);
+  } else {
+    labels.push("");
+  }
+
+  dataPoints.push(hourMap[i] || 0);
+}
+
+  // 🔹 2️⃣ Get total generated (daily total)
+  const totalPayload = {
+    stationId,
+    timeType: 2,  // daily total
+    startTime: start,
+    endTime: end,
+  };
+
+  const totalData = await fetchHistoricalData(totalPayload);
+  const totalItems = totalData.stationDataItems || [];
+
+  let totalUnits = 0;
+
+  totalItems.forEach((item) => {
+    totalUnits += Number(item.generationValue) || 0;
+  });
+
+  setTotalGenerated(Number(totalUnits.toFixed(1)));
+  setTotalSaved(Number((totalUnits * rate).toFixed(0)));
+
+  setChartData({
+    labels,
+    datasets: [{ data: dataPoints }],
+  });
+
+  return;
+} else {
+
+  items.forEach((item, index) => {
+    labels.push(item.day || index + 1);
+    dataPoints.push(Number(item.generationValue) || 0);
+  });
+
+  const total = dataPoints.reduce((a, b) => a + b, 0);
+
+  setTotalGenerated(Number(total.toFixed(1)));
+  setTotalSaved(Number((total * rate).toFixed(0)));
+}
 
 const loadPotentialAndPercent = (generatedUnits) => {
   if (totalInstalledCapacity <= 0) {
@@ -510,7 +595,7 @@ const loadPotentialAndPercent = (generatedUnits) => {
   );
 
   setPotentialUnits(potential);
-  setCommittedUnits(potential); // old name வேணும்னா வைங்க
+  setCommittedUnits(potential);
 
   const percent = potential > 0
     ? Number(((generatedUnits / potential) * 100).toFixed(1))
@@ -639,41 +724,88 @@ useEffect(() => {
          {!loading && hasValidData && chartData.labels.length > 0 && (
   <View style={{ alignItems: "center" }}>
 
-    
-    <BarChart
-  data={chartData}
-  width={
-  selectedTab === "Month"
-    ? screenWidth
-    : Math.max(screenWidth - 1, (chartData?.labels?.length || 1) * 28)
-}
-  height={selectedTab === "Year" ? 300 : 220}   // Year
-  fromZero
-  withInnerLines={false}
-  withOuterLines={false}
-  showValuesOnTopOfBars={false}
+    {selectedTab === "Day" ? (
 
-  flatColor
-  withCustomBarColorFromData
+      // 🔥 DAY GRAPH (CRYPTO STYLE)
+      <LineChart
+        data={{
+          labels: chartData.labels,
+          datasets: [
+            {
+              data: chartData.datasets[0].data,
+            },
+          ],
+        }}
+        width={screenWidth - 20}
+        height={220}
+        fromZero
+        withDots={false}
+        withInnerLines={false}
+        withOuterLines={false}
+        withShadow={true}
+        bezier
+        verticalLabelRotation={270}
+        chartConfig={{
+          backgroundColor: "#fff",
+          backgroundGradientFrom: "#fff",
+          backgroundGradientTo: "#fff",
 
-  // ✅ ONLY YEAR TAB LABEL ROTATE
-  verticalLabelRotation={selectedTab === "Month" || selectedTab === "Year" ? 270 : 0}
-  xLabelsOffset={selectedTab === "Year" ? +1 : 0}
+          decimalPlaces: 1,
 
-  chartConfig={{
-    backgroundColor: "#fff",
-    backgroundGradientFrom: "#fff",
-    backgroundGradientTo: "#fff",
-    decimalPlaces: 0,
-    barPercentage: selectedTab === "Month" ? 0.15 : 0.3,
-    paddingLeft: 0,
-  paddingRight: 0,
-    color: (opacity = 1) => `rgba(184,199,255,${opacity})`,
-    labelColor: () => "#444",
-    propsForBackgroundLines: { stroke: "transparent" },
-  }}
-  style={{ borderRadius: 12 }}
-/>
+          color: (opacity = 1) => `rgba(31,79,255,${opacity})`,
+          labelColor: () => "#888",
+
+          fillShadowGradient: "#1F4FFF",
+          fillShadowGradientOpacity: 0.8,
+
+          propsForBackgroundLines: {
+            stroke: "transparent",
+          },
+        }}
+        style={{
+          borderRadius: 16,
+        }}
+
+  xLabelsOffset={12}
+  segments={2}
+      />
+
+    ) : (
+
+      // 🔹 OTHER TABS → BAR CHART (UNCHANGED)
+      <BarChart
+        data={chartData}
+        width={
+          selectedTab === "Month"
+            ? screenWidth
+            : Math.max(screenWidth - 1, (chartData?.labels?.length || 1) * 28)
+        }
+        height={selectedTab === "Year" ? 300 : 220}
+        fromZero
+        withInnerLines={false}
+        withOuterLines={false}
+        flatColor
+        withCustomBarColorFromData
+        verticalLabelRotation={270}    
+  xLabelsOffset={-3}      
+  yLabelsOffset={10}
+        chartConfig={{
+          backgroundColor: "#fff",
+          backgroundGradientFrom: "#fff",
+          backgroundGradientTo: "#fff",
+          decimalPlaces: 0,
+          barPercentage: 0.3,
+          color: (opacity = 1) =>
+            `rgba(184,199,255,${opacity})`,
+          labelColor: () => "#444",
+          propsForBackgroundLines: {
+            stroke: "transparent",
+          },
+        }}
+        style={{ borderRadius: 12 }}
+      />
+    )}
+
   </View>
 )}
 
@@ -694,17 +826,18 @@ useEffect(() => {
 </Text>
         </View>
         <View style={styles.summaryContainer}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{totalGenerated} Units</Text>
-            <Text style={styles.summaryLabel}>Total Generated</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>
-              ₹{totalSaved}
-            </Text>
-            <Text style={styles.summaryLabel}>Money Saved</Text>
-          </View>
-        </View>
+  <View style={styles.summaryItem}>
+    <Text style={styles.summaryValue}>{totalGenerated} Units</Text>
+    <Text style={styles.summaryLabel}>Total Generated</Text>
+  </View>
+
+  {(selectedTab === "Month" || selectedTab === "Year") && (
+    <View style={styles.summaryItem}>
+      <Text style={styles.summaryValue}>₹{totalSaved}</Text>
+      <Text style={styles.summaryLabel}>Money Saved</Text>
+    </View>
+  )}
+</View>
 
         <TouchableOpacity
           onPress={() => navigation.navigate(SCREEN_NAMES.KONDA_ABOUT)}

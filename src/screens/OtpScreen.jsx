@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  StatusBar,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DeviceInfo from "react-native-device-info";
@@ -191,27 +192,32 @@ const handleConfirm = async () => {
     console.log("📩 FCM permission status:", authStatus);
   };
   return (
-    <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
+    <View style={{ flex: 1 }}>
+      {/* 2. TRANSLUCENT STATUS BAR: Makes the system bar invisible so the gradient flows up */}
+      <StatusBar 
+        translucent 
+        backgroundColor="transparent" 
+        barStyle="light-content" 
+      />
+
+      {/* 3. WRAP EVERYTHING IN THE MAIN GRADIENT */}
       <LinearGradient
         colors={['#F00001', '#B00100']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-          <LinearGradient
-            colors={['#F00001', '#B00100']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.header}
-          >
-            <Image
-              source={require("../../assets/images/kondass.png")}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-          </LinearGradient>
-
+        <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+            
+            {/* 4. HEADER: Removed extra LinearGradient/Background to use parent's unique color shadow */}
+            <View style={styles.header}>
+              <Image
+                source={require("../../assets/images/kondass.png")}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            </View>
           <View style={styles.bottomContainer}>
             <View style={styles.indicatorWrapper}>
               <View style={styles.indicator}></View>
@@ -288,20 +294,21 @@ const handleConfirm = async () => {
           </View>
         </ScrollView>
         {loading && <Loader />}
+        </SafeAreaView>
       </LinearGradient>
-    </SafeAreaView>
+      </View>
+      
   );
 };
 
 export default OtpScreen;
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#fb0404" },
   header: {
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fb0404",
-    paddingVertical: 40,
+    paddingTop: 60,
+    paddingBottom:40,
   },
   logo: { width: 200, height: 100 },
   bottomContainer: {
@@ -363,6 +370,9 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
   },
   confirmText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  changeNumberContainer: { alignItems: "center", marginTop: 15 },
+  changeNumberText: { color: "#555", fontSize: 14 },
+  changeLink: { color: "#fb0404", fontWeight: "600", textDecorationLine: "underline" },
   resendContainer: { alignItems: "center", marginTop: 15 },
   resendText: { color: "#fb0404", fontSize: 15, fontWeight: "600" },
   timerText: { color: "#777", fontSize: 14 },

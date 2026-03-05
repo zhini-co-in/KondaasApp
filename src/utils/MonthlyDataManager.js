@@ -3,49 +3,38 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import SolarExportCalculator from './SolarExportCalculator';
 import SlabsSyncManager from './SlabsSyncManager';
 import { setAuthToken, fetchHistoricalData } from "../api/api";
-import { getStationId } from "./stationId";
 
-const getKey = (stationId) =>
-  `@SolarApp:monthly_generation_${stationId}`;
-
+const MONTHLY_KEY = '@SolarApp:monthly_generation';
 
 class MonthlyDataManager {
-  static async _getStoredData(stationId) {
-  try {
-    const json = await AsyncStorage.getItem(getKey(stationId));
-    return json ? JSON.parse(json) : null;
-  } catch {
-    return null;
+  static async _getStoredData() {
+    try {
+      const json = await AsyncStorage.getItem(MONTHLY_KEY);
+      return json ? JSON.parse(json) : null;
+    } catch {
+      return null;
+    }
   }
-}
 
-  static async _saveData(stationId, data) {
-  try {
-    await AsyncStorage.setItem(
-      getKey(stationId),
-      JSON.stringify(data)
-    );
-  } catch (e) {
-    console.error('Failed to save monthly data', e);
+  static async _saveData(data) {
+    try {
+      await AsyncStorage.setItem(MONTHLY_KEY, JSON.stringify(data));
+    } catch (e) {
+      console.error('Failed to save monthly data', e);
+    }
   }
-}
 
   /**
    * Full sync: Fetch month-by-month from creation date to current month
    * @param {string} stationId - current station ID
    */
   static async sync(stationId) {
+    if (!stationId) {
+      console.warn('No stationId provided');
+      return null;
+    }
 
-  if (!stationId) {
-    stationId = await getStationId(); // ✅ AUTO LOAD
-  }
-
-  if (!stationId) {
-    console.warn("No stationId found");
-    return null;
-  }
-
-    const stored = (await this._getStoredData(stationId)) || {
+    const stored = (await this._getStoredData()) || {
       monthlyRecords: {},
       cumulativeUnits: 0,
       cumulativeCost: 0,
@@ -77,26 +66,14 @@ class MonthlyDataManager {
 
     // Build month list
     const monthsToFetch = [];
-let cursor = new Date(startDate);
-cursor.setDate(1);
+    let cursor = new Date(startDate);
+    cursor.setDate(1); // start of month
 
-const isFirstSync = !stored.lastSyncMonth;
-
-while (cursor <= now) {
-  const m = this._formatYearMonth(cursor);
-
-  if (isFirstSync) {
-    // First time → fetch all
-    monthsToFetch.push(m);
-  } else {
-    // After first sync → fetch months after lastSyncMonth
-    if (m > stored.lastSyncMonth) {
+    while (cursor <= now) {
+      const m = this._formatYearMonth(cursor);
       monthsToFetch.push(m);
+      cursor.setMonth(cursor.getMonth() + 1);
     }
-  }
-
-  cursor.setMonth(cursor.getMonth() + 1);
-}
 
 
     const calculator = new SolarExportCalculator();
@@ -163,7 +140,7 @@ while (cursor <= now) {
     };
 
 
-    await this._saveData(stationId, finalData);
+    await this._saveData(finalData);
     console.log('Ezhil Monthly sync completed ', finalData);
 
     return finalData;
@@ -173,24 +150,24 @@ while (cursor <= now) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
   }
 
-  static async getMonth(stationId, monthKey) {
-  const stored = await this._getStoredData(stationId);
-  return stored?.monthlyRecords?.[monthKey] || null;
-}
+  static async getMonth(monthKey) {
+    const stored = await this._getStoredData();
+    return stored?.monthlyRecords?.[monthKey] || null;
+  }
 
-  static async getCurrentMonth(stationId) {
-  const now = new Date();
-  const current = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  return this.getMonth(stationId, current);
-}
+  static async getCurrentMonth() {
+    const now = new Date();
+    const current = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    return this.getMonth(current);
+  }
 
-  static async getAll(stationId) {
-  return await this._getStoredData(stationId);
-}
+  static async getAll() {
+    return await this._getStoredData();
+  }
 
-  static async clear(stationId) {
-  await AsyncStorage.removeItem(getKey(stationId));
-}
+  static async clear() {
+    await AsyncStorage.removeItem(MONTHLY_KEY);
+  }
 }
 
 export default MonthlyDataManager;
