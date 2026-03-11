@@ -2,13 +2,13 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import MultiLineChart from "../components/MultiLineChart";
 import { fetchHistoricalData } from "../api/api";
@@ -178,12 +178,14 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
         </View>
 
         <View style={styles.chartContainer}>
-          {chartData.length > 0 ? (
-            <MultiLineChart datasets={chartData} labels={labels} />
-          ) : (
-            <Text style={{ textAlign: "center", color: "#888" }}>No data available</Text>
-          )}
-        </View>
+  {chartData.length > 0 ? (
+    <MultiLineChart datasets={chartData} labels={labels} />
+  ) : (
+    <Text style={{ textAlign: "center", color: "#888" }}>
+      No data available
+    </Text>
+  )}
+</View>
 
         <View style={[styles.infoCard, { backgroundColor: "#E6F9EF" }]}>
           <View style={styles.iconCircleGreen}>
@@ -278,9 +280,10 @@ const styles = StyleSheet.create({
   },
 
   chartContainer: {
-    alignItems: "center",
-    marginBottom: 15,
-  },
+  alignItems: "center",
+  marginTop: 10,
+  marginBottom: 15,
+},
 
   infoCard: {
     flexDirection: "row",

@@ -3,13 +3,14 @@ import {
   View,
   Text,
   Image,
-  SafeAreaView,
+  
   ScrollView,
   TouchableOpacity,
   StatusBar,
   StyleSheet,
   Modal,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { SCREEN_NAMES } from '../constants/screenNames';
 

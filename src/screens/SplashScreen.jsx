@@ -5,6 +5,7 @@ import {
   View,
   StyleSheet,
   StatusBar,
+  Platform
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Kondaas } from '../constants/ImageConstant';
@@ -137,5 +138,9 @@ const styles = StyleSheet.create({
     fontFamily: FontStyles.POPPINS500,
     fontWeight: '400',
     padding: 12,
+    position: 'absolute', 
+    bottom: Platform.OS === 'ios' ? 65 : 45, 
+    textAlign: 'center',
+    width: '100%',
   },
 });

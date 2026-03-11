@@ -518,10 +518,15 @@ if (processed.length > 0) {
           <Text style={styles.updateText}>Updated {updatedTime}</Text>
           {/* Card */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>
-              Your Solar home is{" "}
-              <Text style={styles.brandText}>kondaas Assured™</Text>
-            </Text>
+            <Text
+  style={styles.cardTitle}
+  numberOfLines={1}
+  adjustsFontSizeToFit
+  minimumFontScale={0.7}
+>
+  Your Solar home is{" "}
+  <Text style={styles.brandText}>kondaas Assured™</Text>
+</Text>
             <View style={styles.progressBar}>
               <Animated.View
   style={[
@@ -767,6 +772,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "500",
     color: "#333",
+    flexWrap: "nowrap",
   },
   brandText: { color: "#ED1C25", fontWeight: "900" },
   progressBar: {

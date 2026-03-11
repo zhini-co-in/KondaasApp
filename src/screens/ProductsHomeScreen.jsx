@@ -3,7 +3,7 @@ import {
   View,
   Text,
   Image,
-  SafeAreaView,
+
   ScrollView,
   TouchableOpacity,
   StyleSheet,
@@ -13,6 +13,7 @@ import {
   Modal,
   TextInput,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useNavigation } from "@react-navigation/native";
 import firestore from "@react-native-firebase/firestore";

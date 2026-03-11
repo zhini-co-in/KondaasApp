@@ -2,12 +2,13 @@ import React from "react";
 import {
   View,
   Text,
-  SafeAreaView,
+
   ScrollView,
   StatusBar,
   TouchableOpacity,
   StyleSheet,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import LinearGradient from "react-native-linear-gradient";
 import Ionicons from "react-native-vector-icons/Ionicons";
 

@@ -3,11 +3,12 @@ import {
   View,
   Text,
   TouchableOpacity,
-  SafeAreaView,
+  
   ScrollView,
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { BarChart,LineChart  } from "react-native-chart-kit";
 import { Dimensions } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";

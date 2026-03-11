@@ -4,7 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import {
     View,
     Text,
-    SafeAreaView,
+    
     ScrollView,
     StatusBar,
     TouchableOpacity,
@@ -12,6 +12,7 @@ import {
     Alert,
     Linking,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import firestore from "@react-native-firebase/firestore";
 import Loader from "../components/Loader";
