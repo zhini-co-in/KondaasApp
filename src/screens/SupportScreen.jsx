@@ -243,16 +243,17 @@ const styles = StyleSheet.create({
         fontSize: 15,
     },
     createButton: {
-
-        borderRadius: 8,
-        paddingVertical: 12,
-        alignItems: "center",
-    },
+  height: 45,
+  borderRadius: 8,
+  justifyContent: "center",
+  alignItems: "center",
+},
     createButtonText: {
-        color: "#fff",
-        fontWeight: "600",
-        fontSize: 15,
-    },
+  color: "#fff",
+  fontWeight: "600",
+  fontSize: 15,
+  lineHeight: 20
+},
     recentTitle: {
         fontSize: 16,
         fontWeight: "700",

@@ -17,14 +17,17 @@ end
 target 'KondaasApp' do
   config = use_native_modules!
 
+  pod 'FirebaseCore'
   pod 'FirebaseAuth'
   pod 'FirebaseFirestore'
-  pod 'FirebaseCore'
+
+  pod 'FirebaseMessaging'
+  pod 'FirebaseAppCheck'
 
   use_react_native!(
     :path => config[:reactNativePath],
     :app_path => "#{Pod::Config.instance.installation_root}/..",
-    :hermes_enabled => false,   # ← FINAL FIX
+    :hermes_enabled => true,
     :fabric_enabled => false
   )
 

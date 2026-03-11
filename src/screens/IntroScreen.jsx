@@ -102,6 +102,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 5,
+    marginTop: 20,
   },
   skipText: {
     color: "#f00001",

@@ -136,31 +136,31 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   highlightBox: {
-    paddingVertical: 20,
+    paddingVertical: 0,
     alignItems: "center",
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
   },
   highlightTitle: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: "700",
   },
   highlightSub: {
     color: "#fff",
-    fontSize: 14,
+    fontSize: 12,
     marginTop: 4,
   },
   updateBox: {
     backgroundColor: "#FF8A80",
     borderRadius: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 6,
+    paddingHorizontal: 13,
+    paddingVertical: 3,
     marginTop: 10,
   },
   updateText: {
     color: "#fff",
-    fontSize: 12,
+    fontSize: 10,
   },
   content: {
     padding: 20,

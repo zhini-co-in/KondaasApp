@@ -882,10 +882,27 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  activeTabButton: { width: "100%", borderRadius: 6, paddingVertical: 8, alignItems: "center" },
+  activeTabButton: {
+  width: "100%",
+  height: "100%",        // 🔥 important
+  borderRadius: 6,
+  justifyContent: "center",
+  alignItems: "center",
+},
 
-  tabText: { color: "#444", fontSize: 14, fontWeight: "500" },
-  activeTabText: { color: "#fff" },
+  tabText: { 
+  color: "#444", 
+  fontSize: 14, 
+  fontWeight: "500",
+  lineHeight: 18
+},
+
+activeTabText: { 
+  color: "#fff",
+  fontSize: 14,
+  fontWeight: "600",
+  lineHeight: 18
+},
   dateSelector: {
     justifyContent: "center",
     alignItems: "center",

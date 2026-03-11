@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CLIENT_ID</key>
+	<string>833207375451-eipirgpkbqlpv9s9q2aqc0bahm2spfo9.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.833207375451-eipirgpkbqlpv9s9q2aqc0bahm2spfo9</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>833207375451-ebcm11u0krsu48hn787nqjicdtdoh2aa.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
 	<string>AIzaSyDJ1m5b-lnaf_HBb0fPQxwtcYHDwYL1ccI</string>
 	<key>GCM_SENDER_ID</key>
@@ -15,15 +21,15 @@
 	<key>STORAGE_BUCKET</key>
 	<string>kondaas-5dfaa.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
-	<false></false>
+	<false/>
 	<key>IS_ANALYTICS_ENABLED</key>
-	<false></false>
+	<false/>
 	<key>IS_APPINVITE_ENABLED</key>
-	<true></true>
+	<true/>
 	<key>IS_GCM_ENABLED</key>
-	<true></true>
+	<true/>
 	<key>IS_SIGNIN_ENABLED</key>
-	<true></true>
+	<true/>
 	<key>GOOGLE_APP_ID</key>
 	<string>1:833207375451:ios:5c6999e8518509be39917e</string>
 </dict>

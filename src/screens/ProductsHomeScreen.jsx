@@ -146,7 +146,7 @@ const handleSaveCredentials = async () => {
                 {/* Ram kumar */}
                 {userData?.UserInfo?.name || "Guest User"}
               </Text>
-              <Text style={styles.liveText}>● Live</Text>
+              
             </View>
           </View>
           <View style={styles.iconRow}>
@@ -323,7 +323,6 @@ const styles = StyleSheet.create({
   profileRow: { flexDirection: "row", alignItems: "center" },
   profileImg: { width: 35, height: 35, borderRadius: 20, marginRight: 10 },
   profileName: { fontSize: 15, fontWeight: "600", color: "#000" },
-  liveText: { fontSize: 13, color: "green" },
   iconRow: { flexDirection: "row" },
   iconBox: { marginLeft: 10 },
 

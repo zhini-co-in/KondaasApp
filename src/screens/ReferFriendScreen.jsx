@@ -344,14 +344,16 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   referBtn: {
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 30,
+    height: 48,
+  borderRadius: 8,
+  justifyContent: "center",
+  alignItems: "center",
+  marginTop: 30,
   },
   referBtnText: {
     color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
+  fontSize: 16,
+  fontWeight: "600",
+  lineHeight: 20
   },
 });

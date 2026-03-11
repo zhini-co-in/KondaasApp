@@ -239,7 +239,7 @@ const ProfileScreen = ({ route, navigation }) => {
                 >
                     <LinearGradient
                         colors={["#F00001", "#B00100"]}
-                        start={{ x: 0.5, y: 0 }}
+                        start={{ x: 0.5, y: 2 }}
                         end={{ x: 0.5, y: 1 }}
                         style={styles.logoutButton}
                     >
@@ -370,12 +370,18 @@ const styles = StyleSheet.create({
     achievementText: { fontWeight: "600", color: "#333" },
 
     logoutButton: {
-        margin: 15,
-        paddingVertical: 12,
-        borderRadius: 10,
-        alignItems: "center",
-    },
-    logoutText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+    margin: 15,
+    height: 50,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+},
+    logoutText: { 
+    color: "#fff", 
+    fontWeight: "700", 
+    fontSize: 16,
+    lineHeight: 20
+},
     modalOverlay: {
         flex: 1,
         backgroundColor: "rgba(0,0,0,0.4)",

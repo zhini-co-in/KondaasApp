@@ -209,7 +209,7 @@ const ReferAndEarnScreen = ({ navigation }) => {
                 >
                   <LinearGradient
                     colors={["#F00001", "#B00100"]}
-                    start={{ x: 0.5, y: 1 }}
+                    start={{ x: 0.5, y: 0 }}
                     end={{ x: 0.5, y: 1 }}
                     style={styles.remindBtn}
                   >
@@ -261,13 +261,13 @@ const styles = StyleSheet.create({
   topLabel: { fontSize: 13, color: "#777", marginTop: 2 },
 
   referBtn: {
-
-    borderRadius: 8,
-    marginHorizontal: 20,
-    marginVertical: 20,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
+  height: 45,
+  borderRadius: 8,
+  marginHorizontal: 20,
+  marginVertical: 20,
+  justifyContent: "center",
+  alignItems: "center",
+},
   referBtnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
 
   sectionTitle: {
@@ -285,24 +285,38 @@ const styles = StyleSheet.create({
   stepText: { fontSize: 14, color: "#444", flex: 1 },
 
   referralList: { marginTop: 10, marginHorizontal: 15 },
-  referralCard: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#f9f9f9",
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 10,
-  },
-  referralLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
-  referralName: { fontWeight: "700", fontSize: 14 },
+ referralCard: {
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  backgroundColor: "#f9f9f9",
+  borderRadius: 10,
+  paddingVertical: 12,
+  paddingHorizontal: 14,
+  marginBottom: 10,
+},
+  referralLeft: {
+  flexDirection: "row",
+  alignItems: "center",
+  flex: 1,
+  marginRight: 10,
+},
+  referralName: {
+  fontWeight: "700",
+  fontSize: 14,
+  maxWidth: 110},
   referralStatus: { fontSize: 12, color: "#666" },
   remindBtn: {
-    borderRadius: 20,
-    paddingVertical: 5,
-    paddingHorizontal: 12,
-  },
-  remindBtnText: { color: "#fff", fontSize: 12, fontWeight: "600" },
+  width: 90,
+  height: 34,
+  borderRadius: 20,
+  justifyContent: "center",
+  alignItems: "center",
+},
+  remindBtnText: { color: "#fff",
+  fontSize: 12,
+  fontWeight: "600",
+  lineHeight: 16 },
   howItWorksContainer: {
     marginHorizontal: 20,
     marginTop: 10,

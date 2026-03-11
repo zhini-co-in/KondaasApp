@@ -26,6 +26,11 @@ const LoginScreen = ({ navigation }) => {
   const slideAnim = useState(new Animated.Value(-60))[0];
 
   useEffect(() => {
+    if (__DEV__) {
+  auth().settings.appVerificationDisabledForTesting = true;
+}
+  }, []);
+  useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
       setIsConnected(state.isConnected);
 
@@ -81,33 +86,30 @@ const handleSendOTP = async () => {
     setLoading(true);
     const fullNumber = "+91" + phoneNumber.trim();
  auth()
-      .verifyPhoneNumber(fullNumber)
-      .on("state_changed", async snapshot => {
+  .verifyPhoneNumber(fullNumber)
+  .on("state_changed", async snapshot => {
 
-        switch (snapshot.state) {
+    switch (snapshot.state) {
 
-          case auth.PhoneAuthState.CODE_SENT:
-            setLoading(false);
-            navigation.navigate(SCREEN_NAMES.OTP, {
-              verificationId: snapshot.verificationId,
-              phoneNumber: fullNumber,
-            });
-           
-            break;
+      case auth.PhoneAuthState.CODE_SENT:
+        setLoading(false);
+        navigation.navigate(SCREEN_NAMES.OTP, {
+          verificationId: snapshot.verificationId,
+          phoneNumber: fullNumber,
+        });
+        break;
 
-          case auth.PhoneAuthState.AUTO_VERIFIED:
-            setLoading(false);
-            await handleAutoLogin(snapshot.credential, fullNumber);
-          
-            break;
+      case auth.PhoneAuthState.AUTO_VERIFIED:
+        // Ignore auto verification
+        console.log("Auto verification ignored");
+        break;
 
-          case auth.PhoneAuthState.ERROR:
-            setLoading(false);
-            Alert.alert("OTP Error", snapshot.error?.message);
-          
-            break;
-        }
-      });
+      case auth.PhoneAuthState.ERROR:
+        setLoading(false);
+        Alert.alert("OTP Error", snapshot.error?.message);
+        break;
+    }
+  });
 
   } catch (err) {
     setLoading(false);

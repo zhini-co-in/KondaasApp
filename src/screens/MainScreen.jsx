@@ -44,23 +44,26 @@ const MainScreen = ({ navigation }) => {
   const [todayGeneration, setTodayGeneration] = useState(0);
   const [lifeTimeGeneration, setLifetimeGeneration] = useState(0);
   // const [totalCost, setTotalCost] = useState('---');
+  const [refreshKey, setRefreshKey] = useState(0);
   const [userInfo, setUserInfo] = useState(null);
   const { monthlyData, monthlyDataLoading } =
-  useMonthlyData(selectedStationId, userInfo?.UserInfo?.phoneNo);
+  useMonthlyData(selectedStationId, userInfo?.phoneNo, refreshKey);
   const [updatedTime, setUpdatedTime] = useState("");
   const [installationAmount, setInstallationAmount] = useState(0);
   const [todaySavings, setTodaySavings] = useState(0);
   const [progressPercent, setProgressPercent] = useState(0);
 const [progressColor, setProgressColor] = useState("#f39c12");
   const progressAnim = useRef(new Animated.Value(0)).current;
-const costValue = Number(monthlyData?.cumulativeCost ?? 0);
+let totalCost = "₹ Loading...";
 
-const totalCost = monthlyDataLoading
-  ? "₹ Loading..."
-  : `₹ ${costValue.toLocaleString("en-IN", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
+if (!monthlyDataLoading && monthlyData?.cumulativeCost) {
+  const costValue = Number(monthlyData.cumulativeCost);
+
+  totalCost = `₹ ${costValue.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
 
 console.log("MonthlyData:", monthlyData);
 
@@ -135,8 +138,20 @@ function processStations(data) {
     };
   });
 }
+useFocusEffect(
+  useCallback(() => {
+    setRefreshKey(prev => prev + 1); // refresh rupees
+
+    if (selectedStationId) {
+      loadTodayGeneration(selectedStationId);
+      getRealTimeGeneration(selectedStationId);
+    }
+  }, [selectedStationId])
+);
   useFocusEffect(
   useCallback(() => {
+    setRefreshKey(prev => prev + 1); // 👈 force refresh
+
     const loadUser = async () => {
       const data = await getStorageData(USER_DATA);
 
@@ -214,40 +229,14 @@ try {
     setUpdatedTime(formatted);
   }, []);
 
-  // async function sendLocalNotification() {
-  //   await notifee.requestPermission();
-
-  //   await notifee.displayNotification({
-  //     title: 'Hi',
-  //     body: 'Welcome back to Kondaas App!',
-  //     android: {
-  //       channelId: 'default',
-  //       smallIcon: 'ic_launcher',
-  //     },
-  //   });
-  // }
-  // useEffect(() => {
-  //   sendLocalNotification();
-  // }, []);
+  
   useEffect(() => {
     notifee.createChannel({
       id: 'default',
       name: 'Default Notifications',
     });
   }, []);
-  // useEffect(() => {
-  //   MonthlyDataManager.getAll().then(data => {
-  //     if (data?.cumulativeCost != null) {
-  //       const formatted = Number(data.cumulativeCost).toLocaleString('en-IN', {
-  //         minimumFractionDigits: 2,
-  //         maximumFractionDigits: 2,
-  //       });
-  //       setTotalCost(`₹ ${formatted}`);
-  //     }
-  //   }).catch(() => {
-  //     setTotalCost('₹ ---');
-  //   });
-  // }, []);
+
     
   const unitRate = parseFloat(userInfo?.UserInfo?.unitsrupees || 0);
   const totalSavings = (lifeTimeGeneration * unitRate).toFixed(2);
@@ -631,7 +620,7 @@ if (processed.length > 0) {
                       selectedStation === index && { backgroundColor: "#e6f0ff" },
                     ]}
                    onPress={async () => {
-  await MonthlyDataManager.clear?.();
+                    
   await SolarParseUtil.clear?.();
 
   setSelectedStation(index);
