@@ -239,7 +239,7 @@ const ProfileScreen = ({ route, navigation }) => {
                     onPress={() => setShowLogoutPopup(true)}
                 >
                     <LinearGradient
-                        colors={["#F00001", "#B00100"]}
+                        colors={["#F00001", "#d42f2f"]}
                         start={{ x: 0.5, y: 2 }}
                         end={{ x: 0.5, y: 1 }}
                         style={styles.logoutButton}

@@ -9,6 +9,7 @@ import {
   TextInput,
   StatusBar,
   Alert,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from "react-native-vector-icons/Ionicons";
@@ -195,13 +196,16 @@ const CreateTicketScreen = ({ route, navigation }) => {
         </Text>
         <View style={styles.dropdownContainer}>
           <Picker
-            selectedValue={selectedDevice}
-            onValueChange={(itemValue) => setSelectedDevice(itemValue)}
-            style={styles.picker}
-            itemStyle={styles.itemStyle}
-            dropdownIconColor="#000"
-            enabled={!loading}
-          >
+  selectedValue={selectedDevice}
+  onValueChange={(itemValue) => setSelectedDevice(itemValue)}
+  style={[
+    styles.picker,
+    Platform.OS === "ios" && styles.pickerIOS
+  ]}
+  itemStyle={Platform.OS === "ios" ? styles.itemStyle : {}}
+  dropdownIconColor="#000"
+  enabled={!loading}
+>
             <Picker.Item label="Select a Device" value="" color="#111010ff" />
             {loading ? (
               <Picker.Item />
@@ -306,22 +310,25 @@ const styles = StyleSheet.create({
   },
 
   dropdownContainer: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    backgroundColor: "#fff",
-  },
+  borderWidth: 1,
+  borderColor: "#ddd",
+  borderRadius: 8,
+  backgroundColor: "#fff",
+  paddingHorizontal: Platform.OS === "ios" ? 0 : 5,
+},
   picker: {
-    height: 55,        // important for TECNO devices
-    paddingHorizontal: 10,
-    justifyContent: "center",
-    color: "#000",
-  },
-  itemStyle: {
-    fontSize: 16,
-    height: 55,
-    lineHeight: 24,    // prevents text clipping
-  },
+  width: "100%",
+  color: "#000",
+},
+
+pickerIOS: {
+  height: 150,   // iOS picker height
+},
+
+itemStyle: {
+  fontSize: 16,
+  color: "#000",
+},
 
 
   textArea: {
