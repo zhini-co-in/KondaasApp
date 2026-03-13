@@ -85,14 +85,45 @@ const OtpScreen = ({ navigation, route }) => {
       }
 
       // FCM Token
-      let fcmToken = null;
-      try {
-        await requestFCMPermission();
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        fcmToken = await messaging().getToken();
-      } catch (err) {
-        Alert.alert("FCM Error", "Failed to get FCM token");
-      }
+      // FCM Token
+// --- FCM Token Logic Start ---
+let fcmToken = null;
+
+try {
+  // 1. Specifically request Android 13+ permission
+  if (Platform.OS === 'android' && Platform.Version >= 33) {
+    const status = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+    );
+    if (status !== PermissionsAndroid.RESULTS.GRANTED) {
+      console.log("Permission denied for notifications");
+      // Optional: You can choose to throw an error here or proceed with fcmToken = null
+    }
+  }
+
+  // 2. Request Firebase Messaging permission (handles iOS and internal FCM state)
+  const authStatus = await messaging().requestPermission();
+  const enabled =
+    authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+    authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+
+  if (enabled) {
+    // 3. Register device (Critical for Android 13+)
+    await messaging().registerDeviceForRemoteMessages();
+    
+    // 4. Fetch the actual token
+    fcmToken = await messaging().getToken();
+    console.log("FCM TOKEN SUCCESS:", fcmToken);
+  } else {
+    console.log("Messaging permission not enabled");
+  }
+
+} catch (err) {
+  console.log("FCM ERROR DETAIL:", err);
+  // Instead of a hard Alert that stops login, consider logging it 
+  // and allowing the user into the app without push notifications.
+}
+// --- FCM Token Logic End ---
 
       await userRef.set({ UserInfo: { ...userData.UserInfo, fcmToken } }, { merge: true });
 
