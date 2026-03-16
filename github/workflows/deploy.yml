@@ -1,0 +1,28 @@
+name: Kondaas Silent Update
+
+on:
+  push:
+    branches:
+      - main  # Make sure this matches your default branch name
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Push to Revopush
+        run: |
+          npm install -g @revopush/code-push-cli
+          revopush login --accessKey ${{ secrets.REVOPUSH_ACCESS_KEY }}
+          # This name 'KondaasApp' must match your Revopush Dashboard exactly
+          revopush release-react KondaasApp android -d Production
