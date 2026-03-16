@@ -4,6 +4,7 @@ apply plugin: "com.facebook.react"
 apply plugin: 'com.google.gms.google-services'
 
 
+
 /**
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.
@@ -126,4 +127,7 @@ dependencies {
     }
 }
 apply from: file("../../node_modules/react-native-vector-icons/fonts.gradle")
+
+/* ... all your other app settings ... */
+
 apply from: "../../node_modules/@revopush/react-native-code-push/android/codepush.gradle"
