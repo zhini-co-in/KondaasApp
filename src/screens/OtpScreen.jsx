@@ -62,7 +62,7 @@ const OtpScreen = ({ navigation, route }) => {
       const result = await auth().signInWithCredential(credential);
 
 
-      const cleanPhone = phone.replace("+91", "");
+      const cleanPhone = phone?.replace("+91", "").trim();
 
       const appInfo = { version: "1.0.0", buildNo: "1", lastLogin: new Date().toISOString() };
       const platformInfo = { os: DeviceInfo.getSystemName(), version: DeviceInfo.getSystemVersion() };
@@ -86,7 +86,7 @@ const OtpScreen = ({ navigation, route }) => {
 
       // FCM Token
       // FCM Token
-// --- FCM Token Logic Start ---
+// --- FCM Token Logic Start ---      
 let fcmToken = null;
 
 try {
@@ -135,8 +135,19 @@ try {
         if (tokenData?.access_token) accessToken = tokenData.access_token;
       }
 
-      const finalData = { ...userData, AppInfo: appInfo, PlatformInfo: platformInfo, accessToken: accessToken || null, UserInfo: { ...userData.UserInfo, fcmToken } };
-      await storeData(USER_DATA, JSON.stringify(finalData));
+      const finalData = {
+  ...userData,
+  AppInfo: appInfo,
+  PlatformInfo: platformInfo,
+  accessToken: accessToken || null,
+  UserInfo: {
+    ...userData.UserInfo,
+    phoneNo: cleanPhone,
+    fcmToken: fcmToken || null,
+  },
+};
+
+await storeData(USER_DATA, JSON.stringify(finalData));
 
       // Navigate
       if (email && password) {
@@ -274,6 +285,9 @@ const handleConfirm = async () => {
                   keyboardType="number-pad"
                   maxLength={1}
                   returnKeyType="next"
+                   textContentType="oneTimeCode"   // iOS OTP autofill
+      autoComplete="sms-otp"          // Android OTP autofill
+      importantForAutofill="yes"
                    onKeyPress={({ nativeEvent }) => {
         if (nativeEvent.key === "Backspace") {
           if (otp[index] === "" && index > 0) {

@@ -9,7 +9,11 @@ import {
     TouchableOpacity,
     StyleSheet,
     Modal,
+     TextInput,
+     Alert,
 } from "react-native";
+import firestore from "@react-native-firebase/firestore";
+import CryptoJS from "crypto-js";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
@@ -19,12 +23,31 @@ import { getStorageData, USER_DATA } from "../service/localStorage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import LinearGradient from "react-native-linear-gradient";
 import SolarParseUtil from '../utils/SolarParseUtil';
+import { saveMailCredentials } from "../service/mailCredentials";
 const ProfileScreen = ({ route, navigation }) => {
     const { stationId } = route.params || {};
     const [showLogoutPopup, setShowLogoutPopup] = useState(false);
     const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState(null);
     const [stationData, setStationData] = useState(null);
+    const [showCredentialPopup, setShowCredentialPopup] = useState(false);
+const [email, setEmail] = useState("");
+const [password, setPassword] = useState("");
+const [showPassword, setShowPassword] = useState(false);
+const handleUpdateCredentials = async () => {
+
+  const result = await saveMailCredentials(email, password);
+
+  if (result.success) {
+    Alert.alert("Success", result.message);
+    setShowCredentialPopup(false);
+    setEmail("");
+    setPassword("");
+  } else {
+    Alert.alert("Error", result.message);
+  }
+
+};
 
     useEffect(() => {
         const loadUserData = async () => {
@@ -236,8 +259,15 @@ const ProfileScreen = ({ route, navigation }) => {
 
                 {/* Logout Button */}
                 <TouchableOpacity
-                    onPress={() => setShowLogoutPopup(true)}
-                >
+    style={styles.modifyButton}
+    onPress={() => setShowCredentialPopup(true)}
+>
+    <Text style={styles.modifyText}>Modify Credentials</Text>
+</TouchableOpacity>
+
+<TouchableOpacity
+    onPress={() => setShowLogoutPopup(true)}
+>
                     <LinearGradient
                         colors={["#F00001", "#d42f2f"]}
                         start={{ x: 0.5, y: 2 }}
@@ -273,6 +303,85 @@ const ProfileScreen = ({ route, navigation }) => {
                     </View>
                 </View>
             </Modal>
+            <Modal
+transparent
+visible={showCredentialPopup}
+animationType="fade"
+onRequestClose={() => setShowCredentialPopup(false)}
+>
+
+<View style={styles.modalOverlay}>
+
+<View style={styles.popupBox}>
+
+<Ionicons name="mail-outline" size={40} color="#4A90E2" />
+
+<Text style={styles.popupTitle}>Modify Credentials</Text>
+
+<View style={styles.inputContainer}>
+<Ionicons name="mail-outline" size={18} color="#999"/>
+
+<TextInput
+placeholder="Enter email"
+value={email}
+onChangeText={setEmail}
+keyboardType="email-address"
+autoCapitalize="none"
+style={styles.input}
+/>
+</View>
+
+<View style={styles.inputContainer}>
+
+<Ionicons name="lock-closed-outline" size={18} color="#999"/>
+
+<TextInput
+placeholder="Password"
+value={password}
+onChangeText={setPassword}
+secureTextEntry={!showPassword}
+style={styles.input}
+/>
+
+<TouchableOpacity onPress={()=>setShowPassword(!showPassword)}>
+
+<Ionicons
+name={showPassword ? "eye-off-outline":"eye-outline"}
+size={20}
+color="#666"
+/>
+
+</TouchableOpacity>
+
+</View>
+
+<View style={styles.popupButtons}>
+
+<TouchableOpacity
+style={styles.noButton}
+onPress={()=>setShowCredentialPopup(false)}
+>
+
+<Text style={styles.noText}>Cancel</Text>
+
+</TouchableOpacity>
+
+<TouchableOpacity
+style={styles.yesButton}
+onPress={handleUpdateCredentials}
+>
+
+<Text style={styles.yesText}>Update</Text>
+
+</TouchableOpacity>
+
+</View>
+
+</View>
+
+</View>
+
+</Modal>
             {loading && <Loader />}
         </SafeAreaView>
     );
@@ -369,6 +478,23 @@ const styles = StyleSheet.create({
         alignItems: "center",
     },
     achievementText: { fontWeight: "600", color: "#333" },
+    modifyButton: {
+    marginHorizontal: 15,
+    marginTop: 10,
+    height: 50,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#ED1C25",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff"
+},
+
+modifyText: {
+    color: "#ED1C25",
+    fontWeight: "600",
+    fontSize: 16
+},
 
     logoutButton: {
     margin: 15,
@@ -404,23 +530,65 @@ const styles = StyleSheet.create({
         marginVertical: 15,
         textAlign: "center",
     },
+    popupTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#000",
+    marginVertical: 10,
+},
+
+inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginTop: 10,
+    width: "100%",
+    height: 45,
+},
+
+input: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
+    color: "#000",
+},
     popupButtons: {
-        flexDirection: "row",
-        justifyContent: "space-around",
-        width: "100%",
-    },
-    yesButton: {
-        backgroundColor: "#ED1C25",
-        paddingVertical: 10,
-        paddingHorizontal: 50,
-        borderRadius: 8,
-    },
-    noButton: {
-        backgroundColor: "#888",
-        paddingVertical: 10,
-        paddingHorizontal: 50,
-        borderRadius: 8,
-    },
-    yesText: { color: "#fff", fontWeight: "700" },
-    noText: { color: "#fff", fontWeight: "700" },
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    marginTop: 20,
+},
+
+yesButton: {
+    flex: 1,
+    backgroundColor: "#ED1C25",
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    marginHorizontal: 5,
+},
+
+noButton: {
+    flex: 1,
+    backgroundColor: "#666",
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    marginHorizontal: 5,
+},
+
+yesText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 15
+},
+
+noText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 15
+},
 });

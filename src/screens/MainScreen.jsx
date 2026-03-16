@@ -33,6 +33,10 @@ import { useMonthlyData } from '../hooks/useMonthlyData';
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback } from "react";
 
+function isDaytime() {
+  const hour = new Date().getHours();
+  return hour >= 6 && hour < 18;
+}
 const MainScreen = ({ navigation }) => {
   const [selectedStationId, setSelectedStationId] = useState(null);
   const [isDay, setIsDay] = useState(isDaytime());
@@ -46,24 +50,31 @@ const MainScreen = ({ navigation }) => {
   // const [totalCost, setTotalCost] = useState('---');
   const [refreshKey, setRefreshKey] = useState(0);
   const [userInfo, setUserInfo] = useState(null);
-  const { monthlyData, monthlyDataLoading } =
-  useMonthlyData(selectedStationId, userInfo?.phoneNo, refreshKey);
+  const phoneNo = userInfo?.UserInfo?.phoneNo || null;
+const { monthlyData, monthlyDataLoading } =
+  useMonthlyData(selectedStationId, phoneNo);
   const [updatedTime, setUpdatedTime] = useState("");
   const [installationAmount, setInstallationAmount] = useState(0);
   const [todaySavings, setTodaySavings] = useState(0);
   const [progressPercent, setProgressPercent] = useState(0);
 const [progressColor, setProgressColor] = useState("#f39c12");
   const progressAnim = useRef(new Animated.Value(0)).current;
-let totalCost = "₹ Loading...";
+  const [totalCost, setTotalCost] = useState("₹ Loading...");
+  useEffect(() => {
+  setTotalCost("₹ Loading...");
+}, [userInfo?.UserInfo?.phoneNo]);
+useEffect(() => {
+  if (!monthlyDataLoading && monthlyData?.cumulativeCost) {
+    const costValue = Number(monthlyData.cumulativeCost);
 
-if (!monthlyDataLoading && monthlyData?.cumulativeCost) {
-  const costValue = Number(monthlyData.cumulativeCost);
+    const formatted = `₹ ${costValue.toLocaleString("en-IN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
 
-  totalCost = `₹ ${costValue.toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
+    setTotalCost(formatted);
+  }
+}, [monthlyData, monthlyDataLoading]);
 
 console.log("MonthlyData:", monthlyData);
 
@@ -138,35 +149,16 @@ function processStations(data) {
     };
   });
 }
-useFocusEffect(
-  useCallback(() => {
-    setRefreshKey(prev => prev + 1); // refresh rupees
-
-    if (selectedStationId) {
-      loadTodayGeneration(selectedStationId);
-      getRealTimeGeneration(selectedStationId);
-    }
-  }, [selectedStationId])
-);
   useFocusEffect(
   useCallback(() => {
-    setRefreshKey(prev => prev + 1); // 👈 force refresh
-
     const loadUser = async () => {
       const data = await getStorageData(USER_DATA);
 
       if (data) {
         const parsed = JSON.parse(data);
 
-        setStations([]);
-        setSelectedStationId(null);
-        setSelectedStation(0);
-
         setUserInfo(parsed);
 
-        setTimeout(() => {
-          loadStations();
-        }, 100);
       }
     };
 
@@ -242,10 +234,6 @@ try {
   const totalSavings = (lifeTimeGeneration * unitRate).toFixed(2);
 
 
-  function isDaytime() {
-    const hour = new Date().getHours();
-    return hour >= 6 && hour < 18;
-  }
   const saveStationsToFirestore = async () => {
     try {
       const storedData = await AsyncStorage.getItem(USER_DATA);
@@ -543,8 +531,9 @@ if (processed.length > 0) {
               <Text style={styles.markerText}>Kick Off</Text>
               <Text style={styles.markerText}>Solar Freedom</Text>
             </View>
-            <Text style={styles.profitText}>{totalCost}
-            </Text>
+            <Text style={styles.profitText}>
+  {monthlyDataLoading ? "₹ Loading..." : totalCost}
+</Text>
           </View>
           {/* Buttons */}
           <View style={styles.buttonContainer}>

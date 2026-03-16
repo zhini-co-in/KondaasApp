@@ -23,6 +23,7 @@ import { getStorageData, USER_DATA } from "../service/localStorage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SCREEN_NAMES } from '../constants/screenNames';
 import CryptoJS from 'crypto-js';
+import { saveMailCredentials } from "../service/mailCredentials";
 
 const ProductsHomeScreen = () => {
   const navigation = useNavigation();
@@ -100,38 +101,16 @@ const closeCredentialPopup = () => {
   };
 
 const handleSaveCredentials = async () => {
-  if (!email || !password) {
-    Alert.alert("Alert", "Please enter email and password");
-    return;
-  }
 
-  try {
-    const storedData = await AsyncStorage.getItem(USER_DATA);
-    const parsedData = storedData ? JSON.parse(storedData) : null;
-    const phoneNo = parsedData?.UserInfo?.phoneNo;
+  const result = await saveMailCredentials(email, password);
 
-    if (!phoneNo) {
-      Alert.alert("Error", "Phone number not found");
-      return;
-    }
-
-    const hashedPassword = CryptoJS.SHA256(password).toString();
-
-    await firestore()
-      .collection("userDetails")
-      .doc(phoneNo) // document id = phoneNo
-      .update({
-        "UserInfo.email": email,
-        "UserInfo.password": hashedPassword,
-      });
-
-    Alert.alert("Success", "Credentials saved successfully");
+  if (result.success) {
+    Alert.alert("Success", result.message);
     closeCredentialPopup();
-
-  } catch (error) {
-    console.log("Credential Save Error:", error);
-    Alert.alert("Error", "Failed to save credentials");
+  } else {
+    Alert.alert("Error", result.message);
   }
+
 };
 
 
