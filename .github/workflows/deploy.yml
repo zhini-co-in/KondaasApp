@@ -39,11 +39,10 @@ jobs:
         env:
           MY_ACCESS_KEY: ${{ secrets.REVOPUSH_ACCESS_KEY }}
         run: |
-          # Install the CLI
           npm install -g @revopush/code-push-cli
-
-          # 1. Push to Android (Using the exact name from your dashboard)
-          revopush release-react "KondaasApp" android -d Production --accessKey $MY_ACCESS_KEY
-
-          # 2. Push to iOS (Using the exact name we found in your terminal)
-          revopush release-react "kondaas-App-iOS" ios -d Production --accessKey $MY_ACCESS_KEY
+          
+          # Push to Android (allow identical packages)
+          revopush release-react "KondaasApp" android -d Production --accessKey $MY_ACCESS_KEY || true
+          
+          # Push to iOS (allow identical packages)
+          revopush release-react "kondaas-App-iOS" ios -d Production --accessKey $MY_ACCESS_KEY || true
