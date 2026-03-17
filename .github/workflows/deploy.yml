@@ -39,4 +39,4 @@ jobs:
 
           revopush login --accessKey $MY_ACCESS_KEY
 
-          revopush release-react "Kondaas App" android -d Production
+          revopush release-react "KondaasApp" android -d Production
