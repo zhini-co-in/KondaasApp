@@ -20,8 +20,16 @@ jobs:
       - name: Install Dependencies
         run: npm install --legacy-peer-deps
 
+      - name: Check for Secret
+        run: |
+          if [ -z "${{ secrets.REVOPUSH_ACCESS_KEY }}" ]; then
+            echo "ERROR: REVOPUSH_ACCESS_KEY is EMPTY. GitHub cannot find your secret!"
+            exit 1
+          else
+            echo "Secret is found, proceeding..."
+          fi
+
       - name: Push to Revopush
         run: |
           npm install -g @revopush/code-push-cli
-          # We add the --accessKey directly to the command so it never asks for a login
           revopush release-react KondaasApp android -d Production --accessKey ${{ secrets.REVOPUSH_ACCESS_KEY }}
