@@ -8,6 +8,8 @@ on:
 jobs:
   update:
     runs-on: ubuntu-latest
+    # Add this to help the Organization recognize the secret
+    environment: production 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -32,4 +34,5 @@ jobs:
       - name: Push to Revopush
         run: |
           npm install -g @revopush/code-push-cli
-          revopush release-react KondaasApp android -d Production --accessKey ${{ secrets.REVOPUSH_ACCESS_KEY }}
+          # Use DOUBLE QUOTES around the name because of the space
+          revopush release-react "Kondaas App" android -d Production --accessKey ${{ secrets.REVOPUSH_ACCESS_KEY }}
