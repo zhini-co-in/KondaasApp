@@ -3,7 +3,7 @@ name: Kondaas Silent Update
 on:
   push:
     branches:
-      - main  # Make sure this matches your default branch name
+      - main
 
 jobs:
   update:
@@ -15,7 +15,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install Dependencies
         run: npm install
@@ -24,5 +24,5 @@ jobs:
         run: |
           npm install -g @revopush/code-push-cli
           revopush login --accessKey ${{ secrets.REVOPUSH_ACCESS_KEY }}
-          # This name 'KondaasApp' must match your Revopush Dashboard exactly
+          # This name 'KondaasApp' matches your Revopush dashboard exactly
           revopush release-react KondaasApp android -d Production
