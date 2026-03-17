@@ -4,6 +4,7 @@ import React
 import React_RCTAppDelegate
 import ReactAppDependencyProvider
 import Firebase
+import CodePush // 1. Added this import
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -36,6 +37,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     return true
   }
 }
+
 func application(
   _ app: UIApplication,
   open url: URL,
@@ -50,10 +52,11 @@ class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {
   }
 
   override func bundleURL() -> URL? {
-#if DEBUG
-    RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: "index")
-#else
-    Bundle.main.url(forResource: "main", withExtension: "jsbundle")
-#endif
+    #if DEBUG
+      return RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: "index")
+    #else
+      // 2. Changed this line to load from Revopush
+      return CodePush.bundleURL() 
+    #endif
   }
 }
