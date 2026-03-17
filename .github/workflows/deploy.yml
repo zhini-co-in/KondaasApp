@@ -30,6 +30,9 @@ jobs:
           else
             echo "Secret is found, proceeding..."
           fi
+      - name: Install Revopush CLI
+        run: npm install -g @revopush/code-push-cli
+  
       - name: CodePush Login
         run: revopush login --access-key ${{ secrets.REVOPUSH_ACCESS_KEY }}
       - name: Push to Revopush
