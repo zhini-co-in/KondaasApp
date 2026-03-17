@@ -8,8 +8,8 @@ on:
 jobs:
   update:
     runs-on: ubuntu-latest
-    # Add this to help the Organization recognize the secret
-    environment: production 
+    environment: production
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -25,7 +25,7 @@ jobs:
       - name: Check for Secret
         run: |
           if [ -z "${{ secrets.REVOPUSH_ACCESS_KEY }}" ]; then
-            echo "ERROR: REVOPUSH_ACCESS_KEY is EMPTY. GitHub cannot find your secret!"
+            echo "ERROR: REVOPUSH_ACCESS_KEY is EMPTY!"
             exit 1
           else
             echo "Secret is found, proceeding..."
@@ -33,10 +33,10 @@ jobs:
 
       - name: Push to Revopush
         env:
-          # This pulls the secret into a temporary environment variable
           MY_ACCESS_KEY: ${{ secrets.REVOPUSH_ACCESS_KEY }}
         run: |
           npm install -g @revopush/code-push-cli
-          
-          # We use the variable with a $ sign to ensure it's passed correctly
-          revopush release-react "Kondaas App" android -d Production --accessKey $MY_ACCESS_KEY
+
+          revopush login --accessKey $MY_ACCESS_KEY
+
+          revopush release-react "Kondaas App" android -d Production
