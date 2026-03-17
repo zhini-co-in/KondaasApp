@@ -30,7 +30,8 @@ jobs:
           else
             echo "Secret is found, proceeding..."
           fi
-
+      - name: CodePush Login
+        run: revopush login --access-key ${{ secrets.REVOPUSH_ACCESS_KEY }}
       - name: Push to Revopush
         env:
           MY_ACCESS_KEY: ${{ secrets.REVOPUSH_ACCESS_KEY }}
