@@ -23,5 +23,5 @@ jobs:
       - name: Push to Revopush
         run: |
           npm install -g @revopush/code-push-cli
-          # This command uses the secret to "log in" automatically
+          # We add the --accessKey directly to the command so it never asks for a login
           revopush release-react KondaasApp android -d Production --accessKey ${{ secrets.REVOPUSH_ACCESS_KEY }}
