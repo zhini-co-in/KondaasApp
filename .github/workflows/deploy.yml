@@ -21,8 +21,7 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: Push to Revopush
-        env:
-          REVOPUSH_KEY: ${{ secrets.REVOPUSH_ACCESS_KEY }}
         run: |
           npm install -g @revopush/code-push-cli
-          revopush release-react KondaasApp android -d Production --accessKey $REVOPUSH_KEY
+          # This command uses the secret to "log in" automatically
+          revopush release-react KondaasApp android -d Production --accessKey ${{ secrets.REVOPUSH_ACCESS_KEY }}
