@@ -32,7 +32,11 @@ jobs:
           fi
 
       - name: Push to Revopush
+        env:
+          # This pulls the secret into a temporary environment variable
+          MY_ACCESS_KEY: ${{ secrets.REVOPUSH_ACCESS_KEY }}
         run: |
           npm install -g @revopush/code-push-cli
-          # Use DOUBLE QUOTES around the name because of the space
-          revopush release-react "Kondaas App" android -d Production --accessKey ${{ secrets.REVOPUSH_ACCESS_KEY }}
+          
+          # We use the variable with a $ sign to ensure it's passed correctly
+          revopush release-react "Kondaas App" android -d Production --accessKey $MY_ACCESS_KEY
