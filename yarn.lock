@@ -1414,6 +1414,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@babel/runtime@npm:^7.26.0":
+  version: 7.29.2
+  resolution: "@babel/runtime@npm:7.29.2"
+  checksum: 10c0/30b80a0140d16467792e1bbeb06f655b0dab70407da38dfac7fedae9c859f9ae9d846ef14ad77bd3814c064295fe9b1bc551f1541ea14646ae9f22b71a8bc17a
+  languageName: node
+  linkType: hard
+
 "@babel/template@npm:^7.25.0, @babel/template@npm:^7.27.1, @babel/template@npm:^7.27.2, @babel/template@npm:^7.3.3":
   version: 7.27.2
   resolution: "@babel/template@npm:7.27.2"
@@ -3385,6 +3392,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@transistorsoft/background-geolocation-types@npm:^5.0.1":
+  version: 5.0.1
+  resolution: "@transistorsoft/background-geolocation-types@npm:5.0.1"
+  checksum: 10c0/54c1aec1b54ac6b213dfb419ed05f3353b5aeaac4d8503423575a6a8f5436d19fc229ecd18913f9fdecd968f59685f59be1e72edd0ecb4aacdcea1bb1b081458
+  languageName: node
+  linkType: hard
+
 "@types/babel__core@npm:^7.1.14":
   version: 7.20.5
   resolution: "@types/babel__core@npm:7.20.5"
@@ -3755,10 +3769,12 @@ __metadata:
     prettier: "npm:^3.6.2"
     react: "npm:19.1.1"
     react-native: "npm:0.82.0"
+    react-native-background-geolocation: "npm:^5.0.4"
     react-native-chart-kit: "npm:^6.12.0"
     react-native-contacts: "npm:^8.0.7"
     react-native-device-info: "npm:^14.1.1"
     react-native-element-dropdown: "npm:^2.12.4"
+    react-native-geolocation-service: "npm:^5.3.1"
     react-native-gesture-handler: "npm:^2.28.0"
     react-native-gifted-charts: "npm:^1.4.64"
     react-native-keyboard-aware-scroll-view: "npm:^0.9.5"
@@ -9371,6 +9387,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"react-native-background-geolocation@npm:^5.0.4":
+  version: 5.0.4
+  resolution: "react-native-background-geolocation@npm:5.0.4"
+  dependencies:
+    "@babel/runtime": "npm:^7.26.0"
+    "@transistorsoft/background-geolocation-types": "npm:^5.0.1"
+    tslib: "npm:^2.6.3"
+  checksum: 10c0/450902edde77396ffec4b85e4af67fc08c8284ccfd5f55439ec304b05867ad66ea1cf14d3da39a7f567313e6665491488be46b32bc0b926a4f1f3cccb9595c94
+  languageName: node
+  linkType: hard
+
 "react-native-chart-kit@npm:^6.12.0":
   version: 6.12.0
   resolution: "react-native-chart-kit@npm:6.12.0"
@@ -9414,6 +9441,13 @@ __metadata:
     react: "*"
     react-native: "*"
   checksum: 10c0/0f0bce59355112893612fd6b7dca4b181ef1998986ead27623cdce3c44093bda5d471dc0e907072472094d1c02437cb5a436ad9ff4e07333e03eb0cc85283544
+  languageName: node
+  linkType: hard
+
+"react-native-geolocation-service@npm:^5.3.1":
+  version: 5.3.1
+  resolution: "react-native-geolocation-service@npm:5.3.1"
+  checksum: 10c0/54cbd8b36dcfcbc3d7a6303766d07c944e634cb40ff1f353c3b965f07bfe2d39a3514e05a48e5008d5d2529dde3ef0e6f8bc8ed1f729988fe3497eba29635c90
   languageName: node
   linkType: hard
 
@@ -10724,7 +10758,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tslib@npm:^2.0.1, tslib@npm:^2.1.0":
+"tslib@npm:^2.0.1, tslib@npm:^2.1.0, tslib@npm:^2.6.3":
   version: 2.8.1
   resolution: "tslib@npm:2.8.1"
   checksum: 10c0/9c4759110a19c53f992d9aae23aac5ced636e99887b51b9e61def52611732872ff7668757d4e4c61f19691e36f4da981cd9485e869b4a7408d689f6bf1f14e62

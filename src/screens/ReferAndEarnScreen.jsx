@@ -138,7 +138,7 @@ const ReferAndEarnScreen = ({ navigation }) => {
         onPress={() => navigation.navigate(SCREEN_NAMES.REFER_FRIEND)}
       >
         <LinearGradient
-          colors={["#1c1a1a", "#020202"]}
+          colors={["#F00001", "#B00100"]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={styles.referBtn}

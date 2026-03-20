@@ -149,12 +149,26 @@ try {
 
 await storeData(USER_DATA, JSON.stringify(finalData));
 
-      // Navigate
-      if (email && password) {
-        navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.MAIN }] });
-      } else {
-        navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }] });
-      }
+ const role = userData?.userroles?.role || userData?.UserInfo?.Role || "";
+
+if (role === "surveyer") {
+  navigation.reset({
+    index: 0,
+    routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }],
+  });
+} 
+else if (email && password) {
+  navigation.reset({
+    index: 0,
+    routes: [{ name: SCREEN_NAMES.MAIN }],
+  });
+} 
+else {
+  navigation.reset({
+    index: 0,
+    routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }],
+  });
+}
 
     } catch (err) {
       Alert.alert("Login Failed", err.message || "Something went wrong during auto-login");

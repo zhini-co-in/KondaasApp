@@ -40,6 +40,8 @@ const SplashScreen = () => {
         const email = userData?.UserInfo?.email;
         const password = userData?.UserInfo?.password;
         const unitsrupees = userData?.UserInfo?.unitsrupees;
+        const role = userData?.userroles?.role || userData?.UserInfo?.Role || "";
+        console.log("User Role:", role);
         console.log("lastLogin:", lastLogin);
         console.log("deviceId:", deviceId);
         console.log("unitId:", unitsrupees);
@@ -65,19 +67,36 @@ const SplashScreen = () => {
           return;
         }
 
-        if (email && email.trim() !== "" && password && password.trim() !== "") {
-          console.log("✅ Device ID found → Navigating to mainScreen");
-          navigation.reset({
-            index: 0,
-            routes: [{ name: SCREEN_NAMES.MAIN }],
-          });
-        } else {
-          console.log("⚠️ No deviceId found → Navigating to ProductsHomeScreen");
-          navigation.reset({
-            index: 0,
-            routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }],
-          });
-        }
+        // ROLE BASED NAVIGATION
+// ROLE BASED NAVIGATION
+if (role === "surveyer") {
+
+  console.log("Surveyer role detected → Navigating to Surveyer Screen");
+
+  navigation.reset({
+  index: 0,
+  routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }],
+});
+
+} else if (email && email.trim() !== "" && password && password.trim() !== "") {
+
+  console.log("Normal user → Navigating to Main");
+
+  navigation.reset({
+    index: 0,
+    routes: [{ name: SCREEN_NAMES.MAIN }],
+  });
+
+} else {
+
+  console.log("No login → Navigating to ProductsHome");
+
+  navigation.reset({
+    index: 0,
+    routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }],
+  });
+
+}
       } catch (error) {
         console.log("❗ Error checking user data:", error);
         navigation.replace(SCREEN_NAMES.INTRO);

@@ -32,5 +32,13 @@
 	<true/>
 	<key>GOOGLE_APP_ID</key>
 	<string>1:833207375451:ios:5c6999e8518509be39917e</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+<string>We need your location to track server availability</string>
+<key>NSLocationWhenInUseUsageDescription</key>
+<string>We need your location to track server availability</string>
+<key>UIBackgroundModes</key>
+<array>
+    <string>location</string>
+</array>
 </dict>
 </plist>
