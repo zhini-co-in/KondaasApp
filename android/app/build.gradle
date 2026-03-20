@@ -85,8 +85,8 @@ android {
         applicationId "com.trisentrix.kondaas"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 26031202
-        versionName "0.1.6"
+        versionCode 26032002
+        versionName "0.1.7"
     }
      signingConfigs {
         debug {
