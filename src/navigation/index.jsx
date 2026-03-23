@@ -21,6 +21,7 @@ import ReferFriendScreen from '../screens/ReferFriendScreen';
 import TermsConditionsScreen from '../screens/TermsConditionsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import Surveyerscreen from "../screens/Surveyerscreen";
+import FormScreen from "../screens/FormScreen";
 
 import { SCREEN_NAMES } from '../constants/screenNames';
 const Stack = createNativeStackNavigator();
@@ -49,6 +50,7 @@ export default function RootStack() {
       <Stack.Screen name={SCREEN_NAMES.DETAIL} component={PanelDetailScreen} />
       <Stack.Screen name={SCREEN_NAMES.SETTINGS} component={SettingsScreen} />
       <Stack.Screen name={SCREEN_NAMES.SURVEYER_SCREEN} component={Surveyerscreen} />
+      <Stack.Screen name="Form" component={FormScreen} />
     </Stack.Navigator>
   );
 }
