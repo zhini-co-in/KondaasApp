@@ -576,7 +576,7 @@ if (processed.length > 0) {
             >
               <Text style={styles.grayButtonText}>Refer & Earn</Text>
             </TouchableOpacity>
-            <Text style={styles.bottomText}>Powered by Trisentrix | Version 1.0</Text>
+            <Text style={styles.bottomText}>Powered by Trisentrix | Version 1.2.26032301</Text>
 
           </View>
 

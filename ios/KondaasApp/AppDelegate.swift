@@ -4,58 +4,36 @@ import React
 import React_RCTAppDelegate
 import ReactAppDependencyProvider
 import Firebase
-import CodePush // 1. Added this import
+import CodePush // ✅ Correct
 
 @main
-class AppDelegate: UIResponder, UIApplicationDelegate {
-  var window: UIWindow?
+class AppDelegate: RCTAppDelegate { // 1. Inherit from RCTAppDelegate for better RN integration
 
-  var reactNativeDelegate: ReactNativeDelegate?
-  var reactNativeFactory: RCTReactNativeFactory?
-
-  func application(
+  override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
     FirebaseApp.configure()
-    application.registerForRemoteNotifications()
-    let delegate = ReactNativeDelegate()
-    let factory = RCTReactNativeFactory(delegate: delegate)
-    delegate.dependencyProvider = RCTAppDependencyProvider()
+    
+    self.moduleName = "KondaasApp"
+    self.dependencyProvider = RCTAppDependencyProvider()
 
-    reactNativeDelegate = delegate
-    reactNativeFactory = factory
+    // Add any custom initial props here
+    self.initialProps = [:]
 
-    window = UIWindow(frame: UIScreen.main.bounds)
-
-    factory.startReactNative(
-      withModuleName: "KondaasApp",
-      in: window,
-      launchOptions: launchOptions
-    )
-
-    return true
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
-}
 
-func application(
-  _ app: UIApplication,
-  open url: URL,
-  options: [UIApplication.OpenURLOptionsKey : Any] = [:]
-) -> Bool {
-  return RCTLinkingManager.application(app, open: url, options: options)
-}
-
-class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {
+  // ✅ This is where Revopush links into the Swift lifecycle
   override func sourceURL(for bridge: RCTBridge) -> URL? {
-    self.bundleURL()
+    return self.bundleURL()
   }
 
   override func bundleURL() -> URL? {
     #if DEBUG
       return RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: "index")
     #else
-      // 2. Changed this line to load from Revopush
+      // ✅ Revopush (CodePush) handles the production bundle
       return CodePush.bundleURL() 
     #endif
   }
