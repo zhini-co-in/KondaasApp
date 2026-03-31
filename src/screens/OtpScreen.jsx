@@ -33,7 +33,7 @@ const OtpScreen = ({ navigation, route }) => {
   const [timer, setTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
 
-  const [confirmation, setConfirmation] = useState(route.params.confirmation);
+  const [confirmation, setConfirmation] = useState(route.params.confirmation ?? null);
   const inputs = useRef([]);
   const { verificationId, phoneNumber } = route.params;
 
