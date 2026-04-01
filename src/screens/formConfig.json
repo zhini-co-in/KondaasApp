@@ -1,0 +1,635 @@
+{
+  "steps": [
+    {
+      "id": 1,
+      "title": "Customer Details",
+      "category": "site_observation",
+      "stateKey": "customerDetails",
+      "fields": [
+        {
+          "key": "orderType",
+          "label": "Order Type",
+          "type": "picker",
+          "required": true,
+          "options": ["Company Lead", "Dealer Own Lead"]
+        },
+        {
+          "key": "consumerNumber",
+          "label": "Consumer Number",
+          "type": "input",
+          "inputType": "numeric",
+          "placeholder": "Enter Consumer Number",
+          "required": true
+        },
+        {
+          "key": "consumerName",
+          "label": "Consumer Name",
+          "type": "input",
+          "inputType": "default",
+          "placeholder": "Enter Consumer Name",
+          "required": true
+        },
+        {
+          "key": "consumerAddress",
+          "label": "Consumer Address",
+          "type": "input",
+          "inputType": "default",
+          "placeholder": "Enter Consumer Address",
+          "required": true
+        },
+        {
+          "key": "mobileNumber",
+          "label": "Mobile Number",
+          "type": "input",
+          "inputType": "phone-pad",
+          "placeholder": "Enter Mobile Number",
+          "required": true,
+          "validation": {
+            "pattern": "^\\d{10,15}$",
+            "message": "Enter a valid mobile number (10–15 digits)"
+          }
+        },
+        {
+          "key": "ebRegisteredMobile",
+          "label": "EB Registered Mobile Number",
+          "type": "input",
+          "inputType": "phone-pad",
+          "placeholder": "Enter EB Registered Mobile",
+          "required": true,
+          "validation": {
+            "pattern": "^\\d{10,15}$",
+            "message": "Enter a valid mobile number (10–15 digits)"
+          }
+        },
+        {
+          "key": "connectionType",
+          "label": "EB Connection Type",
+          "type": "picker",
+          "required": true,
+          "options": ["Single Phase", "Three Phase"]
+        },
+        {
+          "key": "projectType",
+          "label": "Project Type",
+          "type": "picker",
+          "required": true,
+          "options": [
+            "Ongrid - Subsidy",
+            "Ongrid - Non Subsidy",
+            "Hybrid - Subsidy",
+            "Hybrid - Non Subsidy"
+          ]
+        },
+        {
+          "key": "ebConnectionStatus",
+          "label": "EB Connection Status",
+          "type": "picker",
+          "required": true,
+          "options": [
+            "Permanent Residential",
+            "Temporary Residential",
+            "Commercial",
+            "Other"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Customer Requirements",
+      "category": "site_observation",
+      "stateKey": "customerRequirements",
+      "fields": [
+        {
+          "key": "ebConnectedLoad",
+          "label": "EB Connected Load (KW)",
+          "type": "input",
+          "inputType": "decimal-pad",
+          "placeholder": "Enter KW",
+          "required": true
+        },
+        {
+          "key": "inverterCapacity",
+          "label": "Inverter Capacity (KW)",
+          "type": "input",
+          "inputType": "decimal-pad",
+          "placeholder": "Enter KW",
+          "required": true
+        },
+        {
+          "key": "inverterConnectionType",
+          "label": "Inverter Connection Type",
+          "type": "picker",
+          "required": true,
+          "options": ["1 Phase", "3 Phase"]
+        },
+        {
+          "key": "numPanels",
+          "label": "No. of Panels",
+          "type": "input",
+          "inputType": "numeric",
+          "placeholder": "Enter number",
+          "required": true
+        },
+        {
+          "key": "panelType",
+          "label": "Type of Panel",
+          "type": "picker",
+          "required": true,
+          "options": [
+            "Mono PERC Half Cut Bifacial 520–550W",
+            "TopCon Bifacial 600–620W"
+          ]
+        },
+        {
+          "key": "buildingHeight",
+          "label": "Building Height",
+          "type": "picker",
+          "required": true,
+          "options": [
+            "1st Floor",
+            "2nd Floor",
+            "3rd Floor",
+            "4th Floor",
+            "5 + Floors"
+          ]
+        },
+        {
+          "key": "rooftopAccess",
+          "label": "Rooftop Access",
+          "type": "picker",
+          "required": true,
+          "options": ["Yes", "No"]
+        },
+        {
+          "key": "ladderToRooftop",
+          "label": "Ladder to Rooftop",
+          "type": "picker",
+          "required": true,
+          "options": ["Permanent", "Temporary", "Not Required"]
+        },
+        {
+          "key": "roofType",
+          "label": "Type of Roof",
+          "type": "picker",
+          "required": true,
+          "options": [
+            "Flat",
+            "Concrete Slope",
+            "GI Sheet N–S",
+            "GI Sheet Slope",
+            "Mixed",
+            "Other"
+          ]
+        },
+        {
+          "key": "structureType",
+          "label": "Structure Type",
+          "type": "picker",
+          "required": true,
+          "options": [
+            "Flat Roof 1 Meter",
+            "Flat Roof 2 Meter",
+            "Aluminum Long Rail",
+            "Aluminum Short Rail",
+            "Customized"
+          ],
+          "conditionalChildren": [
+            {
+              "when": { "key": "structureType", "value": "Flat Roof 1 Meter" },
+              "sectionTitle": "Flat Roof 1 Meter Configuration",
+              "fields": [
+                { "key": "flatRoof1_2x1", "label": "2x1", "type": "input", "inputType": "default", "placeholder": "Enter 2x1" },
+                { "key": "flatRoof1_3x1", "label": "3x1", "type": "input", "inputType": "default", "placeholder": "Enter 3x1" },
+                { "key": "flatRoof1_4x1", "label": "4x1", "type": "input", "inputType": "default", "placeholder": "Enter 4x1" },
+                { "key": "flatRoof1_2x2", "label": "2x2", "type": "input", "inputType": "default", "placeholder": "Enter 2x2" },
+                { "key": "flatRoof1_3x2", "label": "3x2", "type": "input", "inputType": "default", "placeholder": "Enter 3x2" },
+                { "key": "flatRoof1_4x2", "label": "4x2", "type": "input", "inputType": "default", "placeholder": "Enter 4x2" }
+              ]
+            },
+            {
+              "when": { "key": "structureType", "value": "Flat Roof 2 Meter" },
+              "sectionTitle": "Flat Roof 2 Meter Configuration",
+              "fields": [
+                { "key": "flatRoof2_2x2", "label": "2x2", "type": "input", "inputType": "default", "placeholder": "Enter 2x2" },
+                { "key": "flatRoof2_3x2", "label": "3x2", "type": "input", "inputType": "default", "placeholder": "Enter 3x2" },
+                { "key": "flatRoof2_4x2", "label": "4x2", "type": "input", "inputType": "default", "placeholder": "Enter 4x2" },
+                { "key": "flatRoof2_5x2", "label": "5x2", "type": "input", "inputType": "default", "placeholder": "Enter 5x2" }
+              ]
+            },
+            {
+              "when": { "key": "structureType", "values": ["Aluminum Long Rail", "Aluminum Short Rail"] },
+              "sectionTitle": "Aluminum Rail Configuration",
+              "fields": [
+                {
+                  "key": "aluminumRowConfig",
+                  "label": "Row Configuration",
+                  "type": "picker",
+                  "options": ["1 Row", "2 Row", "3 Row", "4 Row"]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "requiredCivilWork",
+          "label": "Required Civil Work",
+          "type": "picker",
+          "required": true,
+          "options": ["Yes", "No"],
+          "conditionalChildren": [
+            {
+              "when": { "key": "requiredCivilWork", "value": "Yes" },
+              "fields": [
+                {
+                  "key": "scopeCivilWork",
+                  "label": "Scope Of Civil Work",
+                  "type": "picker",
+                  "required": true,
+                  "options": ["Customer", "Installer"]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "additionalStructureRequired",
+          "label": "Additional Structure Required",
+          "type": "picker",
+          "required": true,
+          "options": ["YES", "NO"],
+          "conditionalChildren": [
+            {
+              "when": { "key": "additionalStructureRequired", "value": "YES" },
+              "fields": [
+                {
+                  "key": "additionalStructureAmount",
+                  "label": "Approx Amount for Additional Structure",
+                  "type": "input",
+                  "inputType": "decimal-pad",
+                  "placeholder": "Enter Amount",
+                  "required": true
+                },
+                {
+                  "key": "agreeAdditionalStructureCost",
+                  "label": "Customer agree to bear additional structure cost",
+                  "type": "picker",
+                  "options": ["Yes", "No", "Not Required"]
+                },
+                {
+                  "key": "customerArrangeStructureYes",
+                  "label": "Customer will arrange structure by self",
+                  "type": "picker",
+                  "options": ["Yes", "No"]
+                },
+                {
+                  "key": "arrangeRemark",
+                  "label": "Remark",
+                  "type": "input",
+                  "inputType": "default",
+                  "placeholder": "Enter remark"
+                },
+                {
+                  "key": "additionalStructureTime",
+                  "label": "Approximate time required",
+                  "type": "picker",
+                  "options": [
+                    "1 week",
+                    "2 weeks",
+                    "more than 2 weeks",
+                    "Customer is not willing to install additional structure."
+                  ]
+                }
+              ]
+            },
+            {
+              "when": { "key": "additionalStructureRequired", "value": "NO" },
+              "fields": [
+                {
+                  "key": "customerArrangeStructure",
+                  "label": "Customer will arrange structure by self",
+                  "type": "picker",
+                  "required": true,
+                  "options": ["Yes", "No"]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Safety & Installation Requirements",
+      "category": "site_observation",
+      "stateKey": "safetyAndInstallation",
+      "fields": [
+        {
+          "key": "ladder",
+          "label": "Ladder",
+          "type": "picker",
+          "required": true,
+          "options": ["Yes", "No", "Not Required"]
+        },
+        {
+          "key": "walkway",
+          "label": "Walkway",
+          "type": "picker",
+          "required": true,
+          "options": ["Yes", "No", "Not Required"]
+        },
+        {
+          "key": "handrail",
+          "label": "Handrail",
+          "type": "picker",
+          "required": true,
+          "options": ["Yes", "No", "Not Required"]
+        },
+        {
+          "key": "slidingDoor",
+          "label": "Sliding Door",
+          "type": "picker",
+          "required": true,
+          "options": ["Yes", "No", "Not Required"]
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Cable Requirements",
+      "category": "site_observation",
+      "stateKey": "cableRequirements",
+      "fields": [
+        {
+          "key": "cableRequirement",
+          "label": "Cable Requirement",
+          "type": "picker",
+          "required": true,
+          "options": ["Required Standard BOM Cables Only", "Need Additional Cable"],
+          "conditionalChildren": [
+            {
+              "when": { "key": "cableRequirement", "value": "Need Additional Cable" },
+              "sectionTitle": "Additional Cable Details",
+              "fields": [
+                {
+                  "key": "agreeExtraCableCost",
+                  "label": "Customer agreed for extra cable & accessory cost",
+                  "type": "picker",
+                  "required": true,
+                  "options": ["Yes", "No"]
+                },
+                {
+                  "key": "acCable",
+                  "label": "AC Cable",
+                  "type": "input",
+                  "inputType": "decimal-pad",
+                  "placeholder": "Enter AC Cable",
+                  "required": true
+                },
+                {
+                  "key": "dcCable",
+                  "label": "DC Cable",
+                  "type": "input",
+                  "inputType": "decimal-pad",
+                  "placeholder": "Enter DC Cable",
+                  "required": true
+                },
+                {
+                  "key": "laCable",
+                  "label": "LA Cable",
+                  "type": "input",
+                  "inputType": "decimal-pad",
+                  "placeholder": "Enter LA Cable",
+                  "required": true
+                },
+                {
+                  "key": "earthingCable",
+                  "label": "Earthing Cable",
+                  "type": "input",
+                  "inputType": "decimal-pad",
+                  "placeholder": "Enter Earthing Cable",
+                  "required": true
+                },
+                {
+                  "key": "anyAdditional",
+                  "label": "Any Additional",
+                  "type": "input",
+                  "inputType": "default",
+                  "placeholder": "Enter additional details",
+                  "required": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Collected Document Checklist",
+      "category": "site_observation",
+      "stateKey": "collectedDocumentChecklist",
+      "fields": [
+        {
+          "key": "aadhar",
+          "label": "Aadhar Card",
+          "type": "picker",
+          "required": true,
+          "options": ["Yes", "No"]
+        },
+        {
+          "key": "pan",
+          "label": "PAN Card",
+          "type": "picker",
+          "required": true,
+          "options": ["Yes", "No"]
+        },
+        {
+          "key": "roofPhotos",
+          "label": "Roof Photos",
+          "type": "picker",
+          "required": true,
+          "options": ["Yes", "No"]
+        },
+        {
+          "key": "cheque",
+          "label": "Cancelled Cheque / Passbook",
+          "type": "picker",
+          "required": true,
+          "options": ["Yes", "No"]
+        },
+        {
+          "key": "buildingFull",
+          "label": "Building Full View Photo",
+          "type": "picker",
+          "required": true,
+          "options": ["Yes", "No"]
+        },
+        {
+          "key": "ebBill",
+          "label": "EB Bill copy (last 6 months)",
+          "type": "picker",
+          "required": true,
+          "options": ["Yes", "No"]
+        },
+        {
+          "key": "passportPhoto",
+          "label": "Passport Size Photo",
+          "type": "picker",
+          "required": true,
+          "options": ["Yes", "No"]
+        },
+        {
+          "key": "emailId",
+          "label": "Email ID",
+          "type": "input",
+          "inputType": "email-address",
+          "placeholder": "Enter Email ID",
+          "required": false,
+          "autoCapitalize": "none"
+        },
+        {
+          "key": "googleMapLink",
+          "label": "Google Map Link",
+          "type": "input",
+          "inputType": "url",
+          "placeholder": "Enter Google Map Link",
+          "required": false,
+          "autoCapitalize": "none"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Payment Details",
+      "category": "site_observation",
+      "stateKey": "paymentDetails",
+      "fields": [
+        {
+          "key": "requiredLoan",
+          "label": "Required Loan",
+          "type": "picker",
+          "required": true,
+          "options": ["Yes", "No"]
+        },
+        {
+          "key": "orderClosingDate",
+          "label": "Approx Order Closing Date",
+          "type": "input",
+          "inputType": "default",
+          "placeholder": "YYYY-MM-DD",
+          "required": true
+        },
+        {
+          "key": "plantCost",
+          "label": "Customer Payable Plant Cost",
+          "type": "input",
+          "inputType": "decimal-pad",
+          "placeholder": "Enter Amount",
+          "required": true
+        },
+        {
+          "key": "advancePayment",
+          "label": "Advance Payment Received",
+          "type": "input",
+          "inputType": "decimal-pad",
+          "placeholder": "Enter Amount",
+          "required": true
+        },
+        {
+          "key": "balanceAmount",
+          "label": "Balance Amount Payable",
+          "type": "input",
+          "inputType": "decimal-pad",
+          "placeholder": "Enter Amount",
+          "required": true
+        },
+        {
+          "key": "netMeterCost",
+          "label": "Customer Payable Net Meter Cost",
+          "type": "input",
+          "inputType": "decimal-pad",
+          "placeholder": "Enter Amount",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Signatures",
+      "category": "site_observation",
+      "stateKey": "signatures",
+      "fields": [
+        {
+          "key": "customerNameMobile",
+          "label": "Name & Mobile Number - Who was met during the site survey",
+          "type": "input",
+          "inputType": "default",
+          "placeholder": "Name & Mobile Number",
+          "required": true
+        },
+        {
+          "key": "siteSurveyorName",
+          "label": "Site Surveyor Name",
+          "type": "input",
+          "inputType": "default",
+          "placeholder": "Site Surveyor Name",
+          "required": true
+        },
+        {
+          "key": "surveyorMobile",
+          "label": "Mobile No.",
+          "type": "input",
+          "inputType": "phone-pad",
+          "placeholder": "Mobile No.",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Remarks",
+      "category": "site_observation",
+      "stateKey": "remarks",
+      "fields": [
+        {
+          "key": "changeLoad",
+          "label": "Need to Change EB Connected Load",
+          "type": "picker",
+          "required": true,
+          "options": ["Yes", "No"]
+        },
+        {
+          "key": "nameChangeEB",
+          "label": "Need Name Change in EB",
+          "type": "picker",
+          "required": true,
+          "options": ["Yes", "No"]
+        },
+        {
+          "key": "nameChangeBank",
+          "label": "Need Name Change In Bank Passbook",
+          "type": "picker",
+          "required": true,
+          "options": ["Yes", "No"]
+        },
+        {
+          "key": "change1to3Phase",
+          "label": "Need To Change 1 Phase to 3 Phase",
+          "type": "picker",
+          "required": true,
+          "options": ["Yes", "No"]
+        },
+        {
+          "key": "remarksText",
+          "label": "Remarks",
+          "type": "textarea",
+          "inputType": "default",
+          "placeholder": "Enter remarks...",
+          "required": true,
+          "numberOfLines": 4
+        }
+      ]
+    }
+  ]
+}
