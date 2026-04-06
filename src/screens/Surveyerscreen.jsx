@@ -6,10 +6,7 @@ import {
   Switch,
   Image,
   StatusBar,
-  PermissionsAndroid,
-  Platform,
   Alert,
-  Linking,
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
@@ -20,23 +17,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import API from '../api/api1';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import BackgroundGeolocation from 'react-native-background-geolocation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { USER_DATA } from '../service/localStorage';
 
-const getDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * (Math.PI / 180)) *
-      Math.cos(lat2 * (Math.PI / 180)) *
-      Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 1000;
-};
+// ── Location service imports ──────────────────────────────────────────────────
+import {
+  getDistance,
+  useLocationTracking,
+  requestLocationPermissions,
+} from '../service/locationService';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LeadCard
+// ─────────────────────────────────────────────────────────────────────────────
 const LeadCard = ({
   item,
   currentLocation,
@@ -45,7 +39,7 @@ const LeadCard = ({
   onStart,
   onSiteObservation,
   onManualEnable,
-  onEdit,   
+  onEdit,
   cardType,
 }) => {
   const hasLatLong =
@@ -69,7 +63,7 @@ const LeadCard = ({
   const withinRange = distToLead !== null && distToLead <= 300;
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, cardType === 'unaccepted' && { borderLeftWidth: 4, borderLeftColor: '#ED1C25' }]}>
       <View style={styles.rowBetween}>
         <Text style={styles.referred}>
           Referred by —{' '}
@@ -100,6 +94,7 @@ const LeadCard = ({
           </View>
         </View>
 
+        {/* ── Unaccepted ── */}
         {cardType === 'unaccepted' && (
           <View style={styles.iconContainer}>
             <TouchableOpacity style={styles.iconBtn} onPress={() => onAccept(item)}>
@@ -113,57 +108,66 @@ const LeadCard = ({
 
         {cardType === 'accepted' && (
   <View style={{ alignItems: 'center', gap: 6 }}>
-    <TouchableOpacity style={styles.startBtn} onPress={() => onStart(item.id)}>
-      <Ionicons name="play-circle-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
-      <Text style={styles.startBtnText}>Start</Text>
-    </TouchableOpacity>
+    {item.status === 'completed' ? (
+      <View style={{
+        backgroundColor: '#22c55e', paddingHorizontal: 10,
+        paddingVertical: 6, borderRadius: 8,
+      }}>
+        <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>
+          ✓ Completed
+        </Text>
+      </View>
+    ) : (
+      <TouchableOpacity style={styles.startBtn} onPress={() => onStart(item.id)}>
+        <Ionicons name="play-circle-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
+        <Text style={styles.startBtnText}>Start</Text>
+      </TouchableOpacity>
+    )}
   </View>
 )}
 
+        {/* ── Inprogress ── */}
         {cardType === 'inprogress' && (() => {
-  if (item.manualSiteEnabled || (hasLatLong && withinRange)) {
-    return (
-      <View style={{ alignItems: 'center', gap: 6 }}>
-        <TouchableOpacity
-          style={styles.smallSiteBtn}
-          onPress={() => onSiteObservation(item)}
-        >
-          <Text style={styles.smallSiteBtnText}>Site{'\n'}Observation</Text>
-        </TouchableOpacity>
+          if (item.manualSiteEnabled || (hasLatLong && withinRange)) {
+            return (
+              <View style={{ alignItems: 'center', gap: 6 }}>
+                <TouchableOpacity
+                  style={styles.smallSiteBtn}
+                  onPress={() => onSiteObservation(item)}
+                >
+                  <Text style={styles.smallSiteBtnText}>Site{'\n'}Observation</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.editBtn}
+                  onPress={() => onEdit(item)}
+                >
+                  <Ionicons name="create-outline" size={12} color="#fff" style={{ marginRight: 2 }} />
+                  <Text style={styles.editBtnText}>Edit</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          }
 
-        {/* ← NEW Edit Button */}
-        <TouchableOpacity
-          style={styles.editBtn}
-          onPress={() => onEdit(item)}       // ← new prop
-        >
-          <Ionicons name="create-outline" size={12} color="#fff" style={{ marginRight: 2 }} />
-          <Text style={styles.editBtnText}>Edit</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  // All other cases → Show Reach button, tap to enable Site Observation
-  return (
-    <View style={styles.reachBtnWrapper}>
-      <TouchableOpacity
-        style={styles.reachBtn}
-        onPress={() => onManualEnable(item.id)}
-      >
-        <Ionicons name="navigate-outline" size={14} color="#fff" style={{ marginRight: 3 }} />
-        <Text style={styles.reachBtnText}>Reach</Text>
-      </TouchableOpacity>
-      {hasLatLong && distToLead !== null && (
-        <Text style={styles.reachDistance}>{distToLead} m</Text>
-      )}
-      {!hasLatLong && item.address && (
-        <Text numberOfLines={2} style={{ fontSize: 9, color: '#888', marginTop: 4, textAlign: 'center', maxWidth: 100 }}>
-          {item.address}
-        </Text>
-      )}
-    </View>
-  );
-})()}
+          return (
+            <View style={styles.reachBtnWrapper}>
+              <TouchableOpacity
+                style={styles.reachBtn}
+                onPress={() => onManualEnable(item.id)}
+              >
+                <Ionicons name="navigate-outline" size={14} color="#fff" style={{ marginRight: 3 }} />
+                <Text style={styles.reachBtnText}>Reach</Text>
+              </TouchableOpacity>
+              {hasLatLong && distToLead !== null && (
+                <Text style={styles.reachDistance}>{distToLead} m</Text>
+              )}
+              {!hasLatLong && item.address && (
+                <Text numberOfLines={2} style={{ fontSize: 9, color: '#888', marginTop: 4, textAlign: 'center', maxWidth: 100 }}>
+                  {item.address}
+                </Text>
+              )}
+            </View>
+          );
+        })()}
       </View>
 
       <View style={[styles.commentRow, { borderTopWidth: 0.5, borderTopColor: '#eee', marginTop: 8, paddingTop: 8 }]}>
@@ -177,37 +181,67 @@ const LeadCard = ({
   );
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SurveyerScreen
+// ─────────────────────────────────────────────────────────────────────────────
 const SurveyerScreen = () => {
   const navigation = useNavigation();
   const isMounted = useRef(true);
-  const locationSubscriberRef = useRef(null);
-  const heartbeatSubscriberRef = useRef(null);
-  const lastSentRef = useRef(0);
 
-  const [isOn, setIsOn] = useState(false);
+  // ── Location (from locationService) ────────────────────────────────────────
+  const { currentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
+
+  // ── UI state ───────────────────────────────────────────────────────────────
+  const [isOn, setIsOn] = useState(true);
   const [leads, setLeads] = useState([]);
   const [acceptedLeads, setAcceptedLeads] = useState([]);
   const [inProgressLeads, setInProgressLeads] = useState([]);
   const [leadsLoading, setLeadsLoading] = useState(false);
-  const [currentLocation, setCurrentLocation] = useState(null);
+  const [acceptedFilter, setAcceptedFilter] = useState('all'); // 'all' | 'completed'
+
+  // Reject modal
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectComment, setRejectComment] = useState('');
   const [rejectLeadId, setRejectLeadId] = useState(null);
-   const [editModalVisible, setEditModalVisible] = useState(false);
+
+  // Edit modal
+  const [editModalVisible, setEditModalVisible] = useState(false);
   const [editLead, setEditLead] = useState(null);
   const [editForm, setEditForm] = useState({});
 
+const [completedFromProgress, setCompletedFromProgress] = useState([]);
+
+const route = useRoute();
+
+useFocusEffect(
+  React.useCallback(() => {
+    const completedIds = route.params?.completedIds;
+    if (!completedIds || completedIds.length === 0) return;
+
+    navigation.setParams({ completedIds: null });
+
+    setAcceptedLeads((prev) =>
+      prev.map((l) =>
+        completedIds.includes(l.id) ? { ...l, status: 'completed' } : l
+      )
+    );
+
+    setAcceptedFilter('completed');
+
+  }, [route.params?.completedIds])
+);
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
   useEffect(() => {
     isMounted.current = true;
     fetchLeads();
     return () => {
       isMounted.current = false;
-      locationSubscriberRef.current?.remove();
-      heartbeatSubscriberRef.current?.remove();
-      BackgroundGeolocation.stop();
+      stopTracking();
     };
   }, []);
 
+  // ── API helpers ────────────────────────────────────────────────────────────
   const fetchLeads = async () => {
     setLeadsLoading(true);
     try {
@@ -229,7 +263,7 @@ const SurveyerScreen = () => {
         longitude: item.longitude,
         whatsappNo: item.whatsappNo,
         email: item.email,
-        address: item.address
+        address: item.address,
       }));
       if (isMounted.current) setLeads(mapped);
     } catch (err) {
@@ -239,14 +273,23 @@ const SurveyerScreen = () => {
     }
   };
 
-  const handleAccept = (item) => {
-  setLeads((prev) => prev.filter((l) => l.id !== item.id));
-  setAcceptedLeads((prev) => {
-    // Prevent duplicates
-    if (prev.some((l) => l.id === item.id)) return prev;
-    return [...prev, item];
-  });
-};
+  const updateOrderStatus = async (mobile, status) => {
+    try {
+      await API.put('/order/updatestatus', { mobile, status });
+    } catch (err) {
+      console.log(`Status update error (${status}):`, err?.response?.data || err.message);
+    }
+  };
+
+  // ── Lead handlers ──────────────────────────────────────────────────────────
+  const handleAccept = async (item) => {
+    await updateOrderStatus(item.phone, 'accepted');
+    setLeads((prev) => prev.filter((l) => l.id !== item.id));
+    setAcceptedLeads((prev) => {
+      if (prev.some((l) => l.id === item.id)) return prev;
+      return [...prev, item];
+    });
+  };
 
   const handleReject = (id) => {
     setRejectLeadId(id);
@@ -261,174 +304,115 @@ const SurveyerScreen = () => {
     setRejectComment('');
   };
 
-  const handleStart = (id) => {
+  const handleStart = async (id) => {
   const lead = acceptedLeads.find((l) => l.id === id);
   if (!lead) return;
-  setAcceptedLeads((prev) => prev.filter((l) => l.id !== id));
-  setInProgressLeads((prev) => {
-    if (prev.some((l) => l.id === id)) return prev;
-    return [...prev, lead];
+  await updateOrderStatus(lead.phone, 'inprogress');
+
+  navigation.navigate('InProgress', {
+    lead: lead,
+    completedLeadId: null,
   });
 };
-const handleManualEnable = (id) => {
-  console.log('Manual enable called for id:', id); // ← Add this
-  setInProgressLeads((prev) =>
-    prev.map((l) => l.id === id ? { ...l, manualSiteEnabled: true } : l)
-  );
-};
 
-  const handleSiteObservation = (lead) => {
-    navigation.navigate('Form', { category: 'site_observation', lead });
+  const handleManualEnable = (id) => {
+    setInProgressLeads((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, manualSiteEnabled: true } : l))
+    );
   };
+
+const handleSiteObservation = (item) => {
+  navigation.navigate('Form', {
+    category: 'site_observation',
+    lead: item,
+    onFormComplete: () => {
+      setInProgressLeads((prev) =>
+        prev.map((l) => l.id === item.id ? { ...l, status: 'completed' } : l)
+      );
+
+      const { onComplete } = route.params;
+      if (onComplete) onComplete(item.id);
+    },
+  });
+};
 
   const handleEdit = (item) => {
-  setEditLead(item);
-  setEditForm({
-  name: item.name || '',
-  phone: item.phone || '',
-  whatsappNo: item.whatsappNo || '',
-  city: item.city || '',
-  comment: item.comment || '',
-  address: item.address || '',
-  email: item.email || '',
-  referredBy: item.referredBy || '',
-  latitude: item.latitude || '',
-  longitude: item.longitude || '',
-});
-  setEditModalVisible(true);
-};
-
-const confirmEdit = async () => {
-  try {
-    const payload = {
-      mobile: editForm.phone,        // ← This is what backend uses to find the record
-      name: editForm.name,
-      whatsappNo: editForm.whatsappNo || editForm.phone, // ← Must match mobile or be null
-      city: editForm.city,
-      comment: editForm.comment,
-      address: editForm.address || null,
-      email: editForm.email || null,
-      referredBy: editForm.referredBy,
-      latitude: editForm.latitude || null,
-      longitude: editForm.longitude || null,
-    };
-
-    console.log('Payload:', JSON.stringify(payload));
-
-    // URL-ல் id தேவையில்லை — backend mobile by தான் find பண்றது
-    const res = await API.put('/order/update', payload);
-
-    console.log('Response:', JSON.stringify(res.data));
-
-    setInProgressLeads((prev) =>
-      prev.map((l) =>
-        l.id === editLead.id
-          ? {
-              ...l,
-              name: editForm.name,
-              phone: editForm.phone,
-              whatsappNo: editForm.whatsappNo,
-              city: editForm.city,
-              comment: editForm.comment,
-              address: editForm.address,
-              email: editForm.email,
-              referredBy: editForm.referredBy,
-              latitude: editForm.latitude,
-              longitude: editForm.longitude,
-            }
-          : l
-      )
-    );
-
-    setEditModalVisible(false);
-    Alert.alert('Success', 'Lead updated successfully!');
-  } catch (err) {
-    console.log('Edit error:', err?.response?.status, JSON.stringify(err?.response?.data));
-    Alert.alert('Error', err?.response?.data?.error || 'Failed to update.');
-  }
-};
-  const getUserPhone = async () => {
-    try {
-      const data = await AsyncStorage.getItem(USER_DATA);
-      if (data) return JSON.parse(data)?.UserInfo?.phoneNo || '';
-    } catch (e) {}
-    return '';
+    setEditLead(item);
+    setEditForm({
+      name: item.name || '',
+      phone: item.phone || '',
+      whatsappNo: item.whatsappNo || '',
+      city: item.city || '',
+      comment: item.comment || '',
+      address: item.address || '',
+      email: item.email || '',
+      referredBy: item.referredBy || '',
+      latitude: item.latitude || '',
+      longitude: item.longitude || '',
+    });
+    setEditModalVisible(true);
   };
 
-  const sendLocation = async (latitude, longitude, timestamp) => {
-    const now = Date.now();
-    if (now - lastSentRef.current < 120000) return;
-    lastSentRef.current = now;
+  const confirmEdit = async () => {
     try {
-      const phoneNo = await getUserPhone();
-      await API.post('/location/add', {
-        latitude, longitude, phoneNo,
-        epoch: timestamp ? new Date(timestamp).getTime() : Date.now(),
-      });
+      const payload = {
+        mobile: editForm.phone,
+        name: editForm.name,
+        whatsappNo: editForm.whatsappNo || editForm.phone,
+        city: editForm.city,
+        comment: editForm.comment,
+        address: editForm.address || null,
+        email: editForm.email || null,
+        referredBy: editForm.referredBy,
+        latitude: editForm.latitude || null,
+        longitude: editForm.longitude || null,
+      };
+
+      const res = await API.put('/order/update', payload);
+
+      setInProgressLeads((prev) =>
+        prev.map((l) =>
+          l.id === editLead.id
+            ? {
+                ...l,
+                name: editForm.name,
+                phone: editForm.phone,
+                whatsappNo: editForm.whatsappNo,
+                city: editForm.city,
+                comment: editForm.comment,
+                address: editForm.address,
+                email: editForm.email,
+                referredBy: editForm.referredBy,
+                latitude: editForm.latitude,
+                longitude: editForm.longitude,
+              }
+            : l
+        )
+      );
+
+      setEditModalVisible(false);
+      Alert.alert('Success', 'Lead updated successfully!');
     } catch (err) {
-      console.log('Location send error:', err);
+      console.log('Edit error:', err?.response?.status, JSON.stringify(err?.response?.data));
+      Alert.alert('Error', err?.response?.data?.error || 'Failed to update.');
     }
   };
 
-  const startBackgroundTracking = () => {
-    locationSubscriberRef.current?.remove();
-    heartbeatSubscriberRef.current?.remove();
-
-    locationSubscriberRef.current = BackgroundGeolocation.onLocation(async (location) => {
-      const { latitude, longitude } = location.coords;
-      if (isMounted.current) setCurrentLocation({ latitude, longitude });
-      await sendLocation(latitude, longitude, location.timestamp);
-    });
-
-    heartbeatSubscriberRef.current = BackgroundGeolocation.onHeartbeat(async () => {
-      try {
-        const location = await BackgroundGeolocation.getCurrentPosition({ samples: 1, persist: false });
-        const { latitude, longitude } = location.coords;
-        if (isMounted.current) setCurrentLocation({ latitude, longitude });
-        await sendLocation(latitude, longitude, location.timestamp);
-      } catch (err) { console.log('Heartbeat error:', err); }
-    });
-
-    BackgroundGeolocation.ready({
-      desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
-      distanceFilter: 10,
-      interval: 120000,
-      fastestInterval: 120000,
-      heartbeatInterval: 120,
-      stopOnTerminate: false,
-      startOnBoot: true,
-      debug: false,
-    }).then((state) => { if (!state.enabled) BackgroundGeolocation.start(); });
-  };
-
-  const stopBackgroundTracking = () => {
-    BackgroundGeolocation.stop();
-    locationSubscriberRef.current?.remove();
-    heartbeatSubscriberRef.current?.remove();
-  };
-
+  // ── Toggle (ON / OFF) ──────────────────────────────────────────────────────
   const handleToggle = async () => {
     if (!isOn) {
-      if (Platform.OS === 'android') {
-        const fine = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
-        const bg = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION);
-        if (fine !== PermissionsAndroid.RESULTS.GRANTED || bg !== PermissionsAndroid.RESULTS.GRANTED) {
-          Alert.alert('Permission Required', 'Enable location permission', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => Linking.openSettings() },
-          ]);
-          return;
-        }
-      }
+      const granted = await requestLocationPermissions();
+      if (!granted) return;
       setIsOn(true);
-      startBackgroundTracking();
+      startTracking();
       fetchLeads();
     } else {
       setIsOn(false);
-      stopBackgroundTracking();
+      stopTracking();
     }
   };
 
+  // ── Logout ─────────────────────────────────────────────────────────────────
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
       { text: 'Cancel', style: 'cancel' },
@@ -438,88 +422,82 @@ const confirmEdit = async () => {
           try {
             await AsyncStorage.removeItem(USER_DATA);
             navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
-          } catch (e) { Alert.alert('Error', 'Failed to logout.'); }
+          } catch (e) {
+            Alert.alert('Error', 'Failed to logout.');
+          }
         },
       },
     ]);
   };
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <View style={{ flex: 1 }}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
-      {/* ── OFF STATE: Full red gradient with logout + toggle on top ── */}
-{!isOn && (
-  <LinearGradient colors={['#F00001', '#B00100']} style={{ flex: 1 }}>
-    {/* Logout top-left */}
-    <TouchableOpacity style={styles.offLogoutBtn} onPress={handleLogout}>
-      <Ionicons name="log-out-outline" size={28} color="#fff" />
-    </TouchableOpacity>
+      {/* ── OFF STATE ─────────────────────────────────────────────────────── */}
+      {!isOn && (
+        <LinearGradient colors={['#F00001', '#B00100']} style={{ flex: 1 }}>
+          {/* Logout */}
+          <TouchableOpacity style={styles.offLogoutBtn} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={28} color="#fff" />
+          </TouchableOpacity>
 
-    {/* Toggle top-right */}
-    <View style={styles.offToggleBtn}>
-      <Switch
-        trackColor={{ false: '#ffffff88', true: '#fff' }}
-        thumbColor="#ED1C25"
-        value={isOn}
-        onValueChange={handleToggle}
-      />
-    </View>
-
-    <ScrollView
-      contentContainerStyle={{ paddingTop: 60, paddingBottom: 30 }}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Logo */}
-      <View style={{ alignItems: 'center', paddingTop: 20, marginBottom: 20 }}>
-        <Image
-          source={require('../../assets/images/kondass.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-      </View>
-
-      {/* Leads or Welcome */}
-      {leadsLoading ? (
-        <ActivityIndicator size="large" color="#fff" style={{ marginTop: 40 }} />
-      ) : leads.length === 0 ? (
-        // No leads → show old welcome screen content
-        <View style={styles.offTextContainer}>
-          <Text style={styles.welcome}>Welcome!</Text>
-          <Text style={styles.message}>
-            Let's get started! Turn on availability!
-          </Text>
-        </View>
-      ) : (
-        // Has leads → show unaccepted leads list
-        <>
-          <View style={[styles.sectionHeader, { paddingHorizontal: 15 }]}>
-            <View style={[styles.sectionDot, { backgroundColor: '#fff' }]} />
-            <Text style={[styles.sectionTitle, { color: '#fff' }]}>
-              Leads - Un Accepted
-            </Text>
+          {/* Toggle */}
+          <View style={styles.offToggleBtn}>
+            <Switch
+              trackColor={{ false: '#ffffff88', true: '#fff' }}
+              thumbColor="#ED1C25"
+              value={isOn}
+              onValueChange={handleToggle}
+            />
           </View>
 
-          {leads.map((item) => (
-            <LeadCard
-              key={item.id}
-              item={item}
-              currentLocation={currentLocation}
-              cardType="unaccepted"
-              onAccept={handleAccept}
-              onReject={handleReject}
-            />
-          ))}
-        </>
-      )}
-    </ScrollView>
-  </LinearGradient>
-)}
+          <ScrollView
+            contentContainerStyle={{ paddingTop: 60, paddingBottom: 30 }}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={{ alignItems: 'center', paddingTop: 20, marginBottom: 20 }}>
+              <Image
+                source={require('../../assets/images/kondass.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            </View>
 
-      {/* ── ON STATE: White fixed top bar + ScrollView ── */}
+            {leadsLoading ? (
+              <ActivityIndicator size="large" color="#fff" style={{ marginTop: 40 }} />
+            ) : leads.length === 0 ? (
+              <View style={styles.offTextContainer}>
+                <Text style={styles.welcome}>Welcome!</Text>
+                <Text style={styles.message}>Let's get started! Turn on availability!</Text>
+              </View>
+            ) : (
+              <>
+                <View style={[styles.sectionHeader, { paddingHorizontal: 15 }]}>
+                  <View style={[styles.sectionDot, { backgroundColor: '#fff' }]} />
+                  <Text style={[styles.sectionTitle, { color: '#fff' }]}>Leads - New</Text>
+                </View>
+                {leads.map((item) => (
+                  <LeadCard
+                    key={item.id}
+                    item={item}
+                    currentLocation={currentLocation}
+                    cardType="unaccepted"
+                    onAccept={handleAccept}
+                    onReject={handleReject}
+                  />
+                ))}
+              </>
+            )}
+          </ScrollView>
+        </LinearGradient>
+      )}
+
+      {/* ── ON STATE ──────────────────────────────────────────────────────── */}
       {isOn && (
         <>
-          {/* Fixed white top bar */}
+          {/* Fixed top bar */}
           <View style={styles.fixedTopBar}>
             <TouchableOpacity onPress={handleLogout}>
               <Ionicons name="log-out-outline" size={28} color="#ED1C25" />
@@ -536,56 +514,97 @@ const confirmEdit = async () => {
             style={{ flex: 1, width: '100%', backgroundColor: '#F5F5F5' }}
             contentContainerStyle={{ paddingTop: 90, paddingBottom: 30 }}
           >
-            {/* ── SECTION 1: Leads Un Accepted ── */}
+            {/* Section 1 – Un Accepted */}
             <View style={styles.sectionHeader}>
               <View style={[styles.sectionDot, { backgroundColor: '#ED1C25' }]} />
-              <Text style={styles.sectionTitle}>Leads - Un Accepted</Text>
+              <Text style={styles.sectionTitle}>Leads - New</Text>
             </View>
 
             {leadsLoading && (
               <ActivityIndicator size="large" color="#ED1C25" style={{ marginTop: 30 }} />
             )}
-
             {!leadsLoading && leads.length === 0 && (
               <Text style={styles.emptyText}>No leads available right now.</Text>
             )}
+            {!leadsLoading &&
+              leads.map((item) => (
+                <LeadCard
+                  key={item.id}
+                  item={item}
+                  currentLocation={currentLocation}
+                  cardType="unaccepted"
+                  onAccept={handleAccept}
+                  onReject={handleReject}
+                />
+              ))}
 
-            {!leadsLoading && leads.map((item) => (
-              <LeadCard
-                key={item.id}
-                item={item}
-                currentLocation={currentLocation}
-                cardType="unaccepted"
-                onAccept={handleAccept}
-                onReject={handleReject}
-              />
-            ))}
+            {/* Section 2 – Accepted */}
+{acceptedLeads.length > 0 && (
+  <>
+    <View style={styles.sectionHeader}>
+      <View style={[styles.sectionDot, { backgroundColor: '#22c55e' }]} />
+      <Text style={styles.sectionTitle}>Leads - Accepted</Text>
 
-            {/* ── SECTION 2: Leads Accepted ── */}
-            {acceptedLeads.length > 0 && (
-              <>
-                <View style={styles.sectionHeader}>
-                  <View style={[styles.sectionDot, { backgroundColor: '#22c55e' }]} />
-                  <Text style={styles.sectionTitle}>Leads Accepted</Text>
-                </View>
-                {acceptedLeads.map((item) => (
-                  <LeadCard
-                    key={item.id}
-                    item={item}
-                    currentLocation={currentLocation}
-                    cardType="accepted"
-                    onStart={handleStart}
-                  />
-                ))}
-              </>
-            )}
+      {/* Filter buttons */}
+      <View style={{ flexDirection: 'row', marginLeft: 'auto', gap: 6 }}>
+        <TouchableOpacity
+          onPress={() => setAcceptedFilter('all')}
+          style={{
+            paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12,
+            backgroundColor: acceptedFilter === 'all' ? '#22c55e' : '#e5e7eb',
+          }}
+        >
+          <Text style={{
+            fontSize: 11, fontWeight: 'bold',
+            color: acceptedFilter === 'all' ? '#fff' : '#555',
+          }}>All</Text>
+        </TouchableOpacity>
 
-            {/* ── SECTION 3: Lead Inprogress ── */}
+        <TouchableOpacity
+          onPress={() => setAcceptedFilter('completed')}
+          style={{
+            paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12,
+            backgroundColor: acceptedFilter === 'completed' ? '#22c55e' : '#e5e7eb',
+          }}
+        >
+          <Text style={{
+            fontSize: 11, fontWeight: 'bold',
+            color: acceptedFilter === 'completed' ? '#fff' : '#555',
+          }}>Completed</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+
+    {acceptedLeads
+      .filter(item =>
+        acceptedFilter === 'all' ? true : item.status === 'completed'
+      )
+      .map((item) => (
+        <LeadCard
+          key={item.id}
+          item={item}
+          currentLocation={currentLocation}
+          cardType="accepted"
+          onStart={handleStart}
+        />
+    ))}
+
+    {acceptedLeads.filter(item =>
+  acceptedFilter === 'all' ? true : item.status === 'completed'
+).length === 0 && (
+      <Text style={[styles.emptyText, { marginTop: 10 }]}>
+        No completed leads yet.
+      </Text>
+    )}
+  </>
+)}
+
+            {/* Section 3 – Inprogress */}
             {inProgressLeads.length > 0 && (
               <>
                 <View style={styles.sectionHeader}>
                   <View style={[styles.sectionDot, { backgroundColor: '#f97316' }]} />
-                  <Text style={styles.sectionTitle}>Lead Inprogress</Text>
+                  <Text style={styles.sectionTitle}>Lead-Inprogress</Text>
                 </View>
                 {inProgressLeads.map((item) => (
                   <LeadCard
@@ -604,7 +623,7 @@ const confirmEdit = async () => {
         </>
       )}
 
-      {/* Reject Modal */}
+      {/* ── Reject Modal ───────────────────────────────────────────────────── */}
       <Modal
         visible={rejectModalVisible}
         transparent
@@ -630,168 +649,166 @@ const confirmEdit = async () => {
           </View>
         </View>
       </Modal>
-      {/* Edit Modal */}
-<Modal
-  visible={editModalVisible}
-  transparent
-  animationType="slide"
-  onRequestClose={() => setEditModalVisible(false)}
->
-  <View style={styles.modalOverlay}>
-    <View style={[styles.modalBox, { maxHeight: '85%' }]}>
-      <Text style={styles.modalTitle}>Edit Lead</Text>
-      <ScrollView showsVerticalScrollIndicator={false}>
-       {[
-  { label: 'Name', key: 'name' },
-  { label: 'Phone', key: 'phone' },
-  { label: 'WhatsApp No', key: 'whatsappNo' },
-  { label: 'City', key: 'city' },
-  { label: 'Email', key: 'email' },
-  { label: 'Referred By', key: 'referredBy' },
-  { label: 'Address', key: 'address' },
-  { label: 'Latitude', key: 'latitude' },
-  { label: 'Longitude', key: 'longitude' },
-  { label: 'Comment', key: 'comment' },
-].map(({ label, key }) => (
-          <View key={key} style={{ marginBottom: 12 }}>
-            <Text style={styles.modalLabel}>{label}</Text>
-            <TextInput
-              style={[styles.modalInput, { minHeight: key === 'comment' || key === 'address' ? 70 : 44 }]}
-              value={editForm[key]}
-              onChangeText={(val) => setEditForm((prev) => ({ ...prev, [key]: val }))}
-              multiline={key === 'comment' || key === 'address'}
-              placeholderTextColor="#aaa"
-            />
-          </View>
-        ))}
-      </ScrollView>
 
-      <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
-        <TouchableOpacity
-          style={[styles.modalSaveBtn, { flex: 1, backgroundColor: '#aaa' }]}
-          onPress={() => setEditModalVisible(false)}
-        >
-          <Text style={styles.modalSaveBtnText}>Cancel</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.modalSaveBtn, { flex: 1 }]}
-          onPress={confirmEdit}
-        >
-          <Text style={styles.modalSaveBtnText}>Update</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  </View>
-</Modal>
+      {/* ── Edit Modal ─────────────────────────────────────────────────────── */}
+      <Modal
+        visible={editModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { maxHeight: '85%' }]}>
+            <Text style={styles.modalTitle}>Edit Lead</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {[
+                { label: 'Name', key: 'name' },
+                { label: 'Phone', key: 'phone' },
+                { label: 'WhatsApp No', key: 'whatsappNo' },
+                { label: 'City', key: 'city' },
+                { label: 'Email', key: 'email' },
+                { label: 'Referred By', key: 'referredBy' },
+                { label: 'Address', key: 'address' },
+                { label: 'Latitude', key: 'latitude' },
+                { label: 'Longitude', key: 'longitude' },
+                { label: 'Comment', key: 'comment' },
+              ].map(({ label, key }) => (
+                <View key={key} style={{ marginBottom: 12 }}>
+                  <Text style={styles.modalLabel}>{label}</Text>
+                  <TextInput
+                    style={[
+                      styles.modalInput,
+                      { minHeight: key === 'comment' || key === 'address' ? 70 : 44 },
+                    ]}
+                    value={editForm[key]}
+                    onChangeText={(val) => setEditForm((prev) => ({ ...prev, [key]: val }))}
+                    multiline={key === 'comment' || key === 'address'}
+                    placeholderTextColor="#aaa"
+                  />
+                </View>
+              ))}
+            </ScrollView>
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+              <TouchableOpacity
+                style={[styles.modalSaveBtn, { flex: 1, backgroundColor: '#aaa' }]}
+                onPress={() => setEditModalVisible(false)}
+              >
+                <Text style={styles.modalSaveBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSaveBtn, { flex: 1 }]}
+                onPress={confirmEdit}
+              >
+                <Text style={styles.modalSaveBtnText}>Update</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
 
 export default SurveyerScreen;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  // OFF state
-  offLogoContainer: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0,
-    alignItems: 'center',
-    paddingTop: 80,
-  },
   logo: { width: 200, height: 100 },
-  offLogoutBtn: {
-    position: 'absolute',
-    top: 55,
-    left: 20,
-    zIndex: 10,
-  },
+  offLogoutBtn: { position: 'absolute', top: 55, left: 20, zIndex: 10 },
   offToggleBtn: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    zIndex: 10,
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    elevation: 4,
+    position: 'absolute', top: 50, right: 20, zIndex: 10,
+    backgroundColor: '#fff', borderRadius: 20,
+    paddingHorizontal: 4, paddingVertical: 2, elevation: 4,
   },
-  offTextContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  offTextContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   welcome: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
   message: { marginTop: 10, color: '#ffffffcc', textAlign: 'center', paddingHorizontal: 30 },
 
-  // ON state fixed top bar
   fixedTopBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 50,
-    paddingBottom: 12,
-    backgroundColor: '#fff',
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingTop: 50, paddingBottom: 12,
+    backgroundColor: '#fff', elevation: 6,
+    shadowColor: '#000', shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 2 }, shadowRadius: 4,
   },
 
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingTop: 16, paddingBottom: 6 },
+  sectionHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 15, paddingTop: 16, paddingBottom: 6,
+  },
   sectionDot: { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
   sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#333' },
-
   emptyText: { textAlign: 'center', marginTop: 40, color: '#999', fontSize: 14, paddingHorizontal: 30 },
-  card: { backgroundColor: '#fff', marginHorizontal: 15, marginBottom: 12, borderRadius: 10, padding: 12, elevation: 3 },
+
+  card: {
+    backgroundColor: '#fff', marginHorizontal: 15, marginBottom: 12,
+    borderRadius: 10, padding: 12, elevation: 3,
+  },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between' },
   referred: { fontSize: 12, color: '#E53935' },
   date: { fontSize: 12, color: '#888' },
   userRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#f0f0f0', marginRight: 10, justifyContent: 'center', alignItems: 'center' },
+  avatar: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: '#f0f0f0', marginRight: 10,
+    justifyContent: 'center', alignItems: 'center',
+  },
   name: { fontSize: 16, fontWeight: 'bold' },
   subText: { fontSize: 12, color: '#555' },
   iconContainer: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   iconBtn: { padding: 4 },
-  commentRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 8 },
+  commentRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'flex-start', marginTop: 8,
+  },
   comment: { flex: 1, fontSize: 12, color: '#555' },
   seeMore: { fontSize: 12, color: '#1E88E5' },
 
-  startBtn: { backgroundColor: '#22c55e', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+  startBtn: {
+    backgroundColor: '#22c55e', flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
+  },
   startBtnText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
 
   reachBtnWrapper: { alignItems: 'center' },
-  reachBtn: { backgroundColor: '#f97316', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, opacity: 0.85 },
+  reachBtn: {
+    backgroundColor: '#f97316', flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, opacity: 0.85,
+  },
   reachBtnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
   reachDistance: { fontSize: 10, color: '#f97316', marginTop: 3, fontWeight: '600' },
 
-  smallSiteBtn: { backgroundColor: '#ED1C25', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 6, alignItems: 'center' },
+  smallSiteBtn: {
+    backgroundColor: '#ED1C25', paddingHorizontal: 10,
+    paddingVertical: 8, borderRadius: 6, alignItems: 'center',
+  },
   smallSiteBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold', textAlign: 'center' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
-  modalBox: { backgroundColor: '#fff', width: '85%', borderRadius: 12, padding: 20, elevation: 10 },
+  editBtn: {
+    backgroundColor: '#3b82f6', flexDirection: 'row',
+    alignItems: 'center', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6,
+  },
+  editBtnText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
+
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  modalBox: {
+    backgroundColor: '#fff', width: '85%',
+    borderRadius: 12, padding: 20, elevation: 10,
+  },
   modalTitle: { fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 16, color: '#222' },
   modalLabel: { fontSize: 13, color: '#444', marginBottom: 6 },
-  modalInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 10, fontSize: 13, color: '#333', textAlignVertical: 'top', minHeight: 90, marginBottom: 16 },
+  modalInput: {
+    borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
+    padding: 10, fontSize: 13, color: '#333',
+    textAlignVertical: 'top', minHeight: 90, marginBottom: 16,
+  },
   modalSaveBtn: { backgroundColor: '#ED1C25', paddingVertical: 13, borderRadius: 8, alignItems: 'center' },
   modalSaveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
-  editBtn: {
-  backgroundColor: '#3b82f6',
-  flexDirection: 'row',
-  alignItems: 'center',
-  paddingHorizontal: 8,
-  paddingVertical: 5,
-  borderRadius: 6,
-},
-editBtnText: {
-  color: '#fff',
-  fontSize: 10,
-  fontWeight: 'bold',
-},
 });
