@@ -1,20 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, Modal, TextInput, Alert, Dimensions,
+  ScrollView, Modal, TextInput, Alert, Dimensions,Linking
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useLocationTracking, getDistance } from '../service/locationService';
 import API from '../api/api1';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 
 const { width } = Dimensions.get('window');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LeadCard
 // ─────────────────────────────────────────────────────────────────────────────
-const LeadCard = ({ item, currentLocation, onSiteObservation, onManualEnable, onEdit }) => {
+// LeadCard function signature மாத்துங்க
+const LeadCard = ({ item, currentLocation, onSiteObservation, onManualEnable, onEdit, navigation }) => {
   const hasLatLong = item.latitude && item.longitude &&
     item.latitude !== '' && item.longitude !== '';
 
@@ -27,96 +27,142 @@ const LeadCard = ({ item, currentLocation, onSiteObservation, onManualEnable, on
 
   const withinRange = distToLead !== null && distToLead <= 300;
 
+  const openMap = () => {
+  if (item.latitude || item.address || item.city) {
+    navigation.navigate('MapView', {
+      latitude: item.latitude,
+      longitude: item.longitude,
+      address: item.address,
+      city: item.city,
+    });
+  } else {
+    Alert.alert('Location not available', 'No coordinates or address found.');
+  }
+};
+
   return (
-  <View style={styles.card}>
+    <View style={styles.card}>
 
-    {/* Top row */}
-    <View style={styles.rowBetween}>
-      <Text style={styles.referred}>
-        Referred by — <Text style={{ fontWeight: 'bold' }}>{item.referredBy || 'N/A'}</Text>
-      </Text>
-      <Text style={styles.date}>{item.date}</Text>
-    </View>
-
-    {/* User info row */}
-    <View style={styles.userRow}>
-      <View style={styles.avatar}>
-        <Ionicons name="person-outline" size={22} color="#aaa" />
+      {/* Top row */}
+      <View style={styles.rowBetween}>
+        <Text style={styles.referred}>
+          Referred by — <Text style={{ fontWeight: 'bold' }}>{item.referredBy || 'N/A'}</Text>
+        </Text>
+        <Text style={styles.date}>{item.date}</Text>
       </View>
 
-      <View style={{ flex: 1 }}>
-        <Text style={styles.name}>{item.name}</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <Ionicons name="call-outline" size={12} color="#555" />
-          <Text style={styles.subText}>{item.phone}</Text>
+      {/* User info row */}
+      <View style={styles.userRow}>
+        <View style={styles.avatar}>
+          <Ionicons name="person-outline" size={22} color="#aaa" />
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <Ionicons name="location-outline" size={12} color="#555" />
-          <Text style={styles.subText}>{item.city}</Text>
-        </View>
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
-          <Ionicons name="notifications-outline" size={16} color="#aaa" />
-          <Ionicons name="logo-whatsapp" size={16} color={item.whatsappNo ? '#25D366' : '#ccc'} />
-          <Ionicons name="chatbubble-outline" size={16} color={item.phone ? '#555' : '#ccc'} />
-          <Ionicons name="mail-outline" size={16} color={item.email ? '#555' : '#ccc'} />
-        </View>
-      </View>
 
-      {/* ✅ Right side buttons - ஒரே இடத்தில் மட்டும் */}
-      {item.status === 'completed' ? (
-        <View style={{
-          backgroundColor: '#22c55e',
-          paddingHorizontal: 10,
-          paddingVertical: 6,
-          borderRadius: 8,
-        }}>
-          <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>
-            ✓ Completed
-          </Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.name}>{item.name}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Ionicons name="call-outline" size={12} color="#555" />
+            <Text style={styles.subText}>{item.phone}</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Ionicons name="location-outline" size={12} color="#555" />
+            <Text style={styles.subText}>{item.city}</Text>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+            <Ionicons name="notifications-outline" size={16} color="#aaa" />
+            <Ionicons name="logo-whatsapp" size={16} color={item.whatsappNo ? '#25D366' : '#ccc'} />
+            <Ionicons name="chatbubble-outline" size={16} color={item.phone ? '#555' : '#ccc'} />
+            <Ionicons name="mail-outline" size={16} color={item.email ? '#555' : '#ccc'} />
+          </View>
         </View>
-      ) : (item.manualSiteEnabled || (hasLatLong && withinRange)) ? (
-        <View style={{ alignItems: 'center', gap: 6 }}>
-          <TouchableOpacity style={styles.smallSiteBtn} onPress={() => onSiteObservation(item)}>
-            <Text style={styles.smallSiteBtnText}>Site{'\n'}Observation</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.editBtn} onPress={() => onEdit(item)}>
-            <Ionicons name="create-outline" size={12} color="#fff" style={{ marginRight: 2 }} />
-            <Text style={styles.editBtnText}>Edit</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={styles.reachBtnWrapper}>
-          <TouchableOpacity style={styles.reachBtn} onPress={() => onManualEnable(item.id)}>
-            <Ionicons name="navigate-outline" size={14} color="#fff" style={{ marginRight: 3 }} />
-            <Text style={styles.reachBtnText}>Reached</Text>
-          </TouchableOpacity>
-          {hasLatLong && distToLead !== null && (
-            <Text style={styles.reachDistance}>{distToLead} m</Text>
-          )}
-          {!hasLatLong && item.address && (
-            <Text numberOfLines={2} style={{
-              fontSize: 9, color: '#888', marginTop: 4,
-              textAlign: 'center', maxWidth: 100,
-            }}>
-              {item.address}
+
+        {/* Right side buttons */}
+        {item.status === 'completed' ? (
+          <View style={{
+            backgroundColor: '#22c55e',
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            borderRadius: 8,
+          }}>
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>
+              ✓ Completed
             </Text>
-          )}
-        </View>
-      )}
-    </View>
+          </View>
 
-    {/* Comment */}
-    <View style={[styles.commentRow, {
-      borderTopWidth: 0.5, borderTopColor: '#eee', marginTop: 8, paddingTop: 8,
-    }]}>
-      <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 12, fontWeight: '600', color: '#555', marginBottom: 2 }}>Comment</Text>
-        <Text numberOfLines={2} style={styles.comment}>{item.comment}</Text>
+        ) : (item.manualSiteEnabled || (hasLatLong && withinRange)) ? (
+          // ✅ Range-க்கு வந்த பிறகு — Site Observation, Edit, Map
+          <View style={{ alignItems: 'center', gap: 6 }}>
+            <TouchableOpacity style={styles.smallSiteBtn} onPress={() => onSiteObservation(item)}>
+              <Text style={styles.smallSiteBtnText}>Site{'\n'}Observation</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.iconBtn} onPress={() => onEdit(item)}>
+  <Ionicons name="create-outline" size={18} color="#fff" />
+</TouchableOpacity>
+
+          </View>
+
+        ) : (
+          // ✅ Range-க்கு வருவதற்கு முன்பு — Reached, Map, Distance
+          <View style={styles.reachBtnWrapper}>
+            <TouchableOpacity style={styles.reachBtn} onPress={() => onManualEnable(item)}>
+              <Ionicons name="navigate-outline" size={14} color="#fff" style={{ marginRight: 3 }} />
+              <Text style={styles.reachBtnText}>Reached</Text>
+            </TouchableOpacity>
+
+            {/* Map button only before reached */}
+{!item.manualSiteEnabled && (
+  <TouchableOpacity
+    style={[styles.editBtn, { backgroundColor: '#0ea5e9', marginTop: 6 }]}
+    onPress={openMap}
+  >
+    <Ionicons name="map-outline" size={12} color="#fff" style={{ marginRight: 2 }} />
+    <Text style={styles.editBtnText}>Open Map</Text>
+  </TouchableOpacity>
+)}
+
+            {hasLatLong && distToLead !== null && (
+              <Text style={styles.reachDistance}>{distToLead} m</Text>
+            )}
+            {!hasLatLong && item.address && (
+              <Text numberOfLines={2} style={{
+                fontSize: 9, color: '#888', marginTop: 4,
+                textAlign: 'center', maxWidth: 100,
+              }}>
+                {item.address}
+              </Text>
+            )}
+          </View>
+        )}
       </View>
-      <Text style={styles.seeMore}>See more</Text>
+
+      {/* Comment */}
+      <View style={[styles.commentRow, {
+        borderTopWidth: 0.5, borderTopColor: '#eee', marginTop: 8, paddingTop: 8,
+      }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 12, fontWeight: '600', color: '#555', marginBottom: 2 }}>Comment</Text>
+          <Text numberOfLines={2} style={styles.comment}>{item.comment}</Text>
+        </View>
+        <TouchableOpacity
+  disabled={!item.comment || item.comment.length <= 200}
+>
+  <Text
+    style={[
+      styles.seeMore,
+      {
+        color:
+          item.comment && item.comment.length > 200
+            ? '#1E88E5'
+            : '#ccc',
+      },
+    ]}
+  >
+    See more
+  </Text>
+</TouchableOpacity>
+      </View>
     </View>
-  </View>
-);
+  );
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -129,7 +175,19 @@ const InProgressScreen = () => {
   const { lead, completedLeadId } = route.params || {};
   const formCompletedRef = useRef(null);
 
-  const [inProgressLeads, setInProgressLeads] = useState(lead ? [lead] : []);
+  const [inProgressLeads, setInProgressLeads] = useState(
+  lead ? [{ ...lead }] : []
+);
+
+useEffect(() => {
+    if (completedLeadId) {
+      setInProgressLeads((prev) =>
+        prev.map((l) =>
+          l.id === completedLeadId ? { ...l, status: 'completed' } : l
+        )
+      );
+    }
+  }, [completedLeadId]);
   const { currentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
 
 useEffect(() => {
@@ -152,7 +210,6 @@ useFocusEffect(
         l.id === completedId ? { ...l, status: 'completed' } : l
       )
     );
-    navigation.goBack();
 
   }, [route.params?.completedLeadId])
 );
@@ -160,34 +217,25 @@ useFocusEffect(
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editLead, setEditLead] = useState(null);
   const [editForm, setEditForm] = useState({});
-
-  useEffect(() => {
-  if (inProgressLeads.length > 0) {
-    const allCompleted = inProgressLeads.every(l => l.status === 'completed');
-    if (allCompleted) {
-      const timer = setTimeout(() => {
-        navigation.goBack();
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }
-}, [inProgressLeads]);
+  const [reachedModalVisible, setReachedModalVisible] = useState(false);
+const [selectedLead, setSelectedLead] = useState(null);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-  const handleManualEnable = (id) => {
-    setInProgressLeads((prev) =>
-      prev.map((l) => (l.id === id ? { ...l, manualSiteEnabled: true } : l))
-    );
-  };
+  const handleManualEnable = (item) => {
+  setInProgressLeads((prev) =>
+    prev.map((l) => (l.id === item.id ? { ...l, manualSiteEnabled: true } : l))
+  );
+
+  // 👉 Popup open
+  setSelectedLead(item);
+  setReachedModalVisible(true);
+};
 
  const handleSiteObservation = (item) => {
   navigation.navigate('Form', {
     category: 'site_observation',
     lead: item,
-  });
-  
-  const unsubscribe = navigation.addListener('focus', () => {
-    unsubscribe();
+    completedLeadId: item.id, // ✅ Form goBack() பண்ணும்போது இது trigger ஆகும்
   });
 };
 
@@ -270,118 +318,10 @@ useFocusEffect(
               onSiteObservation={handleSiteObservation}
               onManualEnable={handleManualEnable}
               onEdit={handleEdit}
+              navigation={navigation}
             />
           ))}
         </View>
-
-        {/* ── Live Tracking Map ── */}
-        {currentLocation ? (
-          <View style={styles.mapContainer}>
-
-            {/* LIVE badge */}
-            <View style={styles.liveBadge}>
-              <View style={styles.liveDot} />
-              <Text style={styles.liveText}>LIVE</Text>
-            </View>
-
-            <MapView
-              provider={PROVIDER_GOOGLE}
-              style={styles.map}
-              region={{
-                latitude: currentLocation.latitude,
-                longitude: currentLocation.longitude,
-                latitudeDelta: 0.008,
-                longitudeDelta: 0.008,
-              }}
-              showsUserLocation={false}
-              showsMyLocationButton={false}
-            >
-              {/* Surveyor marker (moving) */}
-              <Marker
-                coordinate={{
-                  latitude: currentLocation.latitude,
-                  longitude: currentLocation.longitude,
-                }}
-                title="You are here"
-              >
-                <View style={styles.surveyorMarker}>
-                  <Ionicons name="navigate" size={20} color="#fff" />
-                </View>
-              </Marker>
-
-              {/* Lead location markers + polyline */}
-              {inProgressLeads.map((l) => {
-                if (!l.latitude || !l.longitude) return null;
-                const leadCoord = {
-                  latitude: parseFloat(l.latitude),
-                  longitude: parseFloat(l.longitude),
-                };
-                return (
-                  <React.Fragment key={l.id}>
-                    <Marker
-                      coordinate={leadCoord}
-                      title={l.name}
-                      description={l.address || l.city}
-                    >
-                      <View style={styles.leadMarker}>
-                        <Ionicons name="home" size={16} color="#fff" />
-                      </View>
-                    </Marker>
-
-                    {/* Dashed line surveyor → lead */}
-                    <Polyline
-                      coordinates={[
-                        {
-                          latitude: currentLocation.latitude,
-                          longitude: currentLocation.longitude,
-                        },
-                        leadCoord,
-                      ]}
-                      strokeColor="#ED1C25"
-                      strokeWidth={3}
-                      lineDashPattern={[8, 4]}
-                    />
-                  </React.Fragment>
-                );
-              })}
-            </MapView>
-
-            {/* Distance info bar */}
-            {inProgressLeads.map((l) => {
-              if (!l.latitude || !l.longitude) return null;
-              const dist = Math.round(
-                getDistance(
-                  currentLocation.latitude,
-                  currentLocation.longitude,
-                  parseFloat(l.latitude),
-                  parseFloat(l.longitude)
-                )
-              );
-              return (
-                <View key={l.id} style={styles.distanceBar}>
-                  <View style={styles.distanceItem}>
-                    <Ionicons name="navigate-outline" size={16} color="#ED1C25" />
-                    <Text style={styles.distanceValue}>
-                      {dist >= 1000 ? `${(dist / 1000).toFixed(1)} km` : `${dist} m`}
-                    </Text>
-                    <Text style={styles.distanceLabel}>Distance</Text>
-                  </View>
-                  <View style={styles.distanceDivider} />
-                  <View style={styles.distanceItem}>
-                    <Ionicons name="person-outline" size={16} color="#22c55e" />
-                    <Text style={styles.distanceValue}>{l.name}</Text>
-                    <Text style={styles.distanceLabel}>Lead</Text>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-        ) : (
-          <View style={styles.noLocationBox}>
-            <Ionicons name="location-outline" size={32} color="#ccc" />
-            <Text style={styles.noLocationText}>Waiting for location...</Text>
-          </View>
-        )}
       </ScrollView>
 
       {/* ── Edit Modal ── */}
@@ -437,6 +377,41 @@ useFocusEffect(
           </View>
         </View>
       </Modal>
+      <Modal
+  visible={reachedModalVisible}
+  transparent
+  animationType="fade"
+  onRequestClose={() => setReachedModalVisible(false)}
+>
+  <View style={styles.modalOverlay}>
+    <View style={styles.modalBox}>
+      
+      <Text style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 15 }}>
+        You have reached the location
+      </Text>
+
+      <TouchableOpacity
+        style={styles.smallSiteBtn}
+        onPress={() => {
+          setReachedModalVisible(false);
+          handleSiteObservation(selectedLead);
+        }}
+      >
+        <Text style={styles.smallSiteBtnText}>
+          Site Observation
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.modalSaveBtn, { marginTop: 10, backgroundColor: '#aaa' }]}
+        onPress={() => setReachedModalVisible(false)}
+      >
+        <Text style={styles.modalSaveBtnText}>Cancel</Text>
+      </TouchableOpacity>
+
+    </View>
+  </View>
+</Modal>
     </View>
   );
 };
@@ -547,4 +522,11 @@ const styles = StyleSheet.create({
   },
   modalSaveBtn: { backgroundColor: '#ED1C25', paddingVertical: 13, borderRadius: 8, alignItems: 'center' },
   modalSaveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  iconBtn: {
+  backgroundColor: '#3b82f6',
+  padding: 8,
+  borderRadius: 50,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
 });

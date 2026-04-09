@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import API from '../api/api1';
@@ -61,7 +62,6 @@ const LeadCard = ({
       : null;
 
   const withinRange = distToLead !== null && distToLead <= 300;
-
   return (
     <View style={[styles.card, cardType === 'unaccepted' && { borderLeftWidth: 4, borderLeftColor: '#ED1C25' }]}>
       <View style={styles.rowBetween}>
@@ -117,6 +117,15 @@ const LeadCard = ({
           ✓ Completed
         </Text>
       </View>
+    ) : item.status === 'inprogress' ? (
+      // ✅ InProgress-ல் இருக்கும்போது — Resume button காட்டு
+      <TouchableOpacity
+        style={[styles.startBtn, { backgroundColor: '#f97316' }]}
+        onPress={() => onStart(item.id)}
+      >
+        <Ionicons name="play-circle-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
+        <Text style={styles.startBtnText}>Resume</Text>
+      </TouchableOpacity>
     ) : (
       <TouchableOpacity style={styles.startBtn} onPress={() => onStart(item.id)}>
         <Ionicons name="play-circle-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
@@ -126,48 +135,28 @@ const LeadCard = ({
   </View>
 )}
 
-        {/* ── Inprogress ── */}
-        {cardType === 'inprogress' && (() => {
-          if (item.manualSiteEnabled || (hasLatLong && withinRange)) {
-            return (
-              <View style={{ alignItems: 'center', gap: 6 }}>
-                <TouchableOpacity
-                  style={styles.smallSiteBtn}
-                  onPress={() => onSiteObservation(item)}
-                >
-                  <Text style={styles.smallSiteBtnText}>Site{'\n'}Observation</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.editBtn}
-                  onPress={() => onEdit(item)}
-                >
-                  <Ionicons name="create-outline" size={12} color="#fff" style={{ marginRight: 2 }} />
-                  <Text style={styles.editBtnText}>Edit</Text>
-                </TouchableOpacity>
-              </View>
-            );
-          }
+                {cardType === 'inprogress' && (
+  <View style={{ alignItems: 'center', gap: 6 }}>
+    <View
+      style={{
+        backgroundColor: '#22c55e',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 8,
+        minWidth: 120,
+        alignItems: 'center',
+      }}
+    >
+      <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>
+        ✓ Completed
+      </Text>
+    </View>
 
-          return (
-            <View style={styles.reachBtnWrapper}>
-              <TouchableOpacity
-                style={styles.reachBtn}
-                onPress={() => onManualEnable(item.id)}
-              >
-                <Ionicons name="navigate-outline" size={14} color="#fff" style={{ marginRight: 3 }} />
-                <Text style={styles.reachBtnText}>Reach</Text>
-              </TouchableOpacity>
-              {hasLatLong && distToLead !== null && (
-                <Text style={styles.reachDistance}>{distToLead} m</Text>
-              )}
-              {!hasLatLong && item.address && (
-                <Text numberOfLines={2} style={{ fontSize: 9, color: '#888', marginTop: 4, textAlign: 'center', maxWidth: 100 }}>
-                  {item.address}
-                </Text>
-              )}
-            </View>
-          );
-        })()}
+    <TouchableOpacity style={styles.iconBtn} onPress={() => onEdit(item)}>
+  <Ionicons name="create-outline" size={18} color="#fff" />
+</TouchableOpacity>
+  </View>
+)}
       </View>
 
       <View style={[styles.commentRow, { borderTopWidth: 0.5, borderTopColor: '#eee', marginTop: 8, paddingTop: 8 }]}>
@@ -175,7 +164,23 @@ const LeadCard = ({
           <Text style={{ fontSize: 12, fontWeight: '600', color: '#555', marginBottom: 2 }}>Comment</Text>
           <Text numberOfLines={2} style={styles.comment}>{item.comment}</Text>
         </View>
-        <Text style={styles.seeMore}>See more</Text>
+        <TouchableOpacity
+  disabled={!item.comment || item.comment.length <= 200}
+>
+  <Text
+    style={[
+      styles.seeMore,
+      {
+        color:
+          item.comment && item.comment.length > 200
+            ? '#1E88E5'
+            : '#ccc',
+      },
+    ]}
+  >
+    See more
+  </Text>
+</TouchableOpacity>
       </View>
     </View>
   );
@@ -192,11 +197,12 @@ const SurveyerScreen = () => {
   const { currentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
 
   // ── UI state ───────────────────────────────────────────────────────────────
-  const [isOn, setIsOn] = useState(true);
+  const [isOn, setIsOn] = useState(false);
   const [leads, setLeads] = useState([]);
   const [acceptedLeads, setAcceptedLeads] = useState([]);
   const [inProgressLeads, setInProgressLeads] = useState([]);
   const [leadsLoading, setLeadsLoading] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [acceptedFilter, setAcceptedFilter] = useState('all'); // 'all' | 'completed'
 
   // Reject modal
@@ -208,6 +214,8 @@ const SurveyerScreen = () => {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editLead, setEditLead] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [reachedModalVisible, setReachedModalVisible] = useState(false);
+const [selectedLead, setSelectedLead] = useState(null);
 
 const [completedFromProgress, setCompletedFromProgress] = useState([]);
 
@@ -220,6 +228,7 @@ useFocusEffect(
 
     navigation.setParams({ completedIds: null });
 
+    // ✅ accepted card-ஐ completed mark பண்ணு
     setAcceptedLeads((prev) =>
       prev.map((l) =>
         completedIds.includes(l.id) ? { ...l, status: 'completed' } : l
@@ -230,56 +239,92 @@ useFocusEffect(
 
   }, [route.params?.completedIds])
 );
-
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   useEffect(() => {
     isMounted.current = true;
-    fetchLeads();
-    return () => {
+    const restoreToggle = async () => {
+  const saved = await AsyncStorage.getItem('surveyer_is_on');
+  if (saved === 'true') {
+    setIsOn(true);
+    startTracking();
+  }
+
+  // ✅ Leads fetch பண்ணி inprogress check பண்ணு
+  await fetchLeadsAndCheckInProgress();
+};
+  restoreToggle();
+
+  return () => {
       isMounted.current = false;
       stopTracking();
     };
   }, []);
 
   // ── API helpers ────────────────────────────────────────────────────────────
-  const fetchLeads = async () => {
-    setLeadsLoading(true);
-    try {
-      const res = await API.get('/order/all');
-      const rawData = Array.isArray(res.data)
-        ? res.data
-        : Array.isArray(res.data?.data)
-        ? res.data.data
-        : [];
-      const mapped = rawData.map((item) => ({
-        id: item._id,
-        name: item.name,
-        phone: item.mobile,
-        city: item.city,
-        comment: item.comment,
-        referredBy: item.referredBy,
-        date: item.createdAt,
-        latitude: item.latitude,
-        longitude: item.longitude,
-        whatsappNo: item.whatsappNo,
-        email: item.email,
-        address: item.address,
-      }));
-      if (isMounted.current) setLeads(mapped);
-    } catch (err) {
-      console.log('Error fetching leads:', err);
-    } finally {
-      if (isMounted.current) setLeadsLoading(false);
-    }
-  };
+  const fetchLeadsAndCheckInProgress = async () => {
+  setLeadsLoading(true);
+  try {
+    const res = await API.get('/order/all');
+    const rawData = Array.isArray(res.data)
+      ? res.data
+      : Array.isArray(res.data?.data)
+      ? res.data.data
+      : [];
+
+    const mapped = rawData.map((item) => ({
+      id: item._id,
+      name: item.name,
+      phone: item.mobile,
+      city: item.city,
+      comment: item.comment,
+      referredBy: item.referredBy,
+      date: item.createdAt,
+      latitude: item.latitude,
+      longitude: item.longitude,
+      whatsappNo: item.whatsappNo,
+      email: item.email,
+      address: item.address,
+      status: item.status,
+    }));
+
+    if (isMounted.current) {
+  const newLeads = mapped.filter((l) => l.status === 'unaccepted');
+  const accepted = mapped.filter(
+    (l) => l.status === 'accepted' || l.status === 'completed'
+  );
+  const inprogress = mapped.filter((l) => l.status === 'inprogress');
+
+  setLeads(newLeads);
+  setAcceptedLeads(accepted);
+  setInProgressLeads(inprogress);
+
+  // ✅ Only first load la mattum navigate
+  if (isInitialLoad && inprogress.length > 0) {
+    navigation.navigate('InProgress', {
+      lead: inprogress[0],
+    });
+  }
+
+  setIsInitialLoad(false); // 👈 important
+}
+  } catch (err) {
+    console.log('Error fetching leads:', err);
+  } finally {
+    if (isMounted.current) setLeadsLoading(false);
+  }
+};
 
   const updateOrderStatus = async (mobile, status) => {
-    try {
-      await API.put('/order/updatestatus', { mobile, status });
-    } catch (err) {
-      console.log(`Status update error (${status}):`, err?.response?.data || err.message);
-    }
-  };
+  try {
+    await API.put('/order/updatestatus', { mobile, status });
+
+    // ✅ important
+    await fetchLeadsAndCheckInProgress();
+
+  } catch (err) {
+    console.log(`Status update error (${status}):`, err?.response?.data || err.message);
+  }
+};
 
   // ── Lead handlers ──────────────────────────────────────────────────────────
   const handleAccept = async (item) => {
@@ -304,34 +349,50 @@ useFocusEffect(
     setRejectComment('');
   };
 
-  const handleStart = async (id) => {
+ const handleStart = async (id) => {
   const lead = acceptedLeads.find((l) => l.id === id);
   if (!lead) return;
+
   await updateOrderStatus(lead.phone, 'inprogress');
 
+  // ✅ Remove பண்ணாதே — status மட்டும் update பண்ணு
+  setAcceptedLeads(prev =>
+    prev.map(l => l.id === id ? { ...l, status: 'inprogress' } : l)
+  );
+
   navigation.navigate('InProgress', {
-    lead: lead,
-    completedLeadId: null,
+    lead: { ...lead, status: 'inprogress' },
   });
 };
 
-  const handleManualEnable = (id) => {
-    setInProgressLeads((prev) =>
-      prev.map((l) => (l.id === id ? { ...l, manualSiteEnabled: true } : l))
-    );
-  };
+  const handleManualEnable = (item) => {
+  setInProgressLeads((prev) =>
+    prev.map((l) => (l.id === item.id ? { ...l, manualSiteEnabled: true } : l))
+  );
+
+  // 👉 Popup open
+  setSelectedLead(item);
+  setReachedModalVisible(true);
+};
 
 const handleSiteObservation = (item) => {
   navigation.navigate('Form', {
     category: 'site_observation',
     lead: item,
-    onFormComplete: () => {
-      setInProgressLeads((prev) =>
-        prev.map((l) => l.id === item.id ? { ...l, status: 'completed' } : l)
-      );
+    onFormComplete: async () => {
 
-      const { onComplete } = route.params;
-      if (onComplete) onComplete(item.id);
+      // ✅ DB update
+      await updateOrderStatus(item.phone, 'completed');
+
+      // ✅ remove from inprogress
+      setInProgressLeads(prev => prev.filter(l => l.id !== item.id));
+
+      // ✅ add to accepted as completed
+      setAcceptedLeads(prev =>
+  prev.map(l =>
+    l.id === item.id ? { ...l, status: 'completed' } : l
+  )
+);
     },
   });
 };
@@ -400,17 +461,21 @@ const handleSiteObservation = (item) => {
 
   // ── Toggle (ON / OFF) ──────────────────────────────────────────────────────
   const handleToggle = async () => {
-    if (!isOn) {
-      const granted = await requestLocationPermissions();
-      if (!granted) return;
-      setIsOn(true);
-      startTracking();
-      fetchLeads();
-    } else {
-      setIsOn(false);
-      stopTracking();
-    }
-  };
+  if (!isOn) {
+    const granted = await requestLocationPermissions();
+    if (!granted) return;
+
+    setIsOn(true);
+    await AsyncStorage.setItem('surveyer_is_on', 'true');
+
+    startTracking();
+    fetchLeadsAndCheckInProgress(); // ✅ மட்டும் போதும்
+  } else {
+    setIsOn(false);
+    await AsyncStorage.setItem('surveyer_is_on', 'false');
+    stopTracking();
+  }
+};
 
   // ── Logout ─────────────────────────────────────────────────────────────────
   const handleLogout = () => {
@@ -542,7 +607,7 @@ const handleSiteObservation = (item) => {
 {acceptedLeads.length > 0 && (
   <>
     <View style={styles.sectionHeader}>
-      <View style={[styles.sectionDot, { backgroundColor: '#22c55e' }]} />
+      <View style={[styles.sectionDot, { backgroundColor: '#fd9104' }]} />
       <Text style={styles.sectionTitle}>Leads - Accepted</Text>
 
       {/* Filter buttons */}
@@ -603,8 +668,8 @@ const handleSiteObservation = (item) => {
             {inProgressLeads.length > 0 && (
               <>
                 <View style={styles.sectionHeader}>
-                  <View style={[styles.sectionDot, { backgroundColor: '#f97316' }]} />
-                  <Text style={styles.sectionTitle}>Lead-Inprogress</Text>
+                  <View style={[styles.sectionDot, { backgroundColor: '#1bd824' }]} />
+                  <Text style={styles.sectionTitle}>Leads - Completed</Text>
                 </View>
                 {inProgressLeads.map((item) => (
                   <LeadCard
@@ -643,9 +708,27 @@ const handleSiteObservation = (item) => {
               value={rejectComment}
               onChangeText={setRejectComment}
             />
-            <TouchableOpacity style={styles.modalSaveBtn} onPress={confirmReject}>
-              <Text style={styles.modalSaveBtnText}>Save</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+  {/* Cancel Button */}
+  <TouchableOpacity
+    style={[styles.modalSaveBtn, { flex: 1, backgroundColor: '#aaa' }]}
+    onPress={() => {
+      setRejectModalVisible(false);
+      setRejectLeadId(null);
+      setRejectComment('');
+    }}
+  >
+    <Text style={styles.modalSaveBtnText}>Cancel</Text>
+  </TouchableOpacity>
+
+  {/* Save Button */}
+  <TouchableOpacity
+    style={[styles.modalSaveBtn, { flex: 1 }]}
+    onPress={confirmReject}
+  >
+    <Text style={styles.modalSaveBtnText}>Save</Text>
+  </TouchableOpacity>
+</View>
           </View>
         </View>
       </Modal>
@@ -706,6 +789,41 @@ const handleSiteObservation = (item) => {
           </View>
         </View>
       </Modal>
+      <Modal
+  visible={reachedModalVisible}
+  transparent
+  animationType="fade"
+  onRequestClose={() => setReachedModalVisible(false)}
+>
+  <View style={styles.modalOverlay}>
+    <View style={styles.modalBox}>
+      
+      <Text style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 15 }}>
+        You have reached the location
+      </Text>
+
+      <TouchableOpacity
+        style={styles.smallSiteBtn}
+        onPress={() => {
+          setReachedModalVisible(false);
+          handleSiteObservation(selectedLead);
+        }}
+      >
+        <Text style={styles.smallSiteBtnText}>
+          Site Observation
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.modalSaveBtn, { marginTop: 10, backgroundColor: '#aaa' }]}
+        onPress={() => setReachedModalVisible(false)}
+      >
+        <Text style={styles.modalSaveBtnText}>Cancel</Text>
+      </TouchableOpacity>
+
+    </View>
+  </View>
+</Modal>
     </View>
   );
 };
@@ -811,4 +929,11 @@ const styles = StyleSheet.create({
   },
   modalSaveBtn: { backgroundColor: '#ED1C25', paddingVertical: 13, borderRadius: 8, alignItems: 'center' },
   modalSaveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+ editBtn: {
+  backgroundColor: '#3b82f6',
+  padding: 8,
+  borderRadius: 50,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
 });

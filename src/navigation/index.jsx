@@ -25,6 +25,7 @@ import FormScreen from "../screens/FormScreen";
 
 import { SCREEN_NAMES } from '../constants/screenNames';
 import InProgressScreen from '../screens/InProgressScreen';
+import MapScreen from '../service/MapScreen';
 const Stack = createNativeStackNavigator();
 
 export default function RootStack() {
@@ -53,6 +54,7 @@ export default function RootStack() {
       <Stack.Screen name={SCREEN_NAMES.SURVEYER_SCREEN} component={Surveyerscreen} />
       <Stack.Screen name="Form" component={FormScreen} />
       <Stack.Screen name="InProgress" component={InProgressScreen} />
+      <Stack.Screen name="MapView" component={MapScreen} />
     </Stack.Navigator>
   );
 }

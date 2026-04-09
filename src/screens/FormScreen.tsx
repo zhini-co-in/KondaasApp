@@ -268,10 +268,25 @@ const FormScreen = ({
       mobileNumber: lead.phone,
       ...formValues,
     };
-    await API.post('/user/add', payload);
 
-    navigation.navigate('InProgress', {
-      completedLeadId: lead.id,
+    try {
+      await API.post('/user/add', payload);
+    } catch (apiErr) {
+      console.log('API error:', apiErr);
+    }
+
+    navigation.reset({
+      index: 1,
+      routes: [
+        { name: 'Surveyerscreen' },  // ← உங்கள் exact screen name
+        { 
+          name: 'InProgress', 
+          params: { 
+            lead: { ...lead, status: 'completed' },
+            completedLeadId: lead.id 
+          } 
+        },
+      ],
     });
 
   } catch (err: unknown) {
