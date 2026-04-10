@@ -22,3 +22,16 @@ buildscript {
 }
 
 apply plugin: "com.facebook.react.rootproject"
+// Fix: react-native-gesture-handler implicit task dependency issue with Gradle 8.13
+gradle.projectsEvaluated {
+    subprojects { project ->
+        def codegenTask = project.tasks.findByName("generateCodegenArtifactsFromSchema")
+        if (codegenTask) {
+            project.tasks.configureEach { task ->
+                if (task.name == "releaseSourcesJar" || task.name == "debugSourcesJar") {
+                    task.dependsOn(codegenTask)
+                }
+            }
+        }
+    }
+}

@@ -96,7 +96,7 @@ android {
             // keyPassword 'android'
         }
         release {
-            storeFile file("./my-release-key.keystore")
+            storeFile file(MYAPP_UPLOAD_STORE_FILE)
             storePassword MYAPP_UPLOAD_STORE_PASSWORD
             keyAlias MYAPP_UPLOAD_KEY_ALIAS
             keyPassword MYAPP_UPLOAD_KEY_PASSWORD
@@ -131,3 +131,4 @@ apply from: file("../../node_modules/react-native-vector-icons/fonts.gradle")
 /* ... all your other app settings ... */
 
 apply from: "../../node_modules/@revopush/react-native-code-push/android/codepush.gradle"
+

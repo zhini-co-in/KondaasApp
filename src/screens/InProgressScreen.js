@@ -10,10 +10,6 @@ import API from '../api/api1';
 
 const { width } = Dimensions.get('window');
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LeadCard
-// ─────────────────────────────────────────────────────────────────────────────
-// LeadCard function signature மாத்துங்க
 const LeadCard = ({ item, currentLocation, onSiteObservation, onManualEnable, onEdit, navigation }) => {
   const hasLatLong = item.latitude && item.longitude &&
     item.latitude !== '' && item.longitude !== '';
@@ -75,7 +71,6 @@ const LeadCard = ({ item, currentLocation, onSiteObservation, onManualEnable, on
           </View>
         </View>
 
-        {/* Right side buttons */}
         {item.status === 'completed' ? (
           <View style={{
             backgroundColor: '#22c55e',
@@ -89,7 +84,6 @@ const LeadCard = ({ item, currentLocation, onSiteObservation, onManualEnable, on
           </View>
 
         ) : (item.manualSiteEnabled || (hasLatLong && withinRange)) ? (
-          // ✅ Range-க்கு வந்த பிறகு — Site Observation, Edit, Map
           <View style={{ alignItems: 'center', gap: 6 }}>
             <TouchableOpacity style={styles.smallSiteBtn} onPress={() => onSiteObservation(item)}>
               <Text style={styles.smallSiteBtnText}>Site{'\n'}Observation</Text>
@@ -102,7 +96,6 @@ const LeadCard = ({ item, currentLocation, onSiteObservation, onManualEnable, on
           </View>
 
         ) : (
-          // ✅ Range-க்கு வருவதற்கு முன்பு — Reached, Map, Distance
           <View style={styles.reachBtnWrapper}>
             <TouchableOpacity style={styles.reachBtn} onPress={() => onManualEnable(item)}>
               <Ionicons name="navigate-outline" size={14} color="#fff" style={{ marginRight: 3 }} />
@@ -235,7 +228,7 @@ const [selectedLead, setSelectedLead] = useState(null);
   navigation.navigate('Form', {
     category: 'site_observation',
     lead: item,
-    completedLeadId: item.id, // ✅ Form goBack() பண்ணும்போது இது trigger ஆகும்
+    completedLeadId: item.id, 
   });
 };
 
