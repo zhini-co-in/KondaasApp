@@ -63,7 +63,11 @@ const LeadCard = ({
 
   const withinRange = distToLead !== null && distToLead <= 300;
   return (
-    <View style={[styles.card, cardType === 'unaccepted' && { borderLeftWidth: 4, borderLeftColor: '#ED1C25' }]}>
+    <View style={[
+  styles.card,
+  cardType === 'unaccepted' && { borderLeftWidth: 4, borderLeftColor: '#ED1C25' },
+  cardType === 'completed' && { borderLeftWidth: 4, borderLeftColor: '#22c55e' },
+]}>
       <View style={styles.rowBetween}>
         <Text style={styles.referred}>
           Referred by —{' '}
@@ -110,15 +114,16 @@ const LeadCard = ({
   <View style={{ alignItems: 'center', gap: 6 }}>
     {item.status === 'completed' ? (
       <View style={{
-        backgroundColor: '#22c55e', paddingHorizontal: 10,
-        paddingVertical: 6, borderRadius: 8,
+        backgroundColor: '#22c55e', 
+        paddingHorizontal: 10,
+        paddingVertical: 6, 
+        borderRadius: 8,
       }}>
         <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>
           ✓ Completed
         </Text>
       </View>
     ) : item.status === 'inprogress' ? (
-      // ✅ InProgress-ல் இருக்கும்போது — Resume button காட்டு
       <TouchableOpacity
         style={[styles.startBtn, { backgroundColor: '#f97316' }]}
         onPress={() => onStart(item.id)}
@@ -155,6 +160,18 @@ const LeadCard = ({
     <TouchableOpacity style={styles.iconBtn} onPress={() => onEdit(item)}>
   <Ionicons name="create-outline" size={18} color="#fff" />
 </TouchableOpacity>
+  </View>
+)}
+{cardType === 'completed' && (
+  <View style={{
+    backgroundColor: '#22c55e',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  }}>
+    <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>
+      ✓ Completed
+    </Text>
   </View>
 )}
       </View>
@@ -218,6 +235,7 @@ const SurveyerScreen = () => {
 const [selectedLead, setSelectedLead] = useState(null);
 
 const [completedFromProgress, setCompletedFromProgress] = useState([]);
+const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'completed'
 
 const route = useRoute();
 
@@ -228,14 +246,12 @@ useFocusEffect(
 
     navigation.setParams({ completedIds: null });
 
-    // ✅ accepted card-ஐ completed mark பண்ணு
-    setAcceptedLeads((prev) =>
-      prev.map((l) =>
-        completedIds.includes(l.id) ? { ...l, status: 'completed' } : l
-      )
-    );
-
-    setAcceptedFilter('completed');
+    // ✅ acceptedLeads-லிருந்து எடுத்து completedLeads-ல போடு
+    setAcceptedLeads((prev) => {
+      const toMove = prev.filter((l) => completedIds.includes(l.id));
+      setCompletedLeads((c) => [...c, ...toMove.map(l => ({ ...l, status: 'completed' }))]);
+      return prev.filter((l) => !completedIds.includes(l.id));
+    });
 
   }, [route.params?.completedIds])
 );
@@ -249,7 +265,6 @@ useFocusEffect(
     startTracking();
   }
 
-  // ✅ Leads fetch பண்ணி inprogress check பண்ணு
   await fetchLeadsAndCheckInProgress();
 };
   restoreToggle();
@@ -260,8 +275,11 @@ useFocusEffect(
     };
   }, []);
 
-  // ── API helpers ────────────────────────────────────────────────────────────
-  const fetchLeadsAndCheckInProgress = async () => {
+  // ── State-ல ஒரு புது array add பண்ணுங்கள் ──
+const [completedLeads, setCompletedLeads] = useState([]);
+
+// ── fetchLeadsAndCheckInProgress fix ──
+const fetchLeadsAndCheckInProgress = async () => {
   setLeadsLoading(true);
   try {
     const res = await API.get('/order/all');
@@ -288,25 +306,22 @@ useFocusEffect(
     }));
 
     if (isMounted.current) {
-  const newLeads = mapped.filter((l) => l.status === 'unaccepted');
-  const accepted = mapped.filter(
-    (l) => l.status === 'accepted' || l.status === 'completed'
-  );
-  const inprogress = mapped.filter((l) => l.status === 'inprogress');
+      const newLeads = mapped.filter((l) => l.status === 'unaccepted');
+      
+      // ✅ accepted + inprogress மட்டும் — completed இல்லை
+      const accepted = mapped.filter(
+        (l) => l.status === 'accepted' || l.status === 'inprogress'
+      );
+      
+      // ✅ completed தனியா
+      const completed = mapped.filter((l) => l.status === 'completed');
 
-  setLeads(newLeads);
-  setAcceptedLeads(accepted);
-  setInProgressLeads(inprogress);
-
-  // ✅ Only first load la mattum navigate
-  if (isInitialLoad && inprogress.length > 0) {
-    navigation.navigate('InProgress', {
-      lead: inprogress[0],
-    });
-  }
-
-  setIsInitialLoad(false); // 👈 important
-}
+      setLeads(newLeads);
+      setAcceptedLeads(accepted);
+      setCompletedLeads(completed); // ✅ புது state
+      setInProgressLeads([]);
+      setIsInitialLoad(false);
+    }
   } catch (err) {
     console.log('Error fetching leads:', err);
   } finally {
@@ -349,13 +364,12 @@ useFocusEffect(
     setRejectComment('');
   };
 
- const handleStart = async (id) => {
+const handleStart = async (id) => {
   const lead = acceptedLeads.find((l) => l.id === id);
   if (!lead) return;
 
-  await updateOrderStatus(lead.phone, 'inprogress');
+  await API.put('/order/updatestatus', { mobile: lead.phone, status: 'inprogress' });
 
-  // ✅ Remove பண்ணாதே — status மட்டும் update பண்ணு
   setAcceptedLeads(prev =>
     prev.map(l => l.id === id ? { ...l, status: 'inprogress' } : l)
   );
@@ -363,14 +377,12 @@ useFocusEffect(
   navigation.navigate('InProgress', {
     lead: { ...lead, status: 'inprogress' },
   });
-};
+};  // ✅ இந்த closing brace missing ஆனது
 
-  const handleManualEnable = (item) => {
+const handleManualEnable = (item) => {
   setInProgressLeads((prev) =>
     prev.map((l) => (l.id === item.id ? { ...l, manualSiteEnabled: true } : l))
   );
-
-  // 👉 Popup open
   setSelectedLead(item);
   setReachedModalVisible(true);
 };
@@ -469,7 +481,7 @@ const handleSiteObservation = (item) => {
     await AsyncStorage.setItem('surveyer_is_on', 'true');
 
     startTracking();
-    fetchLeadsAndCheckInProgress(); // ✅ மட்டும் போதும்
+    fetchLeadsAndCheckInProgress(); 
   } else {
     setIsOn(false);
     await AsyncStorage.setItem('surveyer_is_on', 'false');
@@ -603,87 +615,81 @@ const handleSiteObservation = (item) => {
                 />
               ))}
 
-            {/* Section 2 – Accepted */}
-{acceptedLeads.length > 0 && (
+       {/* Section 2 & 3 – Filter with All / Completed */}
+{(acceptedLeads.length > 0 || completedLeads.length > 0) && (
   <>
-    <View style={styles.sectionHeader}>
-      <View style={[styles.sectionDot, { backgroundColor: '#fd9104' }]} />
-      <Text style={styles.sectionTitle}>Leads - Accepted</Text>
-
-      {/* Filter buttons */}
-      <View style={{ flexDirection: 'row', marginLeft: 'auto', gap: 6 }}>
+    {/* Filter Header */}
+    <View style={[styles.sectionHeader, { justifyContent: 'space-between' }]}>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={[styles.sectionDot, { 
+  backgroundColor: activeFilter === 'completed' ? '#22c55e' : '#fd9104' 
+}]} />
+<Text style={styles.sectionTitle}>
+  {activeFilter === 'completed' ? 'Leads - Completed' : 'Leads - Accepted'}
+</Text>
+      </View>
+      <View style={{ flexDirection: 'row', gap: 6 }}>
         <TouchableOpacity
-          onPress={() => setAcceptedFilter('all')}
+          onPress={() => setActiveFilter('all')}
           style={{
-            paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12,
-            backgroundColor: acceptedFilter === 'all' ? '#22c55e' : '#e5e7eb',
+            paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12,
+            backgroundColor: activeFilter === 'all' ? '#ED1C25' : '#e5e7eb',
           }}
         >
-          <Text style={{
-            fontSize: 11, fontWeight: 'bold',
-            color: acceptedFilter === 'all' ? '#fff' : '#555',
-          }}>All</Text>
+          <Text style={{ fontSize: 12, fontWeight: 'bold', color: activeFilter === 'all' ? '#fff' : '#555' }}>All</Text>
         </TouchableOpacity>
-
         <TouchableOpacity
-          onPress={() => setAcceptedFilter('completed')}
+          onPress={() => setActiveFilter('completed')}
           style={{
-            paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12,
-            backgroundColor: acceptedFilter === 'completed' ? '#22c55e' : '#e5e7eb',
+            paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12,
+            backgroundColor: activeFilter === 'completed' ? '#22c55e' : '#e5e7eb',
           }}
         >
-          <Text style={{
-            fontSize: 11, fontWeight: 'bold',
-            color: acceptedFilter === 'completed' ? '#fff' : '#555',
-          }}>Completed</Text>
+          <Text style={{ fontSize: 12, fontWeight: 'bold', color: activeFilter === 'completed' ? '#fff' : '#555' }}>Completed</Text>
         </TouchableOpacity>
       </View>
     </View>
 
-    {acceptedLeads
-      .filter(item =>
-        acceptedFilter === 'all' ? true : item.status === 'completed'
-      )
-      .map((item) => (
-        <LeadCard
-          key={item.id}
-          item={item}
-          currentLocation={currentLocation}
-          cardType="accepted"
-          onStart={handleStart}
-        />
+    {activeFilter === 'all' && (
+  <>
+    {acceptedLeads.map((item) => (
+      <LeadCard key={item.id} item={item} currentLocation={currentLocation} cardType="accepted" onStart={handleStart} />
     ))}
 
-    {acceptedLeads.filter(item =>
-  acceptedFilter === 'all' ? true : item.status === 'completed'
-).length === 0 && (
-      <Text style={[styles.emptyText, { marginTop: 10 }]}>
-        No completed leads yet.
-      </Text>
+    {/* ✅ Completed leads-க்கு தனி header */}
+    {completedLeads.length > 0 && (
+      <>
+        <View style={[styles.sectionHeader, { justifyContent: 'space-between' }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={[styles.sectionDot, { backgroundColor: '#22c55e' }]} />
+            <Text style={styles.sectionTitle}>Leads - Completed</Text>
+          </View>
+        </View>
+        {completedLeads.map((item) => (
+          <LeadCard key={item.id} item={item} currentLocation={currentLocation} cardType="completed" />
+        ))}
+      </>
+    )}
+
+    {acceptedLeads.length === 0 && completedLeads.length === 0 && (
+      <Text style={styles.emptyText}>No leads yet.</Text>
     )}
   </>
 )}
 
-            {/* Section 3 – Inprogress */}
-            {inProgressLeads.length > 0 && (
-              <>
-                <View style={styles.sectionHeader}>
-                  <View style={[styles.sectionDot, { backgroundColor: '#1bd824' }]} />
-                  <Text style={styles.sectionTitle}>Leads - Completed</Text>
-                </View>
-                {inProgressLeads.map((item) => (
-                  <LeadCard
-                    key={item.id}
-                    item={item}
-                    currentLocation={currentLocation}
-                    cardType="inprogress"
-                    onSiteObservation={handleSiteObservation}
-                    onManualEnable={handleManualEnable}
-                    onEdit={handleEdit}
-                  />
-                ))}
-              </>
-            )}
+    {activeFilter === 'completed' && (
+      <>
+        {completedLeads.length > 0 ? (
+          completedLeads.map((item) => (
+            <LeadCard key={item.id} item={item} currentLocation={currentLocation} cardType="completed" />
+          ))
+        ) : (
+          <Text style={styles.emptyText}>No completed leads yet.</Text>
+        )}
+      </>
+    )}
+  </>
+)}
           </ScrollView>
         </>
       )}

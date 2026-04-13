@@ -55,10 +55,17 @@ const LeadCard = ({ item, currentLocation, onSiteObservation, onManualEnable, on
 
         <View style={{ flex: 1 }}>
           <Text style={styles.name}>{item.name}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Ionicons name="call-outline" size={12} color="#555" />
-            <Text style={styles.subText}>{item.phone}</Text>
-          </View>
+          <TouchableOpacity
+  onPress={() => {
+    if (item.phone) {
+      Linking.openURL(`tel:${item.phone}`);
+    }
+  }}
+  style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+>
+  <Ionicons name="call-outline" size={12} color="#25D366" />
+  <Text style={styles.subText}>{item.phone}</Text>
+</TouchableOpacity>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Ionicons name="location-outline" size={12} color="#555" />
             <Text style={styles.subText}>{item.city}</Text>
@@ -89,28 +96,37 @@ const LeadCard = ({ item, currentLocation, onSiteObservation, onManualEnable, on
               <Text style={styles.smallSiteBtnText}>Site{'\n'}Observation</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.iconBtn} onPress={() => onEdit(item)}>
-  <Ionicons name="create-outline" size={18} color="#fff" />
+            <TouchableOpacity
+  style={[styles.commonBtn, { backgroundColor: '#3b82f6', marginTop: 6 }]}
+  onPress={() => onEdit(item)}
+>
+  <Ionicons name="create-outline" size={20} color="#fff" />
+  <Text style={[styles.commonBtnText, { marginLeft: 5 }]}>
+    Edit
+  </Text>
 </TouchableOpacity>
 
           </View>
 
         ) : (
           <View style={styles.reachBtnWrapper}>
-            <TouchableOpacity style={styles.reachBtn} onPress={() => onManualEnable(item)}>
-              <Ionicons name="navigate-outline" size={14} color="#fff" style={{ marginRight: 3 }} />
-              <Text style={styles.reachBtnText}>Reached</Text>
-            </TouchableOpacity>
+            <TouchableOpacity
+  style={[styles.commonBtn, { backgroundColor: '#f97316' }]}
+  onPress={() => onManualEnable(item)}
+>
+  <Ionicons name="navigate-outline" size={14} color="#fff" style={{ marginRight: 4 }} />
+  <Text style={styles.commonBtnText}>Reached</Text>
+</TouchableOpacity>
 
             {/* Map button only before reached */}
 {!item.manualSiteEnabled && (
   <TouchableOpacity
-    style={[styles.editBtn, { backgroundColor: '#0ea5e9', marginTop: 6 }]}
-    onPress={openMap}
-  >
-    <Ionicons name="map-outline" size={12} color="#fff" style={{ marginRight: 2 }} />
-    <Text style={styles.editBtnText}>Open Map</Text>
-  </TouchableOpacity>
+  style={[styles.commonBtn, { backgroundColor: '#0ea5e9', marginTop: 6 }]}
+  onPress={openMap}
+>
+  <Ionicons name="map-outline" size={14} color="#fff" style={{ marginRight: 4 }} />
+  <Text style={styles.commonBtnText}>Open Map</Text>
+</TouchableOpacity>
 )}
 
             {hasLatLong && distToLead !== null && (
@@ -279,22 +295,29 @@ const [selectedLead, setSelectedLead] = useState(null);
 
       <View style={styles.header}>
   <TouchableOpacity onPress={() => {
-    const hasIncomplete = inProgressLeads.some(l => l.status !== 'completed');
-    if (hasIncomplete) {
-      Alert.alert(
-        'Warning',
-        'Task is not completed yet. Do you want to go back?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Yes, Go Back', onPress: () => navigation.goBack() },
-        ]
-      );
-    } else {
-      navigation.goBack();
-    }
-  }}>
-    <Ionicons name="arrow-back" size={24} color="#ED1C25" />
-  </TouchableOpacity>
+  const hasIncomplete = inProgressLeads.some(l => l.status !== 'completed');
+  
+  if (hasIncomplete) {
+    Alert.alert(
+      'Warning',
+      'Form not submitted yet.\nDo you want to exit without submitting?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Yes, Exit', 
+          onPress: () => {
+            // Form submit ஆகல → status inprogress ஆகவே விடு (backend-ல மாற்ற வேண்டாம்)
+            navigation.goBack();
+          } 
+        },
+      ]
+    );
+  } else {
+    navigation.goBack();
+  }
+}}>
+  <Ionicons name="arrow-back" size={24} color="#ED1C25" />
+</TouchableOpacity>
   <Text style={styles.headerTitle}>Lead - Inprogress</Text>
   <View style={{ width: 24 }} />
 </View>
@@ -377,29 +400,73 @@ const [selectedLead, setSelectedLead] = useState(null);
   onRequestClose={() => setReachedModalVisible(false)}
 >
   <View style={styles.modalOverlay}>
-    <View style={styles.modalBox}>
-      
-      <Text style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 15 }}>
-        You have reached the location
+    <View style={[styles.modalBox, { alignItems: 'center', paddingVertical: 28 }]}>
+
+      {/* Icon */}
+      <View style={{
+        backgroundColor: '#fef2f2',
+        borderRadius: 50,
+        padding: 14,
+        marginBottom: 14,
+      }}>
+        <Ionicons name="location" size={32} color="#ED1C25" />
+      </View>
+
+      {/* Title */}
+      <Text style={{
+        fontSize: 17,
+        fontWeight: 'bold',
+        color: '#222',
+        marginBottom: 4,
+        textAlign: 'center',
+      }}>
+        You've Reached the Location!
       </Text>
 
+      {/* Subtitle */}
+      <Text style={{
+        fontSize: 13,
+        color: '#888',
+        marginBottom: 24,
+        textAlign: 'center',
+      }}>
+        Do you want to start Site Observation?
+      </Text>
+
+      {/* Site Observation Button */}
       <TouchableOpacity
-        style={styles.smallSiteBtn}
+        style={{
+          backgroundColor: '#ED1C25',
+          width: '100%',
+          paddingVertical: 13,
+          borderRadius: 8,
+          alignItems: 'center',
+          marginBottom: 10,
+        }}
         onPress={() => {
           setReachedModalVisible(false);
           handleSiteObservation(selectedLead);
         }}
       >
-        <Text style={styles.smallSiteBtnText}>
-          Site Observation
+        <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>
+          🏗️  Start Site Observation
         </Text>
       </TouchableOpacity>
 
+      {/* Cancel Button */}
       <TouchableOpacity
-        style={[styles.modalSaveBtn, { marginTop: 10, backgroundColor: '#aaa' }]}
+        style={{
+          backgroundColor: '#f1f1f1',
+          width: '100%',
+          paddingVertical: 13,
+          borderRadius: 8,
+          alignItems: 'center',
+        }}
         onPress={() => setReachedModalVisible(false)}
       >
-        <Text style={styles.modalSaveBtnText}>Cancel</Text>
+        <Text style={{ color: '#555', fontSize: 14, fontWeight: '600' }}>
+          Cancel
+        </Text>
       </TouchableOpacity>
 
     </View>
@@ -444,6 +511,20 @@ const styles = StyleSheet.create({
 
   // ── Buttons ──
   reachBtnWrapper: { alignItems: 'center' },
+  commonBtn: {
+  width: 100,              // 👈 same width
+  height: 36,              // 👈 same height
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderRadius: 8,
+},
+
+commonBtnText: {
+  color: '#fff',
+  fontSize: 11,
+  fontWeight: 'bold',
+},
   reachBtn: {
     backgroundColor: '#f97316', flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8,

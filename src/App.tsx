@@ -9,6 +9,7 @@ import { lightTheme, darkTheme, PaperDefaultTheme } from './theme';
 import RootStack from './navigation';
 
 import codePush from "@revopush/react-native-code-push";
+import { createNotificationChannel } from './utils/notificationService';
 
 const queryClient = new QueryClient();
 
@@ -21,7 +22,9 @@ let App = () => {
       updateDialog: true,
       installMode: codePush.InstallMode.IMMEDIATE,
     });
+  createNotificationChannel();
   }, []);
+  
 
   return (
     <QueryClientProvider client={queryClient}>

@@ -228,10 +228,8 @@ const FormScreen = ({
   try {
     const res = await API.get('/template/get');
     
-    // என்ன வருதுன்னு பாரு
     console.log('RAW response:', JSON.stringify(res.data));
     
-    // பல structure-ஐ try பண்ணு
     const templateData = 
       res.data?.data ||      // { data: { schema, uischema } }
       res.data?.template ||  // { template: { schema, uischema } }
@@ -269,22 +267,26 @@ const FormScreen = ({
       ...formValues,
     };
 
-    try {
-      await API.post('/user/add', payload);
-    } catch (apiErr) {
-      console.log('API error:', apiErr);
-    }
+    // 1. Submit form data
+    await API.post('/user/add', payload);
 
+    // 2. ✅ Update status to completed
+    await API.put('/order/updatestatus', {
+      mobile: lead.phone,
+      status: 'completed',
+    });
+
+    // 3. Navigate back
     navigation.reset({
       index: 1,
       routes: [
-        { name: 'Surveyerscreen' },  // ← உங்கள் exact screen name
-        { 
-          name: 'InProgress', 
-          params: { 
+        { name: 'Surveyerscreen' },
+        {
+          name: 'InProgress',
+          params: {
             lead: { ...lead, status: 'completed' },
-            completedLeadId: lead.id 
-          } 
+            completedLeadId: lead.id,
+          },
         },
       ],
     });
