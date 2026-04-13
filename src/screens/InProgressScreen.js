@@ -23,6 +23,21 @@ const LeadCard = ({ item, currentLocation, onSiteObservation, onManualEnable, on
 
   const withinRange = distToLead !== null && distToLead <= 300;
 
+  const notifiedRef = useRef(false);
+
+useEffect(() => {
+  if (withinRange && !item.manualSiteEnabled && !notifiedRef.current) {
+    notifiedRef.current = true;
+
+    API.post('https://kondaas-api.trisentrix-dev.workers.dev/notification/trigger', {
+      customerMobile: item.phone,
+      scenarioType: 3,
+    }).catch(e => console.log('Auto 300m notify error:', e));
+
+    onManualEnable(item); // ✅ auto-trigger reached flow
+  }
+}, [withinRange]);
+
   const openMap = () => {
   if (item.latitude || item.address || item.city) {
     navigation.navigate('MapView', {
@@ -230,12 +245,21 @@ useFocusEffect(
 const [selectedLead, setSelectedLead] = useState(null);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-  const handleManualEnable = (item) => {
+ const handleManualEnable = async (item) => {
   setInProgressLeads((prev) =>
     prev.map((l) => (l.id === item.id ? { ...l, manualSiteEnabled: true } : l))
   );
 
-  // 👉 Popup open
+  // ✅ Notification - scenarioType: 3
+  try {
+    await API.post('https://kondaas-api.trisentrix-dev.workers.dev/notification/trigger', {
+      customerMobile: item.phone,
+      scenarioType: 3,
+    });
+  } catch (e) {
+    console.log('Notification error (reached):', e);
+  }
+
   setSelectedLead(item);
   setReachedModalVisible(true);
 };

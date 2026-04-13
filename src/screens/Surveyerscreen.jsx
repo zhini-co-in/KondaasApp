@@ -357,18 +357,47 @@ const fetchLeadsAndCheckInProgress = async () => {
     setRejectModalVisible(true);
   };
 
-  const confirmReject = () => {
+  const confirmReject = async () => {
+  if (!rejectComment.trim()) {
+    Alert.alert('Error', 'Please enter a reason for rejection.');
+    return;
+  }
+
+  try {
+    const lead = leads.find((l) => l.id === rejectLeadId);
+    if (!lead) return;
+
+    await API.post('https://kondaas-api.trisentrix-dev.workers.dev/order/reject', {
+      mobile: lead.phone,
+      reason: rejectComment.trim(),
+    });
+
     setLeads((prev) => prev.filter((l) => l.id !== rejectLeadId));
     setRejectModalVisible(false);
     setRejectLeadId(null);
     setRejectComment('');
-  };
+    Alert.alert('Success', 'Lead rejected successfully.');
+  } catch (err) {
+    console.log('Reject error:', err?.response?.data || err.message);
+    Alert.alert('Error', err?.response?.data?.error || 'Failed to reject lead.');
+  }
+};
 
 const handleStart = async (id) => {
   const lead = acceptedLeads.find((l) => l.id === id);
   if (!lead) return;
 
   await API.put('/order/updatestatus', { mobile: lead.phone, status: 'inprogress' });
+
+  // ✅ Notification - scenarioType: 1
+  try {
+    await API.post('https://kondaas-api.trisentrix-dev.workers.dev/notification/trigger', {
+      customerMobile: lead.phone,
+      scenarioType: 1,
+    });
+  } catch (e) {
+    console.log('Notification error (start):', e);
+  }
 
   setAcceptedLeads(prev =>
     prev.map(l => l.id === id ? { ...l, status: 'inprogress' } : l)
@@ -377,7 +406,7 @@ const handleStart = async (id) => {
   navigation.navigate('InProgress', {
     lead: { ...lead, status: 'inprogress' },
   });
-};  // ✅ இந்த closing brace missing ஆனது
+};
 
 const handleManualEnable = (item) => {
   setInProgressLeads((prev) =>

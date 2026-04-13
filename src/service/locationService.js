@@ -86,23 +86,44 @@ export const sendLocation = async (latitude, longitude, timestamp, lastSentRef) 
 export const requestLocationPermissions = async () => {
   if (Platform.OS !== 'android') return true;
 
+  // Step 1: Request Fine location
   const fine = await PermissionsAndroid.request(
-    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
-  );
-  const bg = await PermissionsAndroid.request(
-    PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION
+    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+    {
+      title: 'Location Permission',
+      message: 'This app needs access to your location.',
+      buttonPositive: 'Allow',
+      buttonNegative: 'Deny',
+    }
   );
 
-  if (
-    fine !== PermissionsAndroid.RESULTS.GRANTED ||
-    bg !== PermissionsAndroid.RESULTS.GRANTED
-  ) {
+  if (fine !== PermissionsAndroid.RESULTS.GRANTED) {
     Alert.alert('Permission Required', 'Enable location permission', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Open Settings', onPress: () => Linking.openSettings() },
     ]);
     return false;
   }
+
+  // Step 2: Request Background location only for Android 10+
+  if (Platform.Version >= 29) {
+    const bg = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION,
+      {
+        title: 'Background Location',
+        message: 'Please select "Allow all the time" for background tracking.',
+        buttonPositive: 'Open Settings',
+        buttonNegative: 'Skip',
+      }
+    );
+
+    // App continues even if background permission is denied
+    if (bg !== PermissionsAndroid.RESULTS.GRANTED) {
+      console.log('Background location not granted - continuing with foreground only');
+    }
+  }
+
+  // Fine location alone is sufficient to proceed
   return true;
 };
 
