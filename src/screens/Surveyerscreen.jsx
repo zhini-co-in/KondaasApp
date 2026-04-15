@@ -21,6 +21,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { USER_DATA } from '../service/localStorage';
+import { saveAcceptedLead, getAcceptedLeads } from '../service/Localleadsstorage';
 
 // ── Location service imports ──────────────────────────────────────────────────
 import {
@@ -255,18 +256,21 @@ useFocusEffect(
 
   }, [route.params?.completedIds])
 );
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
-  useEffect(() => {
-    isMounted.current = true;
-    const restoreToggle = async () => {
-  const saved = await AsyncStorage.getItem('surveyer_is_on');
-  if (saved === 'true') {
-    setIsOn(true);
-    startTracking();
-  }
+useEffect(() => {
+  isMounted.current = true;
+  const restoreToggle = async () => {
+    const saved = await AsyncStorage.getItem('surveyer_is_on');
+    if (saved === 'true') {
+      setIsOn(true);
+      startTracking();
+    }
 
-  await fetchLeadsAndCheckInProgress();
-};
+    // ✅ இதை add பண்ணு — API வருமுன்னே local cache காட்டு
+    const localAccepted = await getAcceptedLeads();
+    if (localAccepted.length > 0) setAcceptedLeads(localAccepted);
+
+    await fetchLeadsAndCheckInProgress();
+  };
   restoreToggle();
 
   return () => {
@@ -275,7 +279,6 @@ useFocusEffect(
     };
   }, []);
 
-  // ── State-ல ஒரு புது array add பண்ணுங்கள் ──
 const [completedLeads, setCompletedLeads] = useState([]);
 
 // ── fetchLeadsAndCheckInProgress fix ──
@@ -342,14 +345,18 @@ const fetchLeadsAndCheckInProgress = async () => {
 };
 
   // ── Lead handlers ──────────────────────────────────────────────────────────
-  const handleAccept = async (item) => {
-    await updateOrderStatus(item.phone, 'accepted');
-    setLeads((prev) => prev.filter((l) => l.id !== item.id));
-    setAcceptedLeads((prev) => {
-      if (prev.some((l) => l.id === item.id)) return prev;
-      return [...prev, item];
-    });
-  };
+ const handleAccept = async (item) => {
+  await updateOrderStatus(item.phone, 'accepted');
+
+  // ✅ இதை add பண்ணு — local-ல save பண்ணு
+  await saveAcceptedLead(item);
+
+  setLeads((prev) => prev.filter((l) => l.id !== item.id));
+  setAcceptedLeads((prev) => {
+    if (prev.some((l) => l.id === item.id)) return prev;
+    return [...prev, item];
+  });
+};
 
   const handleReject = (id) => {
     setRejectLeadId(id);
@@ -389,9 +396,19 @@ const handleStart = async (id) => {
 
   await API.put('/order/updatestatus', { mobile: lead.phone, status: 'inprogress' });
 
-  // ✅ Notification - scenarioType: 1
   try {
+    const userData = await AsyncStorage.getItem(USER_DATA);
+    const parsed = userData ? JSON.parse(userData) : null;
+    
+    // ✅ இதை print பண்ணி பாருங்க
+    console.log('Parsed USER_DATA:', JSON.stringify(parsed));
+    
+const surveyorNumber = parsed?.UserInfo?.phoneNo || '';
+    
+    console.log('Final surveyorNumber:', surveyorNumber);
+
     await API.post('https://kondaas-api.trisentrix-dev.workers.dev/notification/trigger', {
+      surveyorNumber: surveyorNumber,
       customerMobile: lead.phone,
       scenarioType: 1,
     });
