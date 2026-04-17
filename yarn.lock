@@ -4232,6 +4232,7 @@ __metadata:
     react-native-linear-gradient: "npm:^2.8.3"
     react-native-maps: "npm:^1.27.2"
     react-native-paper: "npm:^5.14.5"
+    react-native-permissions: "npm:^5.5.1"
     react-native-reanimated: "npm:^4.3.0"
     react-native-safe-area-context: "npm:^5.7.0"
     react-native-screens: "npm:^4.24.0"
@@ -10113,6 +10114,20 @@ __metadata:
     react-native: "*"
     react-native-safe-area-context: "*"
   checksum: 10c0/8add9b730f26737422621289cc0d4be020236d190d8f5173c3dadef7ba413f2a7b7b2b173f4c33bbe2c66c8ad7d2477e412f5cf406fd948596657123684febce
+  languageName: node
+  linkType: hard
+
+"react-native-permissions@npm:^5.5.1":
+  version: 5.5.1
+  resolution: "react-native-permissions@npm:5.5.1"
+  peerDependencies:
+    react: "*"
+    react-native: "*"
+    react-native-windows: "*"
+  peerDependenciesMeta:
+    react-native-windows:
+      optional: true
+  checksum: 10c0/8ce0e05d1dbb7afd7b7e76db9769714b1a249b93aff8c47769ba91405558aab223a3116c9e9914f15297b53845908d4902ce9fe488336229a2213934cf5a42ed
   languageName: node
   linkType: hard
 

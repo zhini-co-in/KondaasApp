@@ -8,3 +8,32 @@
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
 # Add any project specific keep options here:
+
+# Add project specific ProGuard rules here.
+
+# ─── BackgroundGeolocation ───
+-keep class com.transistorsoft.** { *; }
+-dontwarn com.transistorsoft.**
+
+# ─── React Native ───
+-keep class com.facebook.react.** { *; }
+-dontwarn com.facebook.react.**
+
+# ─── AsyncStorage ───
+-keep class com.reactnativecommunity.asyncstorage.** { *; }
+
+# ─── OkHttp / Networking ───
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-keep class okhttp3.** { *; }
+-keep class okio.** { *; }
+
+# ─── Gson (if used) ───
+-keepattributes Signature
+-keepattributes *Annotation*
+-dontwarn sun.misc.**
+-keep class com.google.gson.** { *; }
+
+# ─── General ───
+-keepattributes SourceFile,LineNumberTable
+-keep public class * extends java.lang.Exception

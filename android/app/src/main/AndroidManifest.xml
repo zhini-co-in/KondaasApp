@@ -8,6 +8,9 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
 
     <application
         android:name=".MainApplication"
@@ -19,8 +22,11 @@
         android:usesCleartextTraffic="${usesCleartextTraffic}"
         android:supportsRtl="true">
         <service
+            android:name="com.transistorsoft.locationmanager.service.TrackingService"
+            android:foregroundServiceType="location" />
+        <service
             android:name="io.invertase.firebase.messaging.ReactNativeFirebaseMessagingService"
-            android:exported="true"
+            android:exported="false" 
             tools:replace="android:exported">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
@@ -39,8 +45,7 @@
             android:windowSoftInputMode="adjustResize"
             android:exported="true"
             android:screenOrientation="portrait"
-            android:resizeableActivity="false"
-            >
+            android:resizeableActivity="false">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -48,7 +53,6 @@
             </intent-filter>
 
         </activity>
-
     </application>
 
 </manifest>

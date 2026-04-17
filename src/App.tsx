@@ -6,9 +6,11 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useColorScheme } from 'react-native';
 import { lightTheme, darkTheme, PaperDefaultTheme } from './theme';
+// @ts-ignore
 import RootStack from './navigation';
 
 import codePush from "@revopush/react-native-code-push";
+// @ts-ignore
 import { createNotificationChannel } from './utils/notificationService';
 
 const queryClient = new QueryClient();

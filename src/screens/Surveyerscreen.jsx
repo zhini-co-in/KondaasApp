@@ -12,7 +12,8 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
-  Linking
+  Linking,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import API from '../api/api1';
@@ -28,6 +29,7 @@ import {
   getDistance,
   useLocationTracking,
   requestLocationPermissions,
+  requestIOSLocationPermission,
 } from '../service/locationService';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -400,7 +402,6 @@ const handleStart = async (id) => {
     const userData = await AsyncStorage.getItem(USER_DATA);
     const parsed = userData ? JSON.parse(userData) : null;
     
-    // ✅ இதை print பண்ணி பாருங்க
     console.log('Parsed USER_DATA:', JSON.stringify(parsed));
     
 const surveyorNumber = parsed?.UserInfo?.phoneNo || '';
@@ -518,16 +519,29 @@ const handleSiteObservation = (item) => {
   };
 
   // ── Toggle (ON / OFF) ──────────────────────────────────────────────────────
-  const handleToggle = async () => {
+ const handleToggle = async () => {
   if (!isOn) {
-    const granted = await requestLocationPermissions();
+    let granted = false;
+
+    if (Platform.OS === 'ios') {
+      granted = await requestIOSLocationPermission(); // ✅ iOS
+    } else {
+      granted = await requestLocationPermissions();   // ✅ Android
+    }
+
     if (!granted) return;
+     if (Platform.OS === 'android') {
+      try {
+        await BackgroundGeolocation.requestPermission();
+      } catch (e) {
+        console.log('Battery optimization request error:', e);
+      }
+    }
 
     setIsOn(true);
     await AsyncStorage.setItem('surveyer_is_on', 'true');
-
     startTracking();
-    fetchLeadsAndCheckInProgress(); 
+    fetchLeadsAndCheckInProgress();
   } else {
     setIsOn(false);
     await AsyncStorage.setItem('surveyer_is_on', 'false');
