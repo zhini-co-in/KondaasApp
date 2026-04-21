@@ -1407,7 +1407,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@babel/runtime@npm:^7.25.0, @babel/runtime@npm:^7.26.0":
+"@babel/runtime@npm:^7.25.0":
   version: 7.29.2
   resolution: "@babel/runtime@npm:7.29.2"
   checksum: 10c0/30b80a0140d16467792e1bbeb06f655b0dab70407da38dfac7fedae9c859f9ae9d846ef14ad77bd3814c064295fe9b1bc551f1541ea14646ae9f22b71a8bc17a
@@ -3826,13 +3826,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@transistorsoft/background-geolocation-types@npm:^5.0.1":
-  version: 5.0.1
-  resolution: "@transistorsoft/background-geolocation-types@npm:5.0.1"
-  checksum: 10c0/54c1aec1b54ac6b213dfb419ed05f3353b5aeaac4d8503423575a6a8f5436d19fc229ecd18913f9fdecd968f59685f59be1e72edd0ecb4aacdcea1bb1b081458
-  languageName: node
-  linkType: hard
-
 "@types/babel__core@npm:^7.1.14":
   version: 7.20.5
   resolution: "@types/babel__core@npm:7.20.5"
@@ -4220,12 +4213,11 @@ __metadata:
     react: "npm:19.1.1"
     react-hook-form: "npm:^7.72.0"
     react-native: "npm:0.82.0"
-    react-native-background-geolocation: "npm:^5.0.4"
+    react-native-background-actions: "npm:^4.1.0"
     react-native-chart-kit: "npm:^6.12.0"
     react-native-contacts: "npm:^8.0.7"
     react-native-device-info: "npm:^14.1.1"
     react-native-element-dropdown: "npm:^2.12.4"
-    react-native-geolocation-service: "npm:^5.3.1"
     react-native-gesture-handler: "npm:^2.31.0"
     react-native-gifted-charts: "npm:^1.4.64"
     react-native-keyboard-aware-scroll-view: "npm:^0.9.5"
@@ -6451,6 +6443,13 @@ __metadata:
   version: 5.0.1
   resolution: "event-target-shim@npm:5.0.1"
   checksum: 10c0/0255d9f936215fd206156fd4caa9e8d35e62075d720dc7d847e89b417e5e62cf1ce6c9b4e0a1633a9256de0efefaf9f8d26924b1f3c8620cffb9db78e7d3076b
+  languageName: node
+  linkType: hard
+
+"eventemitter3@npm:^4.0.7":
+  version: 4.0.7
+  resolution: "eventemitter3@npm:4.0.7"
+  checksum: 10c0/5f6d97cbcbac47be798e6355e3a7639a84ee1f7d9b199a07017f1d2f1e2fe236004d14fa5dfaeba661f94ea57805385e326236a6debbc7145c8877fbc0297c6b
   languageName: node
   linkType: hard
 
@@ -9946,14 +9945,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-native-background-geolocation@npm:^5.0.4":
-  version: 5.1.0
-  resolution: "react-native-background-geolocation@npm:5.1.0"
+"react-native-background-actions@npm:^4.1.0":
+  version: 4.1.0
+  resolution: "react-native-background-actions@npm:4.1.0"
   dependencies:
-    "@babel/runtime": "npm:^7.26.0"
-    "@transistorsoft/background-geolocation-types": "npm:^5.0.1"
-    tslib: "npm:^2.6.3"
-  checksum: 10c0/bc9ad3dd20ad9e2999127f0eea0e07aa1391a6efeda1c7d5f37b3fb4cf6ca6baeba50cf2f5085b1e9721a406df0d56e66fff5560fd75942bac0e97ae906765ee
+    eventemitter3: "npm:^4.0.7"
+  peerDependencies:
+    react-native: ">=0.47.0"
+  checksum: 10c0/92e3c5413747892aaaa123a05ef876643184dda2973965917ceba65a57848143c3668095ebd82cfb3d0d6b8810c9a503ff00a98d008d2edf64006ff809e93dbc
   languageName: node
   linkType: hard
 
@@ -10000,13 +9999,6 @@ __metadata:
     react: "*"
     react-native: "*"
   checksum: 10c0/0f0bce59355112893612fd6b7dca4b181ef1998986ead27623cdce3c44093bda5d471dc0e907072472094d1c02437cb5a436ad9ff4e07333e03eb0cc85283544
-  languageName: node
-  linkType: hard
-
-"react-native-geolocation-service@npm:^5.3.1":
-  version: 5.3.1
-  resolution: "react-native-geolocation-service@npm:5.3.1"
-  checksum: 10c0/54cbd8b36dcfcbc3d7a6303766d07c944e634cb40ff1f353c3b965f07bfe2d39a3514e05a48e5008d5d2529dde3ef0e6f8bc8ed1f729988fe3497eba29635c90
   languageName: node
   linkType: hard
 
@@ -11357,7 +11349,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tslib@npm:^2.0.1, tslib@npm:^2.1.0, tslib@npm:^2.6.3":
+"tslib@npm:^2.0.1, tslib@npm:^2.1.0":
   version: 2.8.1
   resolution: "tslib@npm:2.8.1"
   checksum: 10c0/9c4759110a19c53f992d9aae23aac5ced636e99887b51b9e61def52611732872ff7668757d4e4c61f19691e36f4da981cd9485e869b4a7408d689f6bf1f14e62

@@ -14,6 +14,7 @@ import {
   TextInput,
   Linking,
   Platform,
+  PermissionsAndroid,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import API from '../api/api1';
@@ -23,6 +24,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { USER_DATA } from '../service/localStorage';
 import { saveAcceptedLead, getAcceptedLeads } from '../service/Localleadsstorage';
+import { NativeModules } from 'react-native';
 
 // ── Location service imports ──────────────────────────────────────────────────
 import {
@@ -30,6 +32,8 @@ import {
   useLocationTracking,
   requestLocationPermissions,
   requestIOSLocationPermission,
+   requestBatteryOptimizationExemption,
+   isGPSEnabled,
 } from '../service/locationService';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -260,26 +264,60 @@ useFocusEffect(
 );
 useEffect(() => {
   isMounted.current = true;
+
   const restoreToggle = async () => {
     const saved = await AsyncStorage.getItem('surveyer_is_on');
     if (saved === 'true') {
       setIsOn(true);
-      startTracking();
+      if (Platform.OS === 'android') {
+        NativeModules.StartStopService?.startService();
+      }
+      // ✅ setTimeout — React render complete ஆனதும் startTracking
+      setTimeout(() => {
+        if (isMounted.current) startTracking();
+      }, 500);
     }
 
-    // ✅ இதை add பண்ணு — API வருமுன்னே local cache காட்டு
     const localAccepted = await getAcceptedLeads();
     if (localAccepted.length > 0) setAcceptedLeads(localAccepted);
-
     await fetchLeadsAndCheckInProgress();
   };
+
   restoreToggle();
 
   return () => {
-      isMounted.current = false;
-      stopTracking();
-    };
-  }, []);
+    isMounted.current = false;
+  };
+}, []);
+
+// App open ஆகும் போது automatic setup
+useEffect(() => {
+  const autoSetup = async () => {
+    if (Platform.OS !== 'android') return;
+
+    // 1. Battery optimization exempt கேளு
+    try {
+      await NativeModules.StartStopService?.requestBatteryOptimization?.();
+    } catch (e) {}
+
+    // 2. Location permission கேளு
+    const granted = await requestLocationPermissions();
+    if (!granted) {
+      Alert.alert(
+        'Permission Required',
+        'Location permission is required for this app to work.',
+        [
+          {
+            text: 'Open Settings',
+            onPress: () => Linking.openSettings(),
+          },
+        ]
+      );
+    }
+  };
+
+  autoSetup();
+}, []);
 
 const [completedLeads, setCompletedLeads] = useState([]);
 
@@ -519,33 +557,47 @@ const handleSiteObservation = (item) => {
   };
 
   // ── Toggle (ON / OFF) ──────────────────────────────────────────────────────
- const handleToggle = async () => {
+const handleToggle = async () => {
   if (!isOn) {
-    let granted = false;
-
-    if (Platform.OS === 'ios') {
-      granted = await requestIOSLocationPermission(); // ✅ iOS
-    } else {
-      granted = await requestLocationPermissions();   // ✅ Android
-    }
-
-    if (!granted) return;
-     if (Platform.OS === 'android') {
-      try {
-        await BackgroundGeolocation.requestPermission();
-      } catch (e) {
-        console.log('Battery optimization request error:', e);
+    // ✅ Android — GPS switch check
+    if (Platform.OS === 'android') {
+      const gpsOn = await isGPSEnabled();
+      console.log('🔍 GPS enabled:', gpsOn);
+      
+      if (!gpsOn) {
+        Alert.alert(
+          'Location is Off',
+          'Please turn on Location / GPS to continue.',
+          [
+            {
+              text: 'Open Settings',
+              onPress: () =>
+                Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS')
+                  .catch(() => Linking.openSettings()),
+            },
+            { text: 'Cancel', style: 'cancel' },
+          ]
+        );
+        return; // ← toggle ON ஆகாது
       }
+
+      NativeModules.StartStopService?.startService();
+    } else if (Platform.OS === 'ios') {
+      await requestIOSLocationPermission();
     }
 
     setIsOn(true);
     await AsyncStorage.setItem('surveyer_is_on', 'true');
     startTracking();
     fetchLeadsAndCheckInProgress();
+
   } else {
     setIsOn(false);
     await AsyncStorage.setItem('surveyer_is_on', 'false');
     stopTracking();
+    if (Platform.OS === 'android') {
+      NativeModules.StartStopService?.stopService();
+    }
   }
 };
 

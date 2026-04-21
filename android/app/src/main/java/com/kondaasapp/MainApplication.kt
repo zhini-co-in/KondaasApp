@@ -1,4 +1,5 @@
 package com.trisentrix.kondaas
+
 import android.app.Application
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
@@ -11,13 +12,14 @@ class MainApplication : Application(), ReactApplication {
     override val reactHost: ReactHost by lazy {
         getDefaultReactHost(
             context = applicationContext,
-            packageList = PackageList(this).packages,
-
-            // IMPORTANT: use jsBundleFilePath (new architecture)
+            packageList = PackageList(this).packages +
+                listOf(
+                    StartStopServicePackage(),
+                    LocationPackage(),
+                ),
             jsBundleFilePath = CodePush.getJSBundleFile(),
         )
     }
-
     override fun onCreate() {
         super.onCreate()
         loadReactNative(this)

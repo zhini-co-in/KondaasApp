@@ -1,9 +1,6 @@
-// locationService.js — COMMON FOR ANDROID + iOS (Stable)
-
 import { useRef, useState } from 'react';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
-import { PermissionsAndroid, Platform, Alert, Linking } from 'react-native';
-import BackgroundGeolocation from 'react-native-background-geolocation';
+import { PermissionsAndroid, Platform, Alert, Linking, DeviceEventEmitter, NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import API from '../api/api1';
 import { USER_DATA } from '../service/localStorage';
@@ -28,21 +25,18 @@ const isMockLocation = (lat, lon) => {
   return false;
 };
 
-// Send Location (Common)
-export const sendLocation = async (latitude, longitude, timestamp, lastSentRef) => {
+const lastSentTime = { current: 0 };
+
+export const sendLocation = async (latitude, longitude, timestamp) => {
   if (isMockLocation(latitude, longitude)) return;
-
   const now = Date.now();
-  if (now - lastSentRef.current < 110000) return;   // ~2 நிமிடம்
-
-  lastSentRef.current = now;
-
-  const finalEpoch = timestamp && !isNaN(Number(timestamp)) ? Number(timestamp) : Date.now();
-
+  if (now - lastSentTime.current < 110000) return;
+  lastSentTime.current = now;
+  const finalEpoch = timestamp || Date.now();
   try {
     const phoneNo = await getUserPhone();
+    console.log(`📞 phoneNo being sent: "${phoneNo}"`);
     console.log(`📍 [${Platform.OS}] SENDING → ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-
     await API.post('/location/add', {
       phoneNo,
       latitude: parseFloat(latitude),
@@ -54,7 +48,6 @@ export const sendLocation = async (latitude, longitude, timestamp, lastSentRef) 
   }
 };
 
-// Common Permission Request
 export const requestLocationPermissions = async () => {
   if (Platform.OS === 'android') {
     const fine = await PermissionsAndroid.request(
@@ -65,128 +58,117 @@ export const requestLocationPermissions = async () => {
         buttonPositive: 'Allow',
       }
     );
-
-    if (fine !== PermissionsAndroid.RESULTS.GRANTED) return false;
-
+    if (fine !== PermissionsAndroid.RESULTS.GRANTED) {
+      console.log('❌ Fine location denied');
+      return false;
+    }
     if (Platform.Version >= 29) {
-      await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION);
+      const bg = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION,
+        {
+          title: 'Background Location',
+          message: 'Allow location access all the time for background tracking.',
+          buttonPositive: 'Allow',
+        }
+      );
+      console.log('🔐 Background location result:', bg);
     }
     return true;
-  } 
-  else if (Platform.OS === 'ios') {
-    // iOS - When In Use + Always
+  } else if (Platform.OS === 'ios') {
     const whenInUse = await request(PERMISSIONS.IOS.LOCATION_WHEN_IN_USE);
     if (whenInUse !== RESULTS.GRANTED) return false;
-
-    const always = await request(PERMISSIONS.IOS.LOCATION_ALWAYS);
-    if (always !== RESULTS.GRANTED) {
-      console.log('iOS Always permission not granted - continuing with When In Use');
-    }
+    await request(PERMISSIONS.IOS.LOCATION_ALWAYS);
     return true;
   }
   return true;
 };
 
-// Main Tracking (Common for iOS + Android)
-export const startBackgroundTracking = ({
-  locationSubscriberRef,
-  heartbeatSubscriberRef,
-  lastSentRef,
-  isMounted,
-  onLocationUpdate,
-  intervalRef,
-}) => {
-  locationSubscriberRef.current?.remove();
-  heartbeatSubscriberRef.current?.remove();
-  clearInterval(intervalRef?.current);
+export const requestIOSLocationPermission = requestLocationPermissions;
 
-  BackgroundGeolocation.ready({
-  desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
-  distanceFilter: 10,
-  
-  // ✅ App terminated ஆனாலும் work ஆக
-  stopOnTerminate: false,   // already இருக்கு ✓
-  startOnBoot: true,        // already இருக்கு ✓
-  
-  // ✅ Heartbeat = 2 minutes (120 seconds)
-  heartbeatInterval: 120,   // 180 → 120 மாத்துங்க
-  
-  // Android specific
-  interval: 120000,
-  fastestInterval: 60000,
-  
-  // ✅ iOS kill ஆனாலும் wake up ஆக
-  preventSuspend: true,     // already இருக்கு ✓
-  pausesLocationUpdatesAutomatically: false, // already இருக்கு ✓
-  enableHeadless: true,     // ⬅️ இது MISSING — add பண்ணுங்க
-  
-  locationAuthorizationRequest: 'Always',
-  debug: false,             // production-ல் false வையுங்க
-}).then(async (state) => {
-    console.log(`✅ BackgroundGeolocation ready on ${Platform.OS}`);
-
-    locationSubscriberRef.current = BackgroundGeolocation.onLocation(async (location) => {
-      const { latitude, longitude } = location.coords;
-      const timestamp = location.timestamp || Date.now();
-
-      if (isMounted.current) onLocationUpdate({ latitude, longitude });
-      await sendLocation(latitude, longitude, timestamp, lastSentRef);
-    });
-
-    const forceSend = async () => {
-      try {
-        const loc = await BackgroundGeolocation.getCurrentPosition({
-          samples: 2,
-          timeout: 60,
-          maximumAge: 300000,
-        });
-        const { latitude, longitude } = loc.coords;
-        const timestamp = loc.timestamp || Date.now();
-
-        if (isMounted.current) onLocationUpdate({ latitude, longitude });
-        await sendLocation(latitude, longitude, timestamp, lastSentRef);
-      } catch (e) {
-        console.log('Force send error:', e);
-      }
-    };
-
-    heartbeatSubscriberRef.current = BackgroundGeolocation.onHeartbeat(forceSend);
-    intervalRef.current = setInterval(forceSend, 120000);   // 2 நிமிடத்துக்கு ஒரு முறை
-
-    if (!state.enabled) await BackgroundGeolocation.start();
-  }).catch((err) => {
-    console.log(`❌ BackgroundGeolocation failed on ${Platform.OS}:`, err);
-  });
-};
-
-export const stopBackgroundTracking = (locationSubscriberRef, heartbeatSubscriberRef) => {
-  BackgroundGeolocation.stop();
-  locationSubscriberRef.current?.remove();
-  heartbeatSubscriberRef.current?.remove();
+export const requestBatteryOptimizationExemption = () => {
+  if (Platform.OS !== 'android') return;
+  Alert.alert(
+    'Background Location',
+    'Please turn off Battery Optimization for location tracking to work properly.',
+    [
+      { text: 'Go to Settings', onPress: () => Linking.openSettings() },
+      { text: 'Cancel', style: 'cancel' },
+    ]
+  );
 };
 
 export const useLocationTracking = (isMounted) => {
   const [currentLocation, setCurrentLocation] = useState(null);
-  const locationSubscriberRef = useRef(null);
-  const heartbeatSubscriberRef = useRef(null);
-  const lastSentRef = useRef(0);
-  const intervalRef = useRef(null);
+  const nativeEventRef = useRef(null);
+  const watchIdRef = useRef(null);
 
   const startTracking = () => {
-    startBackgroundTracking({
-      locationSubscriberRef,
-      heartbeatSubscriberRef,
-      lastSentRef,
-      isMounted,
-      onLocationUpdate: setCurrentLocation,
-      intervalRef,
-    });
+    console.log('🟢 Starting location tracking');
+    if (Platform.OS === 'android') {
+      if (nativeEventRef.current) {
+      nativeEventRef.current.remove();
+      nativeEventRef.current = null;
+    }
+      nativeEventRef.current = DeviceEventEmitter.addListener(
+        'nativeLocationUpdate',
+        async (data) => {
+          console.log('🔔 Native service triggered:', data);
+          if (data?.latitude && data?.longitude) {
+            if (isMounted.current) {
+              setCurrentLocation({ latitude: data.latitude, longitude: data.longitude });
+            }
+            await sendLocation(data.latitude, data.longitude, data.timestamp);
+          } else {
+            console.log('❌ No lat/lon in data:', data);
+          }
+        }
+      );
+    } else if (Platform.OS === 'ios') {
+      watchIdRef.current = global.navigator?.geolocation?.watchPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          if (isMounted.current) {
+            setCurrentLocation({ latitude, longitude });
+          }
+          await sendLocation(latitude, longitude, position.timestamp);
+        },
+        (error) => console.log('iOS watch error:', error),
+        {
+          enableHighAccuracy: true,
+          distanceFilter: 10,
+          interval: 120000,
+        }
+      );
+    }
   };
 
   const stopTracking = () => {
-    clearInterval(intervalRef.current);
-    stopBackgroundTracking(locationSubscriberRef, heartbeatSubscriberRef);
+    console.log('🔴 Stopping location tracking');
+    if (Platform.OS === 'ios' && watchIdRef.current !== null) {
+      global.navigator?.geolocation?.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    if (nativeEventRef.current) {
+      nativeEventRef.current.remove();
+      nativeEventRef.current = null;
+    }
   };
 
   return { currentLocation, startTracking, stopTracking };
+};
+
+export const isGPSEnabled = async () => {
+  if (Platform.OS !== 'android') return true;
+  try {
+    const enabled = await NativeModules.LocationManager?.isLocationEnabled();
+    console.log('🔍 GPS enabled:', enabled);
+    return enabled ?? false;
+  } catch (e) {
+    console.log('🔍 GPS check error:', e);
+    return false;
+  }
+};
+
+export const checkAndPromptGPS = async () => {
+  return true;
 };
