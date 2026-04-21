@@ -4,7 +4,8 @@ import { name as appName } from './app.json';
 import codePush from "@revopush/react-native-code-push";
 import messaging from '@react-native-firebase/messaging';
 import notifee, { EventType } from '@notifee/react-native';
-import { showLeadNotification, callUpdateAPI } from './src/utils/notificationService';
+import { showLeadNotification } from './src/utils/notificationService';
+import API from './src/api/api1'; // ✅ direct API use பண்றோம்
 
 const codePushOptions = { 
   checkFrequency: codePush.CheckFrequency.ON_APP_RESUME, 
@@ -18,16 +19,21 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
   await showLeadNotification(remoteMessage.data);
 });
 
-// ✅ Background notification action handler
+// ✅ Background notification action handler — mobile use பண்றோம்
 notifee.onBackgroundEvent(async ({ type, detail }) => {
   if (type === EventType.ACTION_PRESS) {
     const { pressAction, notification } = detail;
-    const { leadId } = notification.data;
+    const mobile = notification?.data?.customerMobile; // ✅ leadId இல்ல, mobile எடு
+
+    if (!mobile) return;
 
     if (pressAction.id === 'accept') {
-      await callUpdateAPI(leadId, 'accepted');
+      await API.put('/order/updatestatus', { mobile, status: 'accepted' });
     } else if (pressAction.id === 'reject') {
-      await callUpdateAPI(leadId, 'rejected');
+      await API.post('/order/reject', { 
+        mobile, 
+        reason: 'Rejected via notification' 
+      });
     }
 
     await notifee.cancelNotification(notification.id);
