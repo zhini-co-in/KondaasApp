@@ -265,28 +265,33 @@ useFocusEffect(
 useEffect(() => {
   isMounted.current = true;
 
-  const restoreToggle = async () => {
-    const saved = await AsyncStorage.getItem('surveyer_is_on');
-    if (saved === 'true') {
-      setIsOn(true);
-      if (Platform.OS === 'android') {
-        NativeModules.StartStopService?.startService();
-      }
-      // ✅ setTimeout — React render complete ஆனதும் startTracking
-      setTimeout(() => {
-        if (isMounted.current) startTracking();
-      }, 500);
+const restoreToggle = async () => {
+  const saved = await AsyncStorage.getItem('surveyer_is_on');
+  
+  if (saved === 'true') {
+    setIsOn(true);
+    if (Platform.OS === 'android') {
+      NativeModules.StartStopService?.startService();
     }
+    startTracking(); // ✅ இதை add பண்ணு — app reopen tracking fix
+  } else {
+    if (Platform.OS === 'android') {
+      NativeModules.StartStopService?.stopService();
+    } else if (Platform.OS === 'ios') {
+      stopTracking();
+    }
+  }
 
-    const localAccepted = await getAcceptedLeads();
-    if (localAccepted.length > 0) setAcceptedLeads(localAccepted);
-    await fetchLeadsAndCheckInProgress();
-  };
+  const localAccepted = await getAcceptedLeads();
+  if (localAccepted.length > 0) setAcceptedLeads(localAccepted);
+  await fetchLeadsAndCheckInProgress();
+};
 
   restoreToggle();
 
   return () => {
     isMounted.current = false;
+    stopTracking(); // ✅ cleanup on unmount
   };
 }, []);
 

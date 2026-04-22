@@ -26,6 +26,7 @@ const isMockLocation = (lat, lon) => {
 };
 
 const lastSentTime = { current: 0 };
+let lastSentCoords = { lat: null, lon: null }; // ✅ ADD THIS
 
 export const sendLocation = async (latitude, longitude, timestamp) => {
   if (isMockLocation(latitude, longitude)) return;
@@ -37,12 +38,13 @@ export const sendLocation = async (latitude, longitude, timestamp) => {
     const phoneNo = await getUserPhone();
     console.log(`📞 phoneNo being sent: "${phoneNo}"`);
     console.log(`📍 [${Platform.OS}] SENDING → ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-    await API.post('/location/add', {
-      phoneNo,
-      latitude: parseFloat(latitude),
-      longitude: parseFloat(longitude),
-      epoch: finalEpoch,
-    });
+    const res = await API.post('/location/add', {
+  phoneNo,
+  latitude: parseFloat(latitude),
+  longitude: parseFloat(longitude),
+  epoch: finalEpoch,
+});
+console.log('✅ Location saved:', res.status);
   } catch (err) {
     console.log('❌ Send error:', err?.response?.data || err.message);
   }
@@ -97,19 +99,30 @@ export const requestBatteryOptimizationExemption = () => {
   );
 };
 
+// ✅ Module level-la வை (hook outside)
+let globalListenerRef = null; // single global ref
+
 export const useLocationTracking = (isMounted) => {
   const [currentLocation, setCurrentLocation] = useState(null);
-  const nativeEventRef = useRef(null);
   const watchIdRef = useRef(null);
+  const isTrackingRef = useRef(false); // ✅ tracking guard
 
   const startTracking = () => {
-    console.log('🟢 Starting location tracking');
-    if (Platform.OS === 'android') {
-      if (nativeEventRef.current) {
-      nativeEventRef.current.remove();
-      nativeEventRef.current = null;
+    if (isTrackingRef.current) {
+      console.log('⚠️ Already tracking, skip');
+      return;
     }
-      nativeEventRef.current = DeviceEventEmitter.addListener(
+    isTrackingRef.current = true;
+    console.log('🟢 Starting location tracking');
+
+    if (Platform.OS === 'android') {
+      // ✅ Global listener clean பண்ணு first
+      if (globalListenerRef) {
+        globalListenerRef.remove();
+        globalListenerRef = null;
+      }
+
+      globalListenerRef = DeviceEventEmitter.addListener(
         'nativeLocationUpdate',
         async (data) => {
           console.log('🔔 Native service triggered:', data);
@@ -118,39 +131,34 @@ export const useLocationTracking = (isMounted) => {
               setCurrentLocation({ latitude: data.latitude, longitude: data.longitude });
             }
             await sendLocation(data.latitude, data.longitude, data.timestamp);
-          } else {
-            console.log('❌ No lat/lon in data:', data);
           }
         }
       );
     } else if (Platform.OS === 'ios') {
+      if (watchIdRef.current !== null) return; // ✅ iOS guard
       watchIdRef.current = global.navigator?.geolocation?.watchPosition(
         async (position) => {
           const { latitude, longitude } = position.coords;
-          if (isMounted.current) {
-            setCurrentLocation({ latitude, longitude });
-          }
+          if (isMounted.current) setCurrentLocation({ latitude, longitude });
           await sendLocation(latitude, longitude, position.timestamp);
         },
         (error) => console.log('iOS watch error:', error),
-        {
-          enableHighAccuracy: true,
-          distanceFilter: 10,
-          interval: 120000,
-        }
+        { enableHighAccuracy: true, distanceFilter: 10, interval: 120000 }
       );
     }
   };
 
   const stopTracking = () => {
     console.log('🔴 Stopping location tracking');
+    isTrackingRef.current = false; // ✅ Reset guard
+
     if (Platform.OS === 'ios' && watchIdRef.current !== null) {
       global.navigator?.geolocation?.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
-    if (nativeEventRef.current) {
-      nativeEventRef.current.remove();
-      nativeEventRef.current = null;
+    if (globalListenerRef) {
+      globalListenerRef.remove();
+      globalListenerRef = null;
     }
   };
 

@@ -153,18 +153,25 @@ class LocationService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         locationListener?.let { locationManager?.removeUpdates(it) }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-            == PackageManager.PERMISSION_GRANTED) {
+
+        val prefs = getSharedPreferences("location_prefs", Context.MODE_PRIVATE)
+        val shouldRestart = prefs.getBoolean("should_restart", true)
+        Log.d("LocationService", "🔍 shouldRestart = $shouldRestart")
+
+        if (shouldRestart && ContextCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             Log.d("LocationService", "♻️ Restarting service")
             startService(Intent(applicationContext, LocationService::class.java))
         } else {
-            Log.e("LocationService", "❌ Not restarting — no permission")
+            Log.d("LocationService", "🛑 Not restarting — stopped intentionally")
         }
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-            == PackageManager.PERMISSION_GRANTED) {
+        val prefs = getSharedPreferences("location_prefs", Context.MODE_PRIVATE)
+        val shouldRestart = prefs.getBoolean("should_restart", true)
+        if (shouldRestart && ContextCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             startService(Intent(applicationContext, LocationService::class.java))
         }
         super.onTaskRemoved(rootIntent)

@@ -1,5 +1,5 @@
 // utils/notificationService.js
-import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
+import notifee, { AndroidImportance, AndroidStyle, EventType } from '@notifee/react-native';
 import API from '../api/api1';
 import { saveAcceptedLead, getAcceptedLeads } from '../service/Localleadsstorage';
 
@@ -19,20 +19,35 @@ export async function showLeadNotification(data) {
 
   await notifee.displayNotification({
     id: data.leadId || String(Date.now()),
-    title: '🔔 New Lead Nearby!',
-    body: `${data.customerName || 'Customer'} is ${data.distance || '0'} km away`,
+    title: '🔔 New Lead Nearby!',                          // ← Heading
+    body: `👤 ${data.customerName || 'Customer'}\n📍 ${data.distance || '0'} km away`,  // ← Name + Location
     data: {
       leadId: data.leadId || '',
-      customerMobile: data.customerMobile || '',  // ✅ mobile = phone (SurveyerScreen போல)
+      customerMobile: data.customerMobile || '',
     },
     android: {
       channelId: 'custom_sound_channel_v2',
       importance: AndroidImportance.HIGH,
       pressAction: { id: 'default' },
+      showTimestamp: true,
+      
+      // ✅ Actions with smallIcon fix
       actions: [
-        { title: '✅ Accept', pressAction: { id: 'accept' } },
-        { title: '❌ Reject', pressAction: { id: 'reject' } },
+        {
+          title: '✅ Accept',
+          pressAction: { id: 'accept' },
+        },
+        {
+          title: '❌ Reject',
+          pressAction: { id: 'reject' },
+        },
       ],
+      
+      // ✅ Expanded style - name + location clearly visible
+      style: {
+        type: AndroidStyle.BIGTEXT,          // ← import வேணும்
+        text: `👤 Customer: ${data.customerName || 'Unknown'}\n📍 Distance: ${data.distance || '0'} km away\n📞 ${data.customerMobile || ''}`,
+      },
     },
   });
 }
