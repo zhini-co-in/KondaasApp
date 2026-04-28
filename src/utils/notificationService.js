@@ -19,8 +19,8 @@ export async function showLeadNotification(data) {
 
   await notifee.displayNotification({
     id: data.leadId || String(Date.now()),
-    title: '🔔 New Lead Nearby!',                          // ← Heading
-    body: `👤 ${data.customerName || 'Customer'}\n📍 ${data.distance || '0'} km away`,  // ← Name + Location
+    title: '🔔 New Lead Nearby!',
+    body: `👤 ${data.customerName || 'Customer'}  ⚡ ${data.kilovolts || 'N/A'} kV`,
     data: {
       leadId: data.leadId || '',
       customerMobile: data.customerMobile || '',
@@ -30,8 +30,7 @@ export async function showLeadNotification(data) {
       importance: AndroidImportance.HIGH,
       pressAction: { id: 'default' },
       showTimestamp: true,
-      
-      // ✅ Actions with smallIcon fix
+
       actions: [
         {
           title: '✅ Accept',
@@ -42,32 +41,33 @@ export async function showLeadNotification(data) {
           pressAction: { id: 'reject' },
         },
       ],
-      
-      // ✅ Expanded style - name + location clearly visible
+
+      // ✅ Expanded view — Name, Address, Kilovolts மட்டும்
       style: {
-        type: AndroidStyle.BIGTEXT,          // ← import வேணும்
-        text: `👤 Customer: ${data.customerName || 'Unknown'}\n📍 Distance: ${data.distance || '0'} km away\n📞 ${data.customerMobile || ''}`,
+        type: AndroidStyle.BIGTEXT,
+        text: 
+          `👤 Name     : ${data.customerName || 'Unknown'}\n` +
+          `📍 Address  : ${data.address || 'N/A'}\n` +
+          `⚡ Kilovolts: ${data.kilovolt || 'N/A'} \n`,
       },
     },
   });
 }
 
 // ─────────────────────────────────────────────────────────────────
-// ✅ SurveyerScreen handleAccept / handleReject — same logic
+// Accept / Reject handlers — same as before
 // ─────────────────────────────────────────────────────────────────
 async function handleNotificationAccept(mobile) {
   try {
-    // 1. Status update — SurveyerScreen updateOrderStatus போல
     await API.put('/order/updatestatus', { mobile, status: 'accepted' });
 
-    // 2. Local storage save — SurveyerScreen handleAccept போல
     const allLeads = await getAcceptedLeads();
     const alreadySaved = allLeads.some((l) => l.phone === mobile);
     if (!alreadySaved) {
-      await saveAcceptedLead({ phone: mobile }); // minimal save
+      await saveAcceptedLead({ phone: mobile });
     }
 
-    console.log('✅ Notification Accept done:', mobile);
+    console.log('✅ Accept done:', mobile);
   } catch (e) {
     console.error('Accept API Error:', e);
   }
@@ -75,24 +75,22 @@ async function handleNotificationAccept(mobile) {
 
 async function handleNotificationReject(mobile) {
   try {
-    // SurveyerScreen confirmReject போல — reject endpoint
     await API.post('/order/reject', {
       mobile,
       reason: 'Rejected via notification',
     });
 
-    console.log('❌ Notification Reject done:', mobile);
+    console.log('❌ Reject done:', mobile);
   } catch (e) {
     console.error('Reject API Error:', e);
   }
 }
 
 // ─────────────────────────────────────────────────────────────────
-// ✅ Background + Foreground event listener — App.js ல call பண்ணு
+// Background + Foreground handlers — App.js ல call பண்ணு
 // ─────────────────────────────────────────────────────────────────
 export function registerNotificationHandlers() {
 
-  // 🔴 Background (app closed / background)
   notifee.onBackgroundEvent(async ({ type, detail }) => {
     const mobile = detail?.notification?.data?.customerMobile;
     if (!mobile) return;
@@ -108,7 +106,6 @@ export function registerNotificationHandlers() {
     }
   });
 
-  // 🟢 Foreground (app open)
   notifee.onForegroundEvent(({ type, detail }) => {
     const mobile = detail?.notification?.data?.customerMobile;
     if (!mobile) return;
