@@ -1,84 +1,56 @@
+// screens/SurveyerScreen.js — Full offline + auto-sync version
+
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  Switch,
-  Image,
-  StatusBar,
-  Alert,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  Modal,
-  TextInput,
-  Linking,
-  Platform,
-  PermissionsAndroid,
+  View, Text, StyleSheet, Switch, Image, StatusBar,
+  Alert, TouchableOpacity, ScrollView, ActivityIndicator,
+  Modal, TextInput, Linking, Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import API from '../api/api1';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
 import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { USER_DATA } from '../service/localStorage';
-import { saveAcceptedLead, getAcceptedLeads } from '../service/Localleadsstorage';
-import { NativeModules } from 'react-native';
-
-// ── Location service imports ──────────────────────────────────────────────────
 import {
-  getDistance,
-  useLocationTracking,
-  requestLocationPermissions,
-  requestIOSLocationPermission,
-   requestBatteryOptimizationExemption,
-   isGPSEnabled,
+  saveAcceptedLead,
+  getAcceptedLeads,
+  updateAcceptedLeadStatus,
+  mergeWithServerLeads,
+} from '../service/localLeadsStorage';
+import { enqueue, processSyncQueue } from '../service/syncQueue';
+import { NativeModules } from 'react-native';
+import {
+  getDistance, useLocationTracking,
+  requestLocationPermissions, requestIOSLocationPermission, isGPSEnabled,
 } from '../service/locationService';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LeadCard
 // ─────────────────────────────────────────────────────────────────────────────
 const LeadCard = ({
-  item,
-  currentLocation,
-  onAccept,
-  onReject,
-  onStart,
-  onSiteObservation,
-  onManualEnable,
-  onEdit,
-  cardType,
+  item, currentLocation, onAccept, onReject, onStart, cardType,
 }) => {
-  const hasLatLong =
-    item.latitude &&
-    item.longitude &&
-    item.latitude !== '' &&
-    item.longitude !== '';
+  const hasLatLong = item.latitude && item.longitude &&
+    item.latitude !== '' && item.longitude !== '';
 
-  const distToLead =
-    currentLocation && hasLatLong
-      ? Math.round(
-          getDistance(
-            currentLocation.latitude,
-            currentLocation.longitude,
-            parseFloat(item.latitude),
-            parseFloat(item.longitude)
-          )
-        )
-      : null;
+  const distToLead = currentLocation && hasLatLong
+    ? Math.round(getDistance(
+        currentLocation.latitude, currentLocation.longitude,
+        parseFloat(item.latitude), parseFloat(item.longitude)
+      ))
+    : null;
 
-  const withinRange = distToLead !== null && distToLead <= 300;
   return (
     <View style={[
-  styles.card,
-  cardType === 'unaccepted' && { borderLeftWidth: 4, borderLeftColor: '#ED1C25' },
-  cardType === 'completed' && { borderLeftWidth: 4, borderLeftColor: '#22c55e' },
-]}>
+      styles.card,
+      cardType === 'unaccepted' && { borderLeftWidth: 4, borderLeftColor: '#ED1C25' },
+      cardType === 'completed'  && { borderLeftWidth: 4, borderLeftColor: '#22c55e' },
+    ]}>
       <View style={styles.rowBetween}>
         <Text style={styles.referred}>
-          Referred by —{' '}
-          <Text style={{ fontWeight: 'bold' }}>{item.referredBy || 'N/A'}</Text>
+          Referred by — <Text style={{ fontWeight: 'bold' }}>{item.referredBy || 'N/A'}</Text>
         </Text>
         <Text style={styles.date}>{item.date}</Text>
       </View>
@@ -105,7 +77,6 @@ const LeadCard = ({
           </View>
         </View>
 
-        {/* ── Unaccepted ── */}
         {cardType === 'unaccepted' && (
           <View style={styles.iconContainer}>
             <TouchableOpacity style={styles.iconBtn} onPress={() => onAccept(item)}>
@@ -118,69 +89,30 @@ const LeadCard = ({
         )}
 
         {cardType === 'accepted' && (
-  <View style={{ alignItems: 'center', gap: 6 }}>
-    {item.status === 'completed' ? (
-      <View style={{
-        backgroundColor: '#22c55e', 
-        paddingHorizontal: 10,
-        paddingVertical: 6, 
-        borderRadius: 8,
-      }}>
-        <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>
-          ✓ Completed
-        </Text>
-      </View>
-    ) : item.status === 'inprogress' ? (
-      <TouchableOpacity
-        style={[styles.startBtn, { backgroundColor: '#f97316' }]}
-        onPress={() => onStart(item.id)}
-      >
-        <Ionicons name="play-circle-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
-        <Text style={styles.startBtnText}>Resume</Text>
-      </TouchableOpacity>
-    ) : (
-      <TouchableOpacity style={styles.startBtn} onPress={() => onStart(item.id)}>
-        <Ionicons name="play-circle-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
-        <Text style={styles.startBtnText}>Start</Text>
-      </TouchableOpacity>
-    )}
-  </View>
-)}
+          <View style={{ alignItems: 'center', gap: 6 }}>
+            {item.status === 'completed' ? (
+              <View style={{ backgroundColor: '#22c55e', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}>
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>✓ Completed</Text>
+              </View>
+            ) : item.status === 'inprogress' ? (
+              <TouchableOpacity style={[styles.startBtn, { backgroundColor: '#f97316' }]} onPress={() => onStart(item.id)}>
+                <Ionicons name="play-circle-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
+                <Text style={styles.startBtnText}>Resume</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.startBtn} onPress={() => onStart(item.id)}>
+                <Ionicons name="play-circle-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
+                <Text style={styles.startBtnText}>Start</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
-                {cardType === 'inprogress' && (
-  <View style={{ alignItems: 'center', gap: 6 }}>
-    <View
-      style={{
-        backgroundColor: '#22c55e',
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        borderRadius: 8,
-        minWidth: 120,
-        alignItems: 'center',
-      }}
-    >
-      <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>
-        ✓ Completed
-      </Text>
-    </View>
-
-    <TouchableOpacity style={styles.iconBtn} onPress={() => onEdit(item)}>
-  <Ionicons name="create-outline" size={18} color="#fff" />
-</TouchableOpacity>
-  </View>
-)}
-{cardType === 'completed' && (
-  <View style={{
-    backgroundColor: '#22c55e',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-  }}>
-    <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>
-      ✓ Completed
-    </Text>
-  </View>
-)}
+        {cardType === 'completed' && (
+          <View style={{ backgroundColor: '#22c55e', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}>
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>✓ Completed</Text>
+          </View>
+        )}
       </View>
 
       <View style={[styles.commentRow, { borderTopWidth: 0.5, borderTopColor: '#eee', marginTop: 8, paddingTop: 8 }]}>
@@ -188,23 +120,11 @@ const LeadCard = ({
           <Text style={{ fontSize: 12, fontWeight: '600', color: '#555', marginBottom: 2 }}>Comment</Text>
           <Text numberOfLines={2} style={styles.comment}>{item.comment}</Text>
         </View>
-        <TouchableOpacity
-  disabled={!item.comment || item.comment.length <= 200}
->
-  <Text
-    style={[
-      styles.seeMore,
-      {
-        color:
-          item.comment && item.comment.length > 200
-            ? '#1E88E5'
-            : '#ccc',
-      },
-    ]}
-  >
-    See more
-  </Text>
-</TouchableOpacity>
+        <TouchableOpacity disabled={!item.comment || item.comment.length <= 200}>
+          <Text style={[styles.seeMore, { color: item.comment && item.comment.length > 200 ? '#1E88E5' : '#ccc' }]}>
+            See more
+          </Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -215,194 +135,175 @@ const LeadCard = ({
 // ─────────────────────────────────────────────────────────────────────────────
 const SurveyerScreen = () => {
   const navigation = useNavigation();
-  const isMounted = useRef(true);
+  const route      = useRoute();
+  const isMounted  = useRef(true);
 
-  // ── Location (from locationService) ────────────────────────────────────────
   const { currentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
 
-  // ── UI state ───────────────────────────────────────────────────────────────
-  const [isOn, setIsOn] = useState(false);
-  const [leads, setLeads] = useState([]);
-  const [acceptedLeads, setAcceptedLeads] = useState([]);
-  const [inProgressLeads, setInProgressLeads] = useState([]);
-  const [leadsLoading, setLeadsLoading] = useState(false);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [acceptedFilter, setAcceptedFilter] = useState('all'); // 'all' | 'completed'
+  const [isOn, setIsOn]                   = useState(false);
+  const [leads, setLeads]                 = useState([]);       // unaccepted
+  const [acceptedLeads, setAcceptedLeads] = useState([]);       // accepted + inprogress
+  const [completedLeads, setCompletedLeads] = useState([]);     // completed
+  const [leadsLoading, setLeadsLoading]   = useState(false);
+  const [activeFilter, setActiveFilter]   = useState('all');
+  const [isOnline, setIsOnline]           = useState(true);
+  const [pendingCount, setPendingCount]   = useState(0);
 
   // Reject modal
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
-  const [rejectComment, setRejectComment] = useState('');
-  const [rejectLeadId, setRejectLeadId] = useState(null);
+  const [rejectComment, setRejectComment]           = useState('');
+  const [rejectLeadId, setRejectLeadId]             = useState(null);
 
-  // Edit modal
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editLead, setEditLead] = useState(null);
-  const [editForm, setEditForm] = useState({});
-  const [reachedModalVisible, setReachedModalVisible] = useState(false);
-const [selectedLead, setSelectedLead] = useState(null);
+  // ── Net watcher — auto sync when net comes back ───────────────────────────
+  useEffect(() => {
+    const unsub = NetInfo.addEventListener(async (state) => {
+      const online = !!state.isConnected && !!state.isInternetReachable;
+      setIsOnline(online);
 
-const [completedFromProgress, setCompletedFromProgress] = useState([]);
-const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'completed'
+      if (online) {
+        console.log('[SurveyerScreen] Net restored — running sync queue...');
+        const result = await processSyncQueue();
+        if (result.synced > 0) {
+          console.log(`[SurveyerScreen] Synced ${result.synced} offline actions`);
+          // Refresh from server after sync
+          await fetchAndMergeLeads();
+        }
+        setPendingCount(0);
+      }
+    });
+    return () => unsub();
+  }, []);
 
-const route = useRoute();
+  // ── Mount ─────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    isMounted.current = true;
+    restoreState();
+    return () => {
+      isMounted.current = false;
+      stopTracking();
+    };
+  }, []);
 
-useFocusEffect(
-  React.useCallback(() => {
-    const completedIds = route.params?.completedIds;
-    if (!completedIds || completedIds.length === 0) return;
+  // ── Android permissions ───────────────────────────────────────────────────
+  useEffect(() => {
+    const autoSetup = async () => {
+      if (Platform.OS !== 'android') return;
+      try { await NativeModules.StartStopService?.requestBatteryOptimization?.(); } catch (e) {}
+      const granted = await requestLocationPermissions();
+      if (!granted) {
+        Alert.alert('Permission Required', 'Location permission is required.', [
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ]);
+      }
+    };
+    autoSetup();
+  }, []);
 
-    navigation.setParams({ completedIds: null });
+  // ── Focus — completed leads from InProgress ───────────────────────────────
+  useFocusEffect(
+    React.useCallback(() => {
+      const completedIds = route.params?.completedIds;
+      if (!completedIds || completedIds.length === 0) return;
+      navigation.setParams({ completedIds: null });
 
-    // ✅ acceptedLeads-லிருந்து எடுத்து completedLeads-ல போடு
+      setAcceptedLeads((prev) => {
+        const toMove = prev.filter((l) => completedIds.includes(l.id));
+        if (toMove.length === 0) return prev;
+        setCompletedLeads((c) => [...c, ...toMove.map((l) => ({ ...l, status: 'completed' }))]);
+        return prev.filter((l) => !completedIds.includes(l.id));
+      });
+    }, [route.params?.completedIds])
+  );
+
+  // ── Restore state on app open ─────────────────────────────────────────────
+  const restoreState = async () => {
+    const saved = await AsyncStorage.getItem('surveyer_is_on');
+    if (saved === 'true') {
+      setIsOn(true);
+      if (Platform.OS === 'android') NativeModules.StartStopService?.startService();
+      startTracking();
+    }
+
+    // 1. Load local instantly
+    await loadLocalLeads();
+
+    // 2. Sync in background
+    await fetchAndMergeLeads();
+  };
+
+  // ── Load from local storage ───────────────────────────────────────────────
+  const loadLocalLeads = async () => {
+    const local = await getAcceptedLeads();
+    if (!isMounted.current) return;
+    setAcceptedLeads(local.filter((l) => l.status === 'accepted' || l.status === 'inprogress'));
+    setCompletedLeads(local.filter((l) => l.status === 'completed'));
+  };
+
+  // ── Fetch from API + merge ────────────────────────────────────────────────
+  const fetchAndMergeLeads = async () => {
+    setLeadsLoading(true);
+    try {
+      const res = await API.get('/order/all');
+      const rawData = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.data)
+        ? res.data.data
+        : [];
+
+      const mapped = rawData.map((item) => ({
+        id: item._id, name: item.name, phone: item.mobile,
+        city: item.city, comment: item.comment, referredBy: item.referredBy,
+        date: item.createdAt, latitude: item.latitude, longitude: item.longitude,
+        whatsappNo: item.whatsappNo, email: item.email, address: item.address,
+        status: item.status,
+      }));
+
+      if (!isMounted.current) return;
+
+      setLeads(mapped.filter((l) => l.status === 'unaccepted'));
+
+      const serverNonNew = mapped.filter((l) => l.status !== 'unaccepted');
+      const merged = await mergeWithServerLeads(serverNonNew);
+
+      setAcceptedLeads(merged.filter((l) => l.status === 'accepted' || l.status === 'inprogress'));
+      setCompletedLeads(merged.filter((l) => l.status === 'completed'));
+
+    } catch (err) {
+      // Offline — local already loaded
+      console.log('[SurveyerScreen] Offline, using local data');
+    } finally {
+      if (isMounted.current) setLeadsLoading(false);
+    }
+  };
+
+  // ── Try API (fire-and-forget) ─────────────────────────────────────────────
+  const tryApi = async (fn) => {
+    try { await fn(); }
+    catch (e) { console.log('[SurveyerScreen] API failed (offline):', e?.message); }
+  };
+
+  // ── Accept ────────────────────────────────────────────────────────────────
+  const handleAccept = async (item) => {
+    // Local first
+    await saveAcceptedLead(item);
+    setLeads((prev) => prev.filter((l) => l.id !== item.id));
     setAcceptedLeads((prev) => {
-      const toMove = prev.filter((l) => completedIds.includes(l.id));
-      setCompletedLeads((c) => [...c, ...toMove.map(l => ({ ...l, status: 'completed' }))]);
-      return prev.filter((l) => !completedIds.includes(l.id));
+      if (prev.some((l) => l.id === item.id)) return prev;
+      return [...prev, { ...item, status: 'accepted' }];
     });
 
-  }, [route.params?.completedIds])
-);
-useEffect(() => {
-  isMounted.current = true;
+    // Queue for sync
+    await enqueue(`status_accepted_${item.id}`, 'STATUS_UPDATE', {
+      mobile: item.phone, status: 'accepted',
+    });
 
-const restoreToggle = async () => {
-  const saved = await AsyncStorage.getItem('surveyer_is_on');
-  
-  if (saved === 'true') {
-    setIsOn(true);
-    if (Platform.OS === 'android') {
-      NativeModules.StartStopService?.startService();
-    }
-    startTracking(); // ✅ இதை add பண்ணு — app reopen tracking fix
-  } else {
-    if (Platform.OS === 'android') {
-      NativeModules.StartStopService?.stopService();
-    } else if (Platform.OS === 'ios') {
-      stopTracking();
-    }
-  }
-
-  const localAccepted = await getAcceptedLeads();
-  if (localAccepted.length > 0) setAcceptedLeads(localAccepted);
-  await fetchLeadsAndCheckInProgress();
-};
-
-  restoreToggle();
-
-  return () => {
-    isMounted.current = false;
-    stopTracking(); // ✅ cleanup on unmount
-  };
-}, []);
-
-// App open ஆகும் போது automatic setup
-useEffect(() => {
-  const autoSetup = async () => {
-    if (Platform.OS !== 'android') return;
-
-    // 1. Battery optimization exempt கேளு
-    try {
-      await NativeModules.StartStopService?.requestBatteryOptimization?.();
-    } catch (e) {}
-
-    // 2. Location permission கேளு
-    const granted = await requestLocationPermissions();
-    if (!granted) {
-      Alert.alert(
-        'Permission Required',
-        'Location permission is required for this app to work.',
-        [
-          {
-            text: 'Open Settings',
-            onPress: () => Linking.openSettings(),
-          },
-        ]
-      );
+    // Try API immediately if online
+    if (isOnline) {
+      tryApi(() => API.put('/order/updatestatus', { mobile: item.phone, status: 'accepted' }));
     }
   };
 
-  autoSetup();
-}, []);
-
-const [completedLeads, setCompletedLeads] = useState([]);
-
-// ── fetchLeadsAndCheckInProgress fix ──
-const fetchLeadsAndCheckInProgress = async () => {
-  setLeadsLoading(true);
-  try {
-    const res = await API.get('/order/all');
-    const rawData = Array.isArray(res.data)
-      ? res.data
-      : Array.isArray(res.data?.data)
-      ? res.data.data
-      : [];
-
-    const mapped = rawData.map((item) => ({
-      id: item._id,
-      name: item.name,
-      phone: item.mobile,
-      city: item.city,
-      comment: item.comment,
-      referredBy: item.referredBy,
-      date: item.createdAt,
-      latitude: item.latitude,
-      longitude: item.longitude,
-      whatsappNo: item.whatsappNo,
-      email: item.email,
-      address: item.address,
-      status: item.status,
-    }));
-
-    if (isMounted.current) {
-      const newLeads = mapped.filter((l) => l.status === 'unaccepted');
-      
-      // ✅ accepted + inprogress மட்டும் — completed இல்லை
-      const accepted = mapped.filter(
-        (l) => l.status === 'accepted' || l.status === 'inprogress'
-      );
-      
-      // ✅ completed தனியா
-      const completed = mapped.filter((l) => l.status === 'completed');
-
-      setLeads(newLeads);
-      setAcceptedLeads(accepted);
-      setCompletedLeads(completed); // ✅ புது state
-      setInProgressLeads([]);
-      setIsInitialLoad(false);
-    }
-  } catch (err) {
-    console.log('Error fetching leads:', err);
-  } finally {
-    if (isMounted.current) setLeadsLoading(false);
-  }
-};
-
-  const updateOrderStatus = async (mobile, status) => {
-  try {
-    await API.put('/order/updatestatus', { mobile, status });
-
-    // ✅ important
-    await fetchLeadsAndCheckInProgress();
-
-  } catch (err) {
-    console.log(`Status update error (${status}):`, err?.response?.data || err.message);
-  }
-};
-
-  // ── Lead handlers ──────────────────────────────────────────────────────────
- const handleAccept = async (item) => {
-  await updateOrderStatus(item.phone, 'accepted');
-
-  // ✅ இதை add பண்ணு — local-ல save பண்ணு
-  await saveAcceptedLead(item);
-
-  setLeads((prev) => prev.filter((l) => l.id !== item.id));
-  setAcceptedLeads((prev) => {
-    if (prev.some((l) => l.id === item.id)) return prev;
-    return [...prev, item];
-  });
-};
-
+  // ── Reject ────────────────────────────────────────────────────────────────
   const handleReject = (id) => {
     setRejectLeadId(id);
     setRejectComment('');
@@ -410,170 +311,76 @@ const fetchLeadsAndCheckInProgress = async () => {
   };
 
   const confirmReject = async () => {
-  if (!rejectComment.trim()) {
-    Alert.alert('Error', 'Please enter a reason for rejection.');
-    return;
-  }
-
-  try {
+    if (!rejectComment.trim()) {
+      Alert.alert('Error', 'Please enter a reason for rejection.');
+      return;
+    }
     const lead = leads.find((l) => l.id === rejectLeadId);
     if (!lead) return;
 
-    await API.post('https://kondaas-api.trisentrix-dev.workers.dev/order/reject', {
-      mobile: lead.phone,
-      reason: rejectComment.trim(),
-    });
+    if (!isOnline) {
+      Alert.alert('No Connection', 'Rejecting a lead requires internet connection.');
+      return;
+    }
 
-    setLeads((prev) => prev.filter((l) => l.id !== rejectLeadId));
-    setRejectModalVisible(false);
-    setRejectLeadId(null);
-    setRejectComment('');
-    Alert.alert('Success', 'Lead rejected successfully.');
-  } catch (err) {
-    console.log('Reject error:', err?.response?.data || err.message);
-    Alert.alert('Error', err?.response?.data?.error || 'Failed to reject lead.');
-  }
-};
-
-const handleStart = async (id) => {
-  const lead = acceptedLeads.find((l) => l.id === id);
-  if (!lead) return;
-
-  await API.put('/order/updatestatus', { mobile: lead.phone, status: 'inprogress' });
-
-  try {
-    const userData = await AsyncStorage.getItem(USER_DATA);
-    const parsed = userData ? JSON.parse(userData) : null;
-    
-    console.log('Parsed USER_DATA:', JSON.stringify(parsed));
-    
-const surveyorNumber = parsed?.UserInfo?.phoneNo || '';
-    
-    console.log('Final surveyorNumber:', surveyorNumber);
-
-    await API.post('https://kondaas-api.trisentrix-dev.workers.dev/notification/trigger', {
-      surveyorNumber: surveyorNumber,
-      customerMobile: lead.phone,
-      scenarioType: 1,
-    });
-  } catch (e) {
-    console.log('Notification error (start):', e);
-  }
-
-  setAcceptedLeads(prev =>
-    prev.map(l => l.id === id ? { ...l, status: 'inprogress' } : l)
-  );
-
-  navigation.navigate('InProgress', {
-    lead: { ...lead, status: 'inprogress' },
-  });
-};
-
-const handleManualEnable = (item) => {
-  setInProgressLeads((prev) =>
-    prev.map((l) => (l.id === item.id ? { ...l, manualSiteEnabled: true } : l))
-  );
-  setSelectedLead(item);
-  setReachedModalVisible(true);
-};
-
-const handleSiteObservation = (item) => {
-  navigation.navigate('Form', {
-    category: 'site_observation',
-    lead: item,
-    onFormComplete: async () => {
-
-      // ✅ DB update
-      await updateOrderStatus(item.phone, 'completed');
-
-      // ✅ remove from inprogress
-      setInProgressLeads(prev => prev.filter(l => l.id !== item.id));
-
-      // ✅ add to accepted as completed
-      setAcceptedLeads(prev =>
-  prev.map(l =>
-    l.id === item.id ? { ...l, status: 'completed' } : l
-  )
-);
-    },
-  });
-};
-
-  const handleEdit = (item) => {
-    setEditLead(item);
-    setEditForm({
-      name: item.name || '',
-      phone: item.phone || '',
-      whatsappNo: item.whatsappNo || '',
-      city: item.city || '',
-      comment: item.comment || '',
-      address: item.address || '',
-      email: item.email || '',
-      referredBy: item.referredBy || '',
-      latitude: item.latitude || '',
-      longitude: item.longitude || '',
-    });
-    setEditModalVisible(true);
-  };
-
-  const confirmEdit = async () => {
     try {
-      const payload = {
-        mobile: editForm.phone,
-        name: editForm.name,
-        whatsappNo: editForm.whatsappNo || editForm.phone,
-        city: editForm.city,
-        comment: editForm.comment,
-        address: editForm.address || null,
-        email: editForm.email || null,
-        referredBy: editForm.referredBy,
-        latitude: editForm.latitude || null,
-        longitude: editForm.longitude || null,
-      };
-
-      const res = await API.put('/order/update', payload);
-
-      setInProgressLeads((prev) =>
-        prev.map((l) =>
-          l.id === editLead.id
-            ? {
-                ...l,
-                name: editForm.name,
-                phone: editForm.phone,
-                whatsappNo: editForm.whatsappNo,
-                city: editForm.city,
-                comment: editForm.comment,
-                address: editForm.address,
-                email: editForm.email,
-                referredBy: editForm.referredBy,
-                latitude: editForm.latitude,
-                longitude: editForm.longitude,
-              }
-            : l
-        )
-      );
-
-      setEditModalVisible(false);
-      Alert.alert('Success', 'Lead updated successfully!');
+      await API.post('/order/reject', { mobile: lead.phone, reason: rejectComment.trim() });
+      setLeads((prev) => prev.filter((l) => l.id !== rejectLeadId));
+      setRejectModalVisible(false);
+      setRejectLeadId(null);
+      setRejectComment('');
+      Alert.alert('Success', 'Lead rejected successfully.');
     } catch (err) {
-      console.log('Edit error:', err?.response?.status, JSON.stringify(err?.response?.data));
-      Alert.alert('Error', err?.response?.data?.error || 'Failed to update.');
+      Alert.alert('Error', err?.response?.data?.error || 'Failed to reject.');
     }
   };
 
-  // ── Toggle (ON / OFF) ──────────────────────────────────────────────────────
-const handleToggle = async () => {
-  if (!isOn) {
-    // ✅ Android — GPS switch check
-    if (Platform.OS === 'android') {
-      const gpsOn = await isGPSEnabled();
-      console.log('🔍 GPS enabled:', gpsOn);
-      
-      if (!gpsOn) {
-        Alert.alert(
-          'Location is Off',
-          'Please turn on Location / GPS to continue.',
-          [
+  // ── Start / Resume ────────────────────────────────────────────────────────
+  const handleStart = async (id) => {
+    const lead = acceptedLeads.find((l) => l.id === id);
+    if (!lead) return;
+
+    // Local first
+    await updateAcceptedLeadStatus(id, 'inprogress');
+    setAcceptedLeads((prev) =>
+      prev.map((l) => l.id === id ? { ...l, status: 'inprogress' } : l)
+    );
+
+    // Queue
+    await enqueue(`status_inprogress_${id}`, 'STATUS_UPDATE', {
+      mobile: lead.phone, status: 'inprogress',
+    });
+
+    // Try API + notification if online
+    if (isOnline) {
+      tryApi(() => API.put('/order/updatestatus', { mobile: lead.phone, status: 'inprogress' }));
+      try {
+        const userData = await AsyncStorage.getItem(USER_DATA);
+        const parsed   = userData ? JSON.parse(userData) : null;
+        const surveyorNumber = parsed?.UserInfo?.phoneNo || '';
+        await API.post('/notification/trigger', {
+          surveyorNumber, customerMobile: lead.phone, scenarioType: 1,
+        });
+      } catch (e) {
+        console.log('[SurveyerScreen] Notification error:', e?.message);
+      }
+    } else {
+      // Queue notification too
+      await enqueue(`notif_start_${id}`, 'NOTIFICATION', {
+        customerMobile: lead.phone, scenarioType: 1,
+      });
+    }
+
+    navigation.navigate('InProgress', { lead: { ...lead, status: 'inprogress' } });
+  };
+
+  // ── Toggle ────────────────────────────────────────────────────────────────
+  const handleToggle = async () => {
+    if (!isOn) {
+      if (Platform.OS === 'android') {
+        const gpsOn = await isGPSEnabled();
+        if (!gpsOn) {
+          Alert.alert('Location is Off', 'Please turn on GPS to continue.', [
             {
               text: 'Open Settings',
               onPress: () =>
@@ -581,32 +388,26 @@ const handleToggle = async () => {
                   .catch(() => Linking.openSettings()),
             },
             { text: 'Cancel', style: 'cancel' },
-          ]
-        );
-        return; // ← toggle ON ஆகாது
+          ]);
+          return;
+        }
+        NativeModules.StartStopService?.startService();
+      } else if (Platform.OS === 'ios') {
+        await requestIOSLocationPermission();
       }
-
-      NativeModules.StartStopService?.startService();
-    } else if (Platform.OS === 'ios') {
-      await requestIOSLocationPermission();
+      setIsOn(true);
+      await AsyncStorage.setItem('surveyer_is_on', 'true');
+      startTracking();
+      fetchAndMergeLeads();
+    } else {
+      setIsOn(false);
+      await AsyncStorage.setItem('surveyer_is_on', 'false');
+      stopTracking();
+      if (Platform.OS === 'android') NativeModules.StartStopService?.stopService();
     }
+  };
 
-    setIsOn(true);
-    await AsyncStorage.setItem('surveyer_is_on', 'true');
-    startTracking();
-    fetchLeadsAndCheckInProgress();
-
-  } else {
-    setIsOn(false);
-    await AsyncStorage.setItem('surveyer_is_on', 'false');
-    stopTracking();
-    if (Platform.OS === 'android') {
-      NativeModules.StartStopService?.stopService();
-    }
-  }
-};
-
-  // ── Logout ─────────────────────────────────────────────────────────────────
+  // ── Logout ────────────────────────────────────────────────────────────────
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
       { text: 'Cancel', style: 'cancel' },
@@ -624,200 +425,143 @@ const handleToggle = async () => {
     ]);
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <View style={{ flex: 1 }}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
-      {/* ── OFF STATE ─────────────────────────────────────────────────────── */}
+      {/* ── OFF STATE ────────────────────────────────────────────────────── */}
       {!isOn && (
         <LinearGradient colors={['#F00001', '#B00100']} style={{ flex: 1 }}>
-          {/* Logout */}
           <TouchableOpacity style={styles.offLogoutBtn} onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={28} color="#fff" />
           </TouchableOpacity>
-
-          {/* Toggle */}
           <View style={styles.offToggleBtn}>
             <Switch
               trackColor={{ false: '#ffffff88', true: '#fff' }}
-              thumbColor="#ED1C25"
-              value={isOn}
-              onValueChange={handleToggle}
+              thumbColor="#ED1C25" value={isOn} onValueChange={handleToggle}
             />
           </View>
 
-          <ScrollView
-            contentContainerStyle={{ paddingTop: 60, paddingBottom: 30 }}
-            showsVerticalScrollIndicator={false}
-          >
+          <ScrollView contentContainerStyle={{ paddingTop: 60, paddingBottom: 30 }} showsVerticalScrollIndicator={false}>
             <View style={{ alignItems: 'center', paddingTop: 20, marginBottom: 20 }}>
-              <Image
-                source={require('../../assets/images/kondass.png')}
-                style={styles.logo}
-                resizeMode="contain"
-              />
+              <Image source={require('../../assets/images/kondass.png')} style={styles.logo} resizeMode="contain" />
             </View>
-
-            {leadsLoading ? (
-              <ActivityIndicator size="large" color="#fff" style={{ marginTop: 40 }} />
-            ) : leads.length === 0 ? (
-              <View style={styles.offTextContainer}>
-                <Text style={styles.welcome}>Welcome!</Text>
-                <Text style={styles.message}>Let's get started! Turn on availability!</Text>
-              </View>
-            ) : (
-              <>
-                <View style={[styles.sectionHeader, { paddingHorizontal: 15 }]}>
-                  <View style={[styles.sectionDot, { backgroundColor: '#fff' }]} />
-                  <Text style={[styles.sectionTitle, { color: '#fff' }]}>Leads - New</Text>
-                </View>
-                {leads.map((item) => (
-                  <LeadCard
-                    key={item.id}
-                    item={item}
-                    currentLocation={currentLocation}
-                    cardType="unaccepted"
-                    onAccept={handleAccept}
-                    onReject={handleReject}
-                  />
-                ))}
-              </>
-            )}
+            <View style={styles.offTextContainer}>
+              <Text style={styles.welcome}>Welcome!</Text>
+              <Text style={styles.message}>Let's get started! Turn on availability!</Text>
+            </View>
           </ScrollView>
         </LinearGradient>
       )}
 
-      {/* ── ON STATE ──────────────────────────────────────────────────────── */}
+      {/* ── ON STATE ─────────────────────────────────────────────────────── */}
       {isOn && (
         <>
-          {/* Fixed top bar */}
           <View style={styles.fixedTopBar}>
             <TouchableOpacity onPress={handleLogout}>
               <Ionicons name="log-out-outline" size={28} color="#ED1C25" />
             </TouchableOpacity>
             <Switch
               trackColor={{ false: '#ccc', true: 'red' }}
-              thumbColor="#fff"
-              value={isOn}
-              onValueChange={handleToggle}
+              thumbColor="#fff" value={isOn} onValueChange={handleToggle}
             />
           </View>
 
+          {/* Offline banner */}
+          {!isOnline && (
+            <View style={styles.offlineBanner}>
+              <Ionicons name="cloud-offline-outline" size={14} color="#fff" style={{ marginRight: 6 }} />
+              <Text style={styles.offlineBannerText}>Offline </Text>
+            </View>
+          )}
+
           <ScrollView
-            style={{ flex: 1, width: '100%', backgroundColor: '#F5F5F5' }}
-            contentContainerStyle={{ paddingTop: 90, paddingBottom: 30 }}
+            style={{ flex: 1, backgroundColor: '#F5F5F5' }}
+            contentContainerStyle={{ paddingTop: !isOnline ? 120 : 90, paddingBottom: 30 }}
           >
-            {/* Section 1 – Un Accepted */}
+            {/* New Leads */}
             <View style={styles.sectionHeader}>
               <View style={[styles.sectionDot, { backgroundColor: '#ED1C25' }]} />
               <Text style={styles.sectionTitle}>Leads - New</Text>
             </View>
 
-            {leadsLoading && (
-              <ActivityIndicator size="large" color="#ED1C25" style={{ marginTop: 30 }} />
-            )}
+            {leadsLoading && <ActivityIndicator size="large" color="#ED1C25" style={{ marginTop: 30 }} />}
             {!leadsLoading && leads.length === 0 && (
-              <Text style={styles.emptyText}>No leads available right now.</Text>
+              <Text style={styles.emptyText}>No new leads available.</Text>
             )}
-            {!leadsLoading &&
-              leads.map((item) => (
-                <LeadCard
-                  key={item.id}
-                  item={item}
-                  currentLocation={currentLocation}
-                  cardType="unaccepted"
-                  onAccept={handleAccept}
-                  onReject={handleReject}
-                />
-              ))}
+            {!leadsLoading && leads.map((item) => (
+              <LeadCard key={item.id} item={item} currentLocation={currentLocation}
+                cardType="unaccepted" onAccept={handleAccept} onReject={handleReject} />
+            ))}
 
-       {/* Section 2 & 3 – Filter with All / Completed */}
-{(acceptedLeads.length > 0 || completedLeads.length > 0) && (
-  <>
-    {/* Filter Header */}
-    <View style={[styles.sectionHeader, { justifyContent: 'space-between' }]}>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <View style={[styles.sectionDot, { 
-  backgroundColor: activeFilter === 'completed' ? '#22c55e' : '#fd9104' 
-}]} />
-<Text style={styles.sectionTitle}>
-  {activeFilter === 'completed' ? 'Leads - Completed' : 'Leads - Accepted'}
-</Text>
-      </View>
-      <View style={{ flexDirection: 'row', gap: 6 }}>
-        <TouchableOpacity
-          onPress={() => setActiveFilter('all')}
-          style={{
-            paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12,
-            backgroundColor: activeFilter === 'all' ? '#ED1C25' : '#e5e7eb',
-          }}
-        >
-          <Text style={{ fontSize: 12, fontWeight: 'bold', color: activeFilter === 'all' ? '#fff' : '#555' }}>All</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setActiveFilter('completed')}
-          style={{
-            paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12,
-            backgroundColor: activeFilter === 'completed' ? '#22c55e' : '#e5e7eb',
-          }}
-        >
-          <Text style={{ fontSize: 12, fontWeight: 'bold', color: activeFilter === 'completed' ? '#fff' : '#555' }}>Completed</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+            {/* Accepted / Completed */}
+            {(acceptedLeads.length > 0 || completedLeads.length > 0) && (
+              <>
+                <View style={[styles.sectionHeader, { justifyContent: 'space-between' }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={[styles.sectionDot, { backgroundColor: activeFilter === 'completed' ? '#22c55e' : '#fd9104' }]} />
+                    <Text style={styles.sectionTitle}>
+                      {activeFilter === 'completed' ? 'Leads - Completed' : 'Leads - Accepted'}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    <TouchableOpacity
+                      onPress={() => setActiveFilter('all')}
+                      style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12, backgroundColor: activeFilter === 'all' ? '#ED1C25' : '#e5e7eb' }}
+                    >
+                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: activeFilter === 'all' ? '#fff' : '#555' }}>All</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setActiveFilter('completed')}
+                      style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12, backgroundColor: activeFilter === 'completed' ? '#22c55e' : '#e5e7eb' }}
+                    >
+                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: activeFilter === 'completed' ? '#fff' : '#555' }}>Completed</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
 
-    {activeFilter === 'all' && (
-  <>
-    {acceptedLeads.map((item) => (
-      <LeadCard key={item.id} item={item} currentLocation={currentLocation} cardType="accepted" onStart={handleStart} />
-    ))}
+                {activeFilter === 'all' && (
+                  <>
+                    {acceptedLeads.map((item) => (
+                      <LeadCard key={item.id} item={item} currentLocation={currentLocation}
+                        cardType="accepted" onStart={handleStart} />
+                    ))}
+                    {completedLeads.length > 0 && (
+                      <>
+                        <View style={[styles.sectionHeader, { justifyContent: 'space-between' }]}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <View style={[styles.sectionDot, { backgroundColor: '#22c55e' }]} />
+                            <Text style={styles.sectionTitle}>Leads - Completed</Text>
+                          </View>
+                        </View>
+                        {completedLeads.map((item) => (
+                          <LeadCard key={item.id} item={item} currentLocation={currentLocation} cardType="completed" />
+                        ))}
+                      </>
+                    )}
+                    {acceptedLeads.length === 0 && completedLeads.length === 0 && (
+                      <Text style={styles.emptyText}>No leads yet.</Text>
+                    )}
+                  </>
+                )}
 
-    {/* ✅ Completed leads-க்கு தனி header */}
-    {completedLeads.length > 0 && (
-      <>
-        <View style={[styles.sectionHeader, { justifyContent: 'space-between' }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <View style={[styles.sectionDot, { backgroundColor: '#22c55e' }]} />
-            <Text style={styles.sectionTitle}>Leads - Completed</Text>
-          </View>
-        </View>
-        {completedLeads.map((item) => (
-          <LeadCard key={item.id} item={item} currentLocation={currentLocation} cardType="completed" />
-        ))}
-      </>
-    )}
-
-    {acceptedLeads.length === 0 && completedLeads.length === 0 && (
-      <Text style={styles.emptyText}>No leads yet.</Text>
-    )}
-  </>
-)}
-
-    {activeFilter === 'completed' && (
-      <>
-        {completedLeads.length > 0 ? (
-          completedLeads.map((item) => (
-            <LeadCard key={item.id} item={item} currentLocation={currentLocation} cardType="completed" />
-          ))
-        ) : (
-          <Text style={styles.emptyText}>No completed leads yet.</Text>
-        )}
-      </>
-    )}
-  </>
-)}
+                {activeFilter === 'completed' && (
+                  completedLeads.length > 0
+                    ? completedLeads.map((item) => (
+                        <LeadCard key={item.id} item={item} currentLocation={currentLocation} cardType="completed" />
+                      ))
+                    : <Text style={styles.emptyText}>No completed leads yet.</Text>
+                )}
+              </>
+            )}
           </ScrollView>
         </>
       )}
 
-      {/* ── Reject Modal ───────────────────────────────────────────────────── */}
-      <Modal
-        visible={rejectModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setRejectModalVisible(false)}
-      >
+      {/* ── Reject Modal ─────────────────────────────────────────────────── */}
+      <Modal visible={rejectModalVisible} transparent animationType="fade"
+        onRequestClose={() => setRejectModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Reject Reason</Text>
@@ -826,127 +570,24 @@ const handleToggle = async () => {
               style={styles.modalInput}
               placeholder="Type your comment here."
               placeholderTextColor="#aaa"
-              multiline
-              numberOfLines={4}
+              multiline numberOfLines={4}
               value={rejectComment}
               onChangeText={setRejectComment}
             />
             <View style={{ flexDirection: 'row', gap: 10 }}>
-  {/* Cancel Button */}
-  <TouchableOpacity
-    style={[styles.modalSaveBtn, { flex: 1, backgroundColor: '#aaa' }]}
-    onPress={() => {
-      setRejectModalVisible(false);
-      setRejectLeadId(null);
-      setRejectComment('');
-    }}
-  >
-    <Text style={styles.modalSaveBtnText}>Cancel</Text>
-  </TouchableOpacity>
-
-  {/* Save Button */}
-  <TouchableOpacity
-    style={[styles.modalSaveBtn, { flex: 1 }]}
-    onPress={confirmReject}
-  >
-    <Text style={styles.modalSaveBtnText}>Save</Text>
-  </TouchableOpacity>
-</View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── Edit Modal ─────────────────────────────────────────────────────── */}
-      <Modal
-        visible={editModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setEditModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalBox, { maxHeight: '85%' }]}>
-            <Text style={styles.modalTitle}>Edit Lead</Text>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {[
-                { label: 'Name', key: 'name' },
-                { label: 'Phone', key: 'phone' },
-                { label: 'WhatsApp No', key: 'whatsappNo' },
-                { label: 'City', key: 'city' },
-                { label: 'Email', key: 'email' },
-                { label: 'Referred By', key: 'referredBy' },
-                { label: 'Address', key: 'address' },
-                { label: 'Latitude', key: 'latitude' },
-                { label: 'Longitude', key: 'longitude' },
-                { label: 'Comment', key: 'comment' },
-              ].map(({ label, key }) => (
-                <View key={key} style={{ marginBottom: 12 }}>
-                  <Text style={styles.modalLabel}>{label}</Text>
-                  <TextInput
-                    style={[
-                      styles.modalInput,
-                      { minHeight: key === 'comment' || key === 'address' ? 70 : 44 },
-                    ]}
-                    value={editForm[key]}
-                    onChangeText={(val) => setEditForm((prev) => ({ ...prev, [key]: val }))}
-                    multiline={key === 'comment' || key === 'address'}
-                    placeholderTextColor="#aaa"
-                  />
-                </View>
-              ))}
-            </ScrollView>
-
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
               <TouchableOpacity
                 style={[styles.modalSaveBtn, { flex: 1, backgroundColor: '#aaa' }]}
-                onPress={() => setEditModalVisible(false)}
+                onPress={() => { setRejectModalVisible(false); setRejectLeadId(null); setRejectComment(''); }}
               >
                 <Text style={styles.modalSaveBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalSaveBtn, { flex: 1 }]}
-                onPress={confirmEdit}
-              >
-                <Text style={styles.modalSaveBtnText}>Update</Text>
+              <TouchableOpacity style={[styles.modalSaveBtn, { flex: 1 }]} onPress={confirmReject}>
+                <Text style={styles.modalSaveBtnText}>Save</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-      <Modal
-  visible={reachedModalVisible}
-  transparent
-  animationType="fade"
-  onRequestClose={() => setReachedModalVisible(false)}
->
-  <View style={styles.modalOverlay}>
-    <View style={styles.modalBox}>
-      
-      <Text style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 15 }}>
-        You have reached the location
-      </Text>
-
-      <TouchableOpacity
-        style={styles.smallSiteBtn}
-        onPress={() => {
-          setReachedModalVisible(false);
-          handleSiteObservation(selectedLead);
-        }}
-      >
-        <Text style={styles.smallSiteBtnText}>
-          Site Observation
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.modalSaveBtn, { marginTop: 10, backgroundColor: '#aaa' }]}
-        onPress={() => setReachedModalVisible(false)}
-      >
-        <Text style={styles.modalSaveBtnText}>Cancel</Text>
-      </TouchableOpacity>
-
-    </View>
-  </View>
-</Modal>
     </View>
   );
 };
@@ -959,104 +600,37 @@ export default SurveyerScreen;
 const styles = StyleSheet.create({
   logo: { width: 200, height: 100 },
   offLogoutBtn: { position: 'absolute', top: 55, left: 20, zIndex: 10 },
-  offToggleBtn: {
-    position: 'absolute', top: 50, right: 20, zIndex: 10,
-    backgroundColor: '#fff', borderRadius: 20,
-    paddingHorizontal: 4, paddingVertical: 2, elevation: 4,
-  },
+  offToggleBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10, backgroundColor: '#fff', borderRadius: 20, paddingHorizontal: 4, paddingVertical: 2, elevation: 4 },
   offTextContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   welcome: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
   message: { marginTop: 10, color: '#ffffffcc', textAlign: 'center', paddingHorizontal: 30 },
-
-  fixedTopBar: {
-    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingTop: 50, paddingBottom: 12,
-    backgroundColor: '#fff', elevation: 6,
-    shadowColor: '#000', shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 2 }, shadowRadius: 4,
-  },
-
-  sectionHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 15, paddingTop: 16, paddingBottom: 6,
-  },
+  fixedTopBar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 50, paddingBottom: 12, backgroundColor: '#fff', elevation: 6 },
+  offlineBanner: { position: 'absolute', top: 90, left: 0, right: 0, zIndex: 99, backgroundColor: '#f97316', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 },
+  offlineBannerText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingTop: 16, paddingBottom: 6 },
   sectionDot: { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
   sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#333' },
   emptyText: { textAlign: 'center', marginTop: 40, color: '#999', fontSize: 14, paddingHorizontal: 30 },
-
-  card: {
-    backgroundColor: '#fff', marginHorizontal: 15, marginBottom: 12,
-    borderRadius: 10, padding: 12, elevation: 3,
-  },
+  card: { backgroundColor: '#fff', marginHorizontal: 15, marginBottom: 12, borderRadius: 10, padding: 12, elevation: 3 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between' },
   referred: { fontSize: 12, color: '#E53935' },
   date: { fontSize: 12, color: '#888' },
   userRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
-  avatar: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#f0f0f0', marginRight: 10,
-    justifyContent: 'center', alignItems: 'center',
-  },
+  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#f0f0f0', marginRight: 10, justifyContent: 'center', alignItems: 'center' },
   name: { fontSize: 16, fontWeight: 'bold' },
   subText: { fontSize: 12, color: '#555' },
   iconContainer: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   iconBtn: { padding: 4 },
-  commentRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'flex-start', marginTop: 8,
-  },
+  commentRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 8 },
   comment: { flex: 1, fontSize: 12, color: '#555' },
-  seeMore: { fontSize: 12, color: '#1E88E5' },
-
-  startBtn: {
-    backgroundColor: '#22c55e', flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
-  },
+  seeMore: { fontSize: 12 },
+  startBtn: { backgroundColor: '#22c55e', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
   startBtnText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
-
-  reachBtnWrapper: { alignItems: 'center' },
-  reachBtn: {
-    backgroundColor: '#f97316', flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, opacity: 0.85,
-  },
-  reachBtnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-  reachDistance: { fontSize: 10, color: '#f97316', marginTop: 3, fontWeight: '600' },
-
-  smallSiteBtn: {
-    backgroundColor: '#ED1C25', paddingHorizontal: 10,
-    paddingVertical: 8, borderRadius: 6, alignItems: 'center',
-  },
-  smallSiteBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold', textAlign: 'center' },
-
-  editBtn: {
-    backgroundColor: '#3b82f6', flexDirection: 'row',
-    alignItems: 'center', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6,
-  },
-  editBtnText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
-
-  modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  modalBox: {
-    backgroundColor: '#fff', width: '85%',
-    borderRadius: 12, padding: 20, elevation: 10,
-  },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
+  modalBox: { backgroundColor: '#fff', width: '85%', borderRadius: 12, padding: 20, elevation: 10 },
   modalTitle: { fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 16, color: '#222' },
   modalLabel: { fontSize: 13, color: '#444', marginBottom: 6 },
-  modalInput: {
-    borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
-    padding: 10, fontSize: 13, color: '#333',
-    textAlignVertical: 'top', minHeight: 90, marginBottom: 16,
-  },
+  modalInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 10, fontSize: 13, color: '#333', textAlignVertical: 'top', minHeight: 90, marginBottom: 16 },
   modalSaveBtn: { backgroundColor: '#ED1C25', paddingVertical: 13, borderRadius: 8, alignItems: 'center' },
   modalSaveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
- editBtn: {
-  backgroundColor: '#3b82f6',
-  padding: 8,
-  borderRadius: 50,
-  justifyContent: 'center',
-  alignItems: 'center',
-},
 });

@@ -1,7 +1,7 @@
 // utils/notificationService.js
 import notifee, { AndroidImportance, AndroidStyle, EventType } from '@notifee/react-native';
 import API from '../api/api1';
-import { saveAcceptedLead, getAcceptedLeads } from '../service/Localleadsstorage';
+import { saveAcceptedLead, getAcceptedLeads } from '../service/localLeadsStorage';
 
 export async function createNotificationChannel() {
   await notifee.createChannel({

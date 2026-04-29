@@ -4,6 +4,7 @@ import {
   ScrollView, Modal, TextInput, Alert, Dimensions,Linking
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { enqueue } from '../service/syncQueue';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useLocationTracking, getDistance } from '../service/locationService';
 import API from '../api/api1';
@@ -200,7 +201,7 @@ const InProgressScreen = () => {
   const formCompletedRef = useRef(null);
 
   const [inProgressLeads, setInProgressLeads] = useState(
-  lead ? [{ ...lead }] : []
+  lead ? [{ ...lead, id: lead.id || lead._id }] : []
 );
 
 useEffect(() => {
@@ -260,15 +261,21 @@ const [selectedLead, setSelectedLead] = useState(null);
     console.log('Notification error (reached):', e);
   }
 
-  setSelectedLead(item);
+  setSelectedLead({ ...item, id: item.id || item._id });
   setReachedModalVisible(true);
 };
 
  const handleSiteObservation = (item) => {
+  const leadToPass = {
+    ...item,
+    id: item.id || item._id,
+  };
+  
+  console.log('Navigating to Form with lead:', JSON.stringify(leadToPass));
+
   navigation.navigate('Form', {
     category: 'site_observation',
-    lead: item,
-    completedLeadId: item.id, 
+    lead: leadToPass,
   });
 };
 
