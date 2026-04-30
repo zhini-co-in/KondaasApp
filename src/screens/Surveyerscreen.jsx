@@ -282,26 +282,41 @@ const SurveyerScreen = () => {
     catch (e) { console.log('[SurveyerScreen] API failed (offline):', e?.message); }
   };
 
-  // ── Accept ────────────────────────────────────────────────────────────────
-  const handleAccept = async (item) => {
-    // Local first
-    await saveAcceptedLead(item);
-    setLeads((prev) => prev.filter((l) => l.id !== item.id));
-    setAcceptedLeads((prev) => {
-      if (prev.some((l) => l.id === item.id)) return prev;
-      return [...prev, { ...item, status: 'accepted' }];
-    });
+ // ── Accept ────────────────────────────────────────────────────────────────
+const handleAccept = async (item) => {
+  // Local first
+  await saveAcceptedLead(item);
+  setLeads((prev) => prev.filter((l) => l.id !== item.id));
+  setAcceptedLeads((prev) => {
+    if (prev.some((l) => l.id === item.id)) return prev;
+    return [...prev, { ...item, status: 'accepted' }];
+  });
 
-    // Queue for sync
-    await enqueue(`status_accepted_${item.id}`, 'STATUS_UPDATE', {
-      mobile: item.phone, status: 'accepted',
-    });
+  // ── Get surveyor number from stored user data ──
+  let surveyorNumber = '';
+  try {
+    const userData = await AsyncStorage.getItem(USER_DATA);
+    const parsed = userData ? JSON.parse(userData) : null;
+    surveyorNumber = parsed?.UserInfo?.phoneNo || '';
+  } catch (e) {
+    console.log('[handleAccept] Failed to get surveyor number:', e?.message);
+  }
 
-    // Try API immediately if online
-    if (isOnline) {
-      tryApi(() => API.put('/order/updatestatus', { mobile: item.phone, status: 'accepted' }));
-    }
+  const payload = {
+    mobile: item.phone,
+    surveyorNumber,
   };
+
+  // Queue for sync (offline support)
+  await enqueue(`accept_${item.id}`, 'ACCEPT_LEAD', payload);
+
+  // Try API immediately if online
+  // Try API immediately if online
+if (isOnline) {
+  tryApi(() => API.post('/order/accept', payload));
+  tryApi(() => API.put('/order/updatestatus', { mobile: item.phone, status: 'accepted' }));
+}
+};
 
   // ── Reject ────────────────────────────────────────────────────────────────
   const handleReject = (id) => {
@@ -336,7 +351,7 @@ const SurveyerScreen = () => {
   };
 
   // ── Start / Resume ────────────────────────────────────────────────────────
-  const handleStart = async (id) => {
+const handleStart = async (id) => {
     const lead = acceptedLeads.find((l) => l.id === id);
     if (!lead) return;
 
@@ -353,11 +368,21 @@ const SurveyerScreen = () => {
 
     // Try API + notification if online
     if (isOnline) {
-      tryApi(() => API.put('/order/updatestatus', { mobile: lead.phone, status: 'inprogress' }));
+      // ── Get surveyor number ──
+      let surveyorNumber = '';
       try {
         const userData = await AsyncStorage.getItem(USER_DATA);
         const parsed   = userData ? JSON.parse(userData) : null;
-        const surveyorNumber = parsed?.UserInfo?.phoneNo || '';
+        surveyorNumber = parsed?.UserInfo?.phoneNo || '';
+      } catch (e) {
+        console.log('[handleStart] Failed to get surveyor number:', e?.message);
+      }
+
+      // ── இரண்டும் call பண்ணு ──
+      tryApi(() => API.put('/order/updatestatus', { mobile: lead.phone, status: 'inprogress' }));
+      tryApi(() => API.post('/order/inprogress', { mobile: lead.phone, surveyorNumber }));
+
+      try {
         await API.post('/notification/trigger', {
           surveyorNumber, customerMobile: lead.phone, scenarioType: 1,
         });
@@ -365,7 +390,6 @@ const SurveyerScreen = () => {
         console.log('[SurveyerScreen] Notification error:', e?.message);
       }
     } else {
-      // Queue notification too
       await enqueue(`notif_start_${id}`, 'NOTIFICATION', {
         customerMobile: lead.phone, scenarioType: 1,
       });
@@ -431,29 +455,55 @@ const SurveyerScreen = () => {
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
       {/* ── OFF STATE ────────────────────────────────────────────────────── */}
-      {!isOn && (
-        <LinearGradient colors={['#F00001', '#B00100']} style={{ flex: 1 }}>
-          <TouchableOpacity style={styles.offLogoutBtn} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={28} color="#fff" />
-          </TouchableOpacity>
-          <View style={styles.offToggleBtn}>
-            <Switch
-              trackColor={{ false: '#ffffff88', true: '#fff' }}
-              thumbColor="#ED1C25" value={isOn} onValueChange={handleToggle}
-            />
-          </View>
+{!isOn && (
+  <LinearGradient colors={['#F00001', '#B00100']} style={{ flex: 1 }}>
+    <TouchableOpacity style={styles.offLogoutBtn} onPress={handleLogout}>
+      <Ionicons name="log-out-outline" size={28} color="#fff" />
+    </TouchableOpacity>
+    <View style={styles.offToggleBtn}>
+      <Switch
+        trackColor={{ false: '#ffffff88', true: '#fff' }}
+        thumbColor="#ED1C25" value={isOn} onValueChange={handleToggle}
+      />
+    </View>
 
-          <ScrollView contentContainerStyle={{ paddingTop: 60, paddingBottom: 30 }} showsVerticalScrollIndicator={false}>
-            <View style={{ alignItems: 'center', paddingTop: 20, marginBottom: 20 }}>
-              <Image source={require('../../assets/images/kondass.png')} style={styles.logo} resizeMode="contain" />
-            </View>
-            <View style={styles.offTextContainer}>
-              <Text style={styles.welcome}>Welcome!</Text>
-              <Text style={styles.message}>Let's get started! Turn on availability!</Text>
-            </View>
-          </ScrollView>
-        </LinearGradient>
+    <ScrollView
+      contentContainerStyle={{ paddingTop: 60, paddingBottom: 30 }}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={{ alignItems: 'center', paddingTop: 20, marginBottom: 20 }}>
+        <Image source={require('../../assets/images/kondass.png')} style={styles.logo} resizeMode="contain" />
+      </View>
+      <View style={styles.offTextContainer}>
+        <Text style={styles.welcome}>Welcome!</Text>
+        <Text style={styles.message}>Let's get started! Turn on availability!</Text>
+      </View>
+
+      {/* ── Unaccepted Leads (OFF state) ── */}
+      {leads.length > 0 && (
+        <>
+          <View style={[styles.sectionHeader, { marginTop: 10 }]}>
+            <View style={[styles.sectionDot, { backgroundColor: '#fff' }]} />
+            <Text style={[styles.sectionTitle, { color: '#fff' }]}>New Leads</Text>
+          </View>
+          {leadsLoading
+            ? <ActivityIndicator size="large" color="#fff" style={{ marginTop: 20 }} />
+            : leads.map((item) => (
+                <LeadCard
+                  key={item.id}
+                  item={item}
+                  currentLocation={currentLocation}
+                  cardType="unaccepted"
+                  onAccept={handleAccept}
+                  onReject={handleReject}
+                />
+              ))
+          }
+        </>
       )}
+    </ScrollView>
+  </LinearGradient>
+)}
 
       {/* ── ON STATE ─────────────────────────────────────────────────────── */}
       {isOn && (

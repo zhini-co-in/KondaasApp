@@ -134,11 +134,35 @@ const _executeAction = async (item) => {
       await API.put('/order/update', payload);
       break;
 
+ // Lead accept (with surveyor number)
+    case 'ACCEPT_LEAD':
+      await API.post('/order/accept', {
+        mobile: payload.mobile,
+        surveyorNumber: payload.surveyorNumber,
+      });
+      break;
+
     // Lead reject
     case 'LEAD_REJECT':
       await API.post('/order/reject', {
         mobile: payload.mobile,
         reason: payload.reason,
+      });
+      break;
+
+      // Lead inprogress (with surveyor number)
+    case 'INPROGRESS_LEAD':
+      await API.post('/order/inprogress', {
+        mobile: payload.mobile,
+        surveyorNumber: payload.surveyorNumber,
+      });
+      break;
+
+       // Lead completed (with surveyor number)
+    case 'COMPLETED_LEAD':
+      await API.post('/order/complete', {
+        mobile: payload.mobile,
+        surveyorNumber: payload.surveyorNumber,
       });
       break;
 

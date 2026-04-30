@@ -15,6 +15,8 @@ import {
   getSavedFormData,
 } from '../service/localLeadsStorage';
 import { enqueue } from '../service/syncQueue';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { USER_DATA } from '../service/localStorage';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface FieldProperty {
@@ -236,64 +238,56 @@ useEffect(() => {
 
   // ── Submit ────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
-    setSubmitting(true);
+  setSubmitting(true);
+  const formPayload = { mobileNumber: lead.phone, ...formValues };
 
-    const formPayload = { mobileNumber: lead.phone, ...formValues };
+  if (isOnline) {
+    try {
+      let surveyorNumber = '';
+      const userData = await AsyncStorage.getItem(USER_DATA);
+      const parsed = userData ? JSON.parse(userData) : null;
+      surveyorNumber = parsed?.UserInfo?.phoneNo || '';
 
-    if (isOnline) {
-      // ── ONLINE PATH ────────────────────────────────────────────────────
-      try {
-        await API.post('/user/add', formPayload);
-        await API.put('/order/updatestatus', { mobile: lead.phone, status: 'completed' });
+      await API.post('/user/add', formPayload);
+      await API.put('/order/updatestatus', { mobile: lead.phone, status: 'completed' });
+      await API.post('/order/complete', { mobile: lead.phone, surveyorNumber }); // ✅ சரியான payload
 
-        // Local status update
-        const leadId = lead.id || lead._id || (lead as any)._id;
-console.log('Updating with leadId:', leadId, '| lead object:', JSON.stringify(lead));
-await updateAcceptedLeadStatus(leadId, 'completed');
+      const leadId = lead.id || lead._id;
+      await updateAcceptedLeadStatus(leadId, 'completed');
 
-        _navigateAfterSubmit();
-      } catch (err: any) {
-        Alert.alert('Error', err?.response?.data?.error || 'Submit failed. Please try again.');
-      } finally {
-        setSubmitting(false);
-      }
-
-    } else {
-      // ── OFFLINE PATH ───────────────────────────────────────────────────
-      try {
-        // 1. Save form data locally (already auto-saved as draft, but mark explicitly)
-        await saveFormDataLocally(lead.id, formPayload);
-
-        // 2. Queue for sync when net comes back
-        await enqueue(
-          `form_submit_${lead.id}`,
-          'FORM_SUBMIT',
-          { formData: formPayload, mobile: lead.phone }
-        );
-
-        // 3. Queue status update too
-        await enqueue(
-          `status_completed_${lead.id}`,
-          'STATUS_UPDATE',
-          { mobile: lead.phone, status: 'completed' }
-        );
-
-        // 4. Local status update (UI will show completed)
-        const leadId = lead.id || lead._id || (lead as any)._id;
-console.log('Updating with leadId:', leadId, '| lead object:', JSON.stringify(lead));
-await updateAcceptedLeadStatus(leadId, 'completed');
-
-        Alert.alert(
-          '✓ Saved Offline',
-          'Form saved locally. It will be submitted automatically when internet is available.',
-          [{ text: 'OK', onPress: _navigateAfterSubmit }]
-        );
-      } catch (e) {
-        Alert.alert('Error', 'Failed to save form offline.');
-      } finally {
-        setSubmitting(false);
-      }
+      _navigateAfterSubmit();
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.error || 'Submit failed. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
+  } else {
+  try {
+    // Surveyor number offline-லயும் எடு
+    let surveyorNumber = '';
+    const userData = await AsyncStorage.getItem(USER_DATA);
+    const parsed = userData ? JSON.parse(userData) : null;
+    surveyorNumber = parsed?.UserInfo?.phoneNo || '';
+
+    await saveFormDataLocally(lead.id, formPayload);
+    await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', { formData: formPayload, mobile: lead.phone });
+    await enqueue(`status_completed_${lead.id}`, 'STATUS_UPDATE', { mobile: lead.phone, status: 'completed' });
+    
+    // ── புதுசா add ──
+    await enqueue(`completed_lead_${lead.id}`, 'COMPLETED_LEAD', { mobile: lead.phone, surveyorNumber });
+
+    const leadId = lead.id || lead._id;
+    await updateAcceptedLeadStatus(leadId, 'completed');
+
+    Alert.alert('✓ Saved Offline', 'Form saved locally. It will be submitted automatically when internet is available.',
+      [{ text: 'OK', onPress: _navigateAfterSubmit }]
+    );
+  } catch (e) {
+    Alert.alert('Error', 'Failed to save form offline.');
+  } finally {
+    setSubmitting(false);
+  }
+}
   };
 
   const _navigateAfterSubmit = () => {
