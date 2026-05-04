@@ -6,7 +6,7 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { enqueue } from '../service/syncQueue';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
-import { useLocationTracking, getDistance } from '../service/locationService';
+import { useLocationTracking, getDistance, stopHighFrequencyTracking } from '../service/locationService';
 import API from '../api/api1';
 
 const { width } = Dimensions.get('window');
@@ -211,6 +211,7 @@ useEffect(() => {
           l.id === completedLeadId ? { ...l, status: 'completed' } : l
         )
       );
+      stopHighFrequencyTracking();
     }
   }, [completedLeadId]);
   const { currentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
@@ -220,6 +221,7 @@ useEffect(() => {
   return () => {
     isMounted.current = false;
     stopTracking();
+    stopHighFrequencyTracking();
   };
 }, []);
 
@@ -235,6 +237,7 @@ useFocusEffect(
         l.id === completedId ? { ...l, status: 'completed' } : l
       )
     );
+    stopHighFrequencyTracking();
 
   }, [route.params?.completedLeadId])
 );

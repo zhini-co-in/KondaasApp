@@ -180,3 +180,67 @@ export const isGPSEnabled = async () => {
 export const checkAndPromptGPS = async () => {
   return true;
 };
+let intervalTracker = null;
+let lastSentHFCoords = { lat: null, lon: null };
+let lastCheckCoords = { lat: null, lon: null };
+
+export const startHighFrequencyTracking = (getLocationFn) => {
+  if (intervalTracker) {
+    clearInterval(intervalTracker);
+  }
+
+  intervalTracker = setInterval(async () => {
+    const loc = getLocationFn();
+    if (!loc?.latitude || !loc?.longitude) return;
+
+    // ✅ முந்தைய check-இல் இருந்து எவ்வளவு நகர்ந்தோம்
+    let movedSinceLastCheck = 0;
+    if (lastCheckCoords.lat !== null) {
+      movedSinceLastCheck = getDistance(
+        lastCheckCoords.lat, lastCheckCoords.lon,
+        loc.latitude, loc.longitude
+      );
+    }
+    lastCheckCoords = { lat: loc.latitude, lon: loc.longitude };
+
+    // ✅ நிற்கும்போது — 2 மீட்டர்க்கு கீழே இருந்தால் skip
+    if (lastSentHFCoords.lat !== null && movedSinceLastCheck < 2) {
+      console.log('🧍 Stationary, skipping...');
+      return;
+    }
+
+    // ✅ நகரும்போது — last sent-இல் இருந்து 10 மீட்டர் மேல் இருந்தால் மட்டும் send
+    if (lastSentHFCoords.lat !== null) {
+      const movedSinceLastSent = getDistance(
+        lastSentHFCoords.lat, lastSentHFCoords.lon,
+        loc.latitude, loc.longitude
+      );
+      if (movedSinceLastSent < 10) return;
+    }
+
+    lastSentHFCoords = { lat: loc.latitude, lon: loc.longitude };
+
+    try {
+      const phoneNo = await getUserPhone();
+      await API.post('/location/add', {
+        phoneNo,
+        latitude: parseFloat(loc.latitude),
+        longitude: parseFloat(loc.longitude),
+        epoch: Date.now(),
+      });
+      console.log('⚡ Location sent:', loc.latitude, loc.longitude);
+    } catch (err) {
+      console.log('❌ HF send error:', err?.message);
+    }
+  }, 3000); // ✅ 3 seconds check
+};
+
+export const stopHighFrequencyTracking = () => {
+  if (intervalTracker) {
+    clearInterval(intervalTracker);
+    intervalTracker = null;
+    lastSentHFCoords = { lat: null, lon: null };
+    lastCheckCoords = { lat: null, lon: null };
+    console.log('🛑 High-freq tracking stopped');
+  }
+};

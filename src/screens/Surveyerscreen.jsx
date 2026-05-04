@@ -24,6 +24,8 @@ import { NativeModules } from 'react-native';
 import {
   getDistance, useLocationTracking,
   requestLocationPermissions, requestIOSLocationPermission, isGPSEnabled,
+  startHighFrequencyTracking,
+  stopHighFrequencyTracking, 
 } from '../service/locationService';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -394,6 +396,7 @@ const handleStart = async (id) => {
         customerMobile: lead.phone, scenarioType: 1,
       });
     }
+startHighFrequencyTracking(() => currentLocation);
 
     navigation.navigate('InProgress', { lead: { ...lead, status: 'inprogress' } });
   };
