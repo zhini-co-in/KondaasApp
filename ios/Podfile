@@ -1,12 +1,11 @@
 require_relative '../node_modules/react-native/scripts/react_native_pods'
+require_relative '../node_modules/react-native-permissions/scripts/setup.rb'  # ← ADD THIS
 
 platform :ios, '16.0'
 prepare_react_native_project!
 
 use_modular_headers!
 
-# Force static framework linkage to avoid duplicate module / header clashes
-# (keeps linkage consistent for Swift + ObjC pods)
 ENV['USE_FRAMEWORKS'] = 'static' unless ENV['USE_FRAMEWORKS']
 linkage = ENV['USE_FRAMEWORKS']
 if linkage != nil
@@ -17,10 +16,18 @@ end
 target 'KondaasApp' do
   config = use_native_modules!
 
+  setup_permissions([   # ← ADD THIS BLOCK (only include what you actually use)
+    'Camera',
+    'Microphone',
+    'Notifications',
+    'PhotoLibrary',
+    'LocationWhenInUse',   # ← ADD THIS
+  'LocationAlways',      # ← ADD THIS
+  ])
+
   pod 'FirebaseCore'
   pod 'FirebaseAuth'
   pod 'FirebaseFirestore'
-
   pod 'FirebaseMessaging'
   pod 'FirebaseAppCheck'
 
@@ -38,8 +45,6 @@ target 'KondaasApp' do
       :mac_catalyst_enabled => false
     )
 
-    # Allow non-modular includes in framework modules to avoid
-    # "non-modular-include-in-framework-module" build errors
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
         config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'

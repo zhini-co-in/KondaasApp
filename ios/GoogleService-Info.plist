@@ -36,6 +36,8 @@
 <string>We need your location to track server availability</string>
 <key>NSLocationWhenInUseUsageDescription</key>
 <string>We need your location to track server availability</string>
+ <key>NSLocationAlwaysUsageDescription</key>
+    <string>We need your location to track server availability</string>
 <key>UIBackgroundModes</key>
 <array>
     <string>location</string>
