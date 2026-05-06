@@ -356,6 +356,26 @@ if (isOnline) {
 const handleStart = async (id) => {
     const lead = acceptedLeads.find((l) => l.id === id);
     if (!lead) return;
+     let etaText = 'N/A';
+     let totalMins = 0;
+  const hasLatLong = lead.latitude && lead.longitude;
+  if (currentLocation && hasLatLong) {
+    const distMeters = Math.round(getDistance(
+      currentLocation.latitude, currentLocation.longitude,
+      parseFloat(lead.latitude), parseFloat(lead.longitude)
+    ));
+    const speed = distMeters <= 300 ? 1.4 : 8.3;
+    totalMins = Math.round(distMeters / speed / 60);
+    if (totalMins < 1) {
+      etaText = 'Less than a minute';
+    } else if (totalMins < 60) {
+      etaText = `${totalMins} min`;
+    } else {
+      const hrs = Math.floor(totalMins / 60);
+      const mins = totalMins % 60;
+      etaText = mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`;
+    }
+  }
 
     // Local first
     await updateAcceptedLeadStatus(id, 'inprogress');
@@ -386,14 +406,14 @@ const handleStart = async (id) => {
 
       try {
         await API.post('/notification/trigger', {
-          surveyorNumber, customerMobile: lead.phone, scenarioType: 1,
+          surveyorNumber, customerMobile: lead.phone, scenarioType: 1, eta: totalMins,
         });
       } catch (e) {
         console.log('[SurveyerScreen] Notification error:', e?.message);
       }
     } else {
       await enqueue(`notif_start_${id}`, 'NOTIFICATION', {
-        customerMobile: lead.phone, scenarioType: 1,
+        customerMobile: lead.phone, scenarioType: 1, eta: totalMins,
       });
     }
 startHighFrequencyTracking(() => currentLocation);

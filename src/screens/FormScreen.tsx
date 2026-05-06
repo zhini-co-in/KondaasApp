@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, ActivityIndicator,
@@ -243,14 +242,8 @@ useEffect(() => {
 
   if (isOnline) {
     try {
-      let surveyorNumber = '';
-      const userData = await AsyncStorage.getItem(USER_DATA);
-      const parsed = userData ? JSON.parse(userData) : null;
-      surveyorNumber = parsed?.UserInfo?.phoneNo || '';
-
       await API.post('/user/add', formPayload);
       await API.put('/order/updatestatus', { mobile: lead.phone, status: 'completed' });
-      await API.post('/order/complete', { mobile: lead.phone, surveyorNumber }); // ✅ சரியான payload
 
       const leadId = lead.id || lead._id;
       await updateAcceptedLeadStatus(leadId, 'completed');
@@ -263,18 +256,9 @@ useEffect(() => {
     }
   } else {
   try {
-    // Surveyor number offline-லயும் எடு
-    let surveyorNumber = '';
-    const userData = await AsyncStorage.getItem(USER_DATA);
-    const parsed = userData ? JSON.parse(userData) : null;
-    surveyorNumber = parsed?.UserInfo?.phoneNo || '';
-
     await saveFormDataLocally(lead.id, formPayload);
     await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', { formData: formPayload, mobile: lead.phone });
     await enqueue(`status_completed_${lead.id}`, 'STATUS_UPDATE', { mobile: lead.phone, status: 'completed' });
-    
-    // ── புதுசா add ──
-    await enqueue(`completed_lead_${lead.id}`, 'COMPLETED_LEAD', { mobile: lead.phone, surveyorNumber });
 
     const leadId = lead.id || lead._id;
     await updateAcceptedLeadStatus(leadId, 'completed');

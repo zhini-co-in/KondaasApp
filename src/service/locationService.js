@@ -2,8 +2,6 @@ import { useRef, useState } from 'react';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import { PermissionsAndroid, Platform, Alert, Linking, DeviceEventEmitter, NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Geolocation from '@react-native-community/geolocation';
-import BackgroundActions from 'react-native-background-actions';
 import API from '../api/api1';
 import { USER_DATA } from '../service/localStorage';
 
@@ -28,24 +26,27 @@ const isMockLocation = (lat, lon) => {
 };
 
 const lastSentTime = { current: 0 };
+let lastSentCoords = { lat: null, lon: null }; // ✅ ADD THIS
 
 export const sendLocation = async (latitude, longitude, timestamp) => {
   if (isMockLocation(latitude, longitude)) return;
   const now = Date.now();
-  if (now - lastSentTime.current < 110000) return;
+  // 3 minutes = 180,000 ms
+if (now - lastSentTime.current < 180000) return;
   lastSentTime.current = now;
   const finalEpoch = timestamp || Date.now();
+  await AsyncStorage.setItem('last_known_location', JSON.stringify({ latitude, longitude }));
   try {
     const phoneNo = await getUserPhone();
     console.log(`📞 phoneNo being sent: "${phoneNo}"`);
     console.log(`📍 [${Platform.OS}] SENDING → ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
     const res = await API.post('/location/add', {
-      phoneNo,
-      latitude: parseFloat(latitude),
-      longitude: parseFloat(longitude),
-      epoch: finalEpoch,
-    });
-    console.log('✅ Location saved:', res.status);
+  phoneNo,
+  latitude: parseFloat(latitude),
+  longitude: parseFloat(longitude),
+  epoch: finalEpoch,
+});
+console.log('✅ Location saved:', res.status);
   } catch (err) {
     console.log('❌ Send error:', err?.response?.data || err.message);
   }
@@ -100,45 +101,15 @@ export const requestBatteryOptimizationExemption = () => {
   );
 };
 
-// iOS Background Task
-const sleep = (time) => new Promise((resolve) => setTimeout(resolve, time));
-
-const iosBackgroundTask = async () => {
-  await new Promise(async (resolve) => {
-    while (BackgroundActions.isRunning()) {
-      Geolocation.getCurrentPosition(
-        async (position) => {
-          const { latitude, longitude } = position.coords;
-          console.log(`📍 [iOS BG] ${latitude}, ${longitude}`);
-          await sendLocation(latitude, longitude, position.timestamp);
-        },
-        (error) => console.log('❌ iOS bg location error:', error),
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-      );
-      await sleep(120000); // 2 minutes
-    }
-    resolve();
-  });
-};
-
-const iosBackgroundOptions = {
-  taskName: 'LocationTracking',
-  taskTitle: 'KondaasApp',
-  taskDesc: 'Location tracking is active',
-  taskIcon: { name: 'ic_launcher', type: 'mipmap' },
-  color: '#ff0000',
-  parameters: {},
-};
-
-// Android global listener
-let globalListenerRef = null;
+// ✅ Module level-la வை (hook outside)
+let globalListenerRef = null; // single global ref
 
 export const useLocationTracking = (isMounted) => {
   const [currentLocation, setCurrentLocation] = useState(null);
   const watchIdRef = useRef(null);
-  const isTrackingRef = useRef(false);
+  const isTrackingRef = useRef(false); // ✅ tracking guard
 
-  const startTracking = async () => {
+  const startTracking = () => {
     if (isTrackingRef.current) {
       console.log('⚠️ Already tracking, skip');
       return;
@@ -147,10 +118,12 @@ export const useLocationTracking = (isMounted) => {
     console.log('🟢 Starting location tracking');
 
     if (Platform.OS === 'android') {
+      // ✅ Global listener clean பண்ணு first
       if (globalListenerRef) {
         globalListenerRef.remove();
         globalListenerRef = null;
       }
+
       globalListenerRef = DeviceEventEmitter.addListener(
         'nativeLocationUpdate',
         async (data) => {
@@ -164,40 +137,34 @@ export const useLocationTracking = (isMounted) => {
         }
       );
     } else if (Platform.OS === 'ios') {
-      if (watchIdRef.current) return;
-      watchIdRef.current = true;
-      try {
-        await BackgroundActions.start(iosBackgroundTask, iosBackgroundOptions);
-        console.log('🟢 iOS background tracking started');
-      } catch (e) {
-        console.log('❌ iOS background start error:', e);
-        watchIdRef.current = null;
-        isTrackingRef.current = false;
-      }
+      if (watchIdRef.current !== null) return; // ✅ iOS guard
+      watchIdRef.current = global.navigator?.geolocation?.watchPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          if (isMounted.current) setCurrentLocation({ latitude, longitude });
+          await sendLocation(latitude, longitude, position.timestamp);
+        },
+        (error) => console.log('iOS watch error:', error),
+        { enableHighAccuracy: true, distanceFilter: 10, interval: 120000, maximumAge: 30000 }
+      );
     }
   };
 
-  const stopTracking = async () => {
+  const stopTracking = () => {
     console.log('🔴 Stopping location tracking');
-    isTrackingRef.current = false;
+    isTrackingRef.current = false; // ✅ Reset guard
 
-    if (Platform.OS === 'ios' && watchIdRef.current) {
-      try {
-        await BackgroundActions.stop();
-        console.log('🛑 iOS background tracking stopped');
-      } catch (e) {
-        console.log('❌ iOS background stop error:', e);
-      }
+    if (Platform.OS === 'ios' && watchIdRef.current !== null) {
+      global.navigator?.geolocation?.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
-
     if (globalListenerRef) {
       globalListenerRef.remove();
       globalListenerRef = null;
     }
   };
 
-  return { currentLocation, startTracking, stopTracking };
+  return { currentLocation, setCurrentLocation, startTracking, stopTracking };
 };
 
 export const isGPSEnabled = async () => {
@@ -215,40 +182,28 @@ export const isGPSEnabled = async () => {
 export const checkAndPromptGPS = async () => {
   return true;
 };
-
 let intervalTracker = null;
 let lastSentHFCoords = { lat: null, lon: null };
 let lastCheckCoords = { lat: null, lon: null };
 
 export const startHighFrequencyTracking = (getLocationFn) => {
-  if (intervalTracker) {
-    clearInterval(intervalTracker);
-  }
+  if (intervalTracker) clearInterval(intervalTracker);
 
+  // 1 minute = 60,000 ms
   intervalTracker = setInterval(async () => {
     const loc = getLocationFn();
     if (!loc?.latitude || !loc?.longitude) return;
 
-    let movedSinceLastCheck = 0;
-    if (lastCheckCoords.lat !== null) {
-      movedSinceLastCheck = getDistance(
-        lastCheckCoords.lat, lastCheckCoords.lon,
-        loc.latitude, loc.longitude
-      );
-    }
-    lastCheckCoords = { lat: loc.latitude, lon: loc.longitude };
-
-    if (lastSentHFCoords.lat !== null && movedSinceLastCheck < 2) {
-      console.log('🧍 Stationary, skipping...');
-      return;
-    }
-
+    // நகரவே இல்லன்னா skip
     if (lastSentHFCoords.lat !== null) {
-      const movedSinceLastSent = getDistance(
+      const moved = getDistance(
         lastSentHFCoords.lat, lastSentHFCoords.lon,
         loc.latitude, loc.longitude
       );
-      if (movedSinceLastSent < 10) return;
+      if (moved < 5) {
+        console.log('🧍 Stationary, skipping HF send');
+        return;
+      }
     }
 
     lastSentHFCoords = { lat: loc.latitude, lon: loc.longitude };
@@ -261,11 +216,11 @@ export const startHighFrequencyTracking = (getLocationFn) => {
         longitude: parseFloat(loc.longitude),
         epoch: Date.now(),
       });
-      console.log('⚡ HF Location sent:', loc.latitude, loc.longitude);
+      console.log('⚡ HF location sent:', loc.latitude, loc.longitude);
     } catch (err) {
       console.log('❌ HF send error:', err?.message);
     }
-  }, 3000);
+  }, 60000); // ✅ 1 minute
 };
 
 export const stopHighFrequencyTracking = () => {

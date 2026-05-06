@@ -1,8 +1,13 @@
 // utils/notificationService.js
 import notifee, { AndroidImportance, AndroidStyle, EventType } from '@notifee/react-native';
 import API from '../api/api1';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { USER_DATA } from '../service/localStorage';
 import { saveAcceptedLead, getAcceptedLeads } from '../service/localLeadsStorage';
 
+// ─────────────────────────────────────────────────────────────────
+// Channel — App start-ல் ஒரே ஒரு தடவை create பண்ணு
+// ─────────────────────────────────────────────────────────────────
 export async function createNotificationChannel() {
   await notifee.createChannel({
     id: 'custom_sound_channel_v2',
@@ -12,112 +17,149 @@ export async function createNotificationChannel() {
   });
 }
 
+// ─────────────────────────────────────────────────────────────────
+// Show Notification
+// ─────────────────────────────────────────────────────────────────
 export async function showLeadNotification(data) {
   if (!data) return;
-
-  await createNotificationChannel();
 
   await notifee.displayNotification({
     id: data.leadId || String(Date.now()),
     title: '🔔 New Lead Nearby!',
-    body: `👤 ${data.customerName || 'Customer'}  ⚡ ${data.kilovolts || 'N/A'} kV`,
+    body: `👤 ${data.customerName || 'Customer'}  ⚡ ${data.kilovolt || 'N/A'} kV`,
     data: {
-      leadId: data.leadId || '',
+      leadId:         data.leadId         || '',
       customerMobile: data.customerMobile || '',
+      customerName:   data.customerName   || '',
+      address:        data.address        || '',
+      kilovolt:       data.kilovolt       || '',
     },
     android: {
-      channelId: 'custom_sound_channel_v2',
-      importance: AndroidImportance.HIGH,
-      pressAction: { id: 'default' },
+      channelId:     'custom_sound_channel_v2',
+      importance:    AndroidImportance.HIGH,
+      pressAction:   { id: 'default' },
       showTimestamp: true,
 
       actions: [
-        {
-          title: '✅ Accept',
-          pressAction: { id: 'accept' },
-        },
-        {
-          title: '❌ Reject',
-          pressAction: { id: 'reject' },
-        },
+        { title: '✅ Accept', pressAction: { id: 'accept' } },
+        { title: '❌ Reject', pressAction: { id: 'reject' } },
       ],
 
-      // ✅ Expanded view — Name, Address, Kilovolts மட்டும்
       style: {
         type: AndroidStyle.BIGTEXT,
-        text: 
-          `👤 Name     : ${data.customerName || 'Unknown'}\n` +
-          `📍 Address  : ${data.address || 'N/A'}\n` +
-          `⚡ Kilovolts: ${data.kilovolt || 'N/A'} \n`,
+        text:
+          `👤 Name      : ${data.customerName || 'Unknown'}\n` +
+          `📍 Address   : ${data.address      || 'N/A'}\n`    +
+          `⚡ Kilovolts : ${data.kilovolt      || 'N/A'} kV\n`,
       },
     },
   });
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Accept / Reject handlers — same as before
+// Helper — Surveyor number
 // ─────────────────────────────────────────────────────────────────
-async function handleNotificationAccept(mobile) {
+async function getSurveyorNumber() {
   try {
-    await API.put('/order/updatestatus', { mobile, status: 'accepted' });
-
-    const allLeads = await getAcceptedLeads();
-    const alreadySaved = allLeads.some((l) => l.phone === mobile);
-    if (!alreadySaved) {
-      await saveAcceptedLead({ phone: mobile });
-    }
-
-    console.log('✅ Accept done:', mobile);
+    const raw    = await AsyncStorage.getItem(USER_DATA);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed?.UserInfo?.phoneNo || '';
   } catch (e) {
-    console.error('Accept API Error:', e);
+    console.log('[notificationService] getSurveyorNumber error:', e?.message);
+    return '';
   }
 }
 
+// ─────────────────────────────────────────────────────────────────
+// Accept handler
+// ─────────────────────────────────────────────────────────────────
+async function handleNotificationAccept(notifData) {
+  const mobile = notifData?.customerMobile;
+  if (!mobile) return;
+
+  try {
+    const surveyorNumber = await getSurveyorNumber();
+
+    // Duplicate guard
+    const allLeads   = await getAcceptedLeads();
+    const alreadySaved = allLeads.some((l) => l.phone === mobile);
+
+    if (!alreadySaved) {
+      await saveAcceptedLead({
+        id:     notifData.leadId       || mobile,
+        phone:  mobile,
+        name:   notifData.customerName || '',
+        address: notifData.address     || '',
+        status: 'accepted',
+      });
+    }
+
+    await API.post('/order/accept', { mobile, surveyorNumber });
+    await API.put('/order/updatestatus', { mobile, status: 'accepted' });
+
+    console.log('✅ Accept done:', mobile);
+  } catch (e) {
+    console.error('[notificationService] Accept error:', e?.message);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Reject handler
+// ─────────────────────────────────────────────────────────────────
 async function handleNotificationReject(mobile) {
+  if (!mobile) return;
+
   try {
     await API.post('/order/reject', {
       mobile,
       reason: 'Rejected via notification',
     });
-
     console.log('❌ Reject done:', mobile);
   } catch (e) {
-    console.error('Reject API Error:', e);
+    console.error('[notificationService] Reject error:', e?.message);
   }
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Background + Foreground handlers — App.js ல call பண்ணு
+// Register handlers — App.js-ல் ஒரே ஒரு தடவை call பண்ணு
 // ─────────────────────────────────────────────────────────────────
 export function registerNotificationHandlers() {
 
+  // Background
   notifee.onBackgroundEvent(async ({ type, detail }) => {
-    const mobile = detail?.notification?.data?.customerMobile;
-    if (!mobile) return;
+    if (type !== EventType.ACTION_PRESS) return;
 
-    if (type === EventType.ACTION_PRESS && detail.pressAction?.id === 'accept') {
-      await handleNotificationAccept(mobile);
-      await notifee.cancelNotification(detail.notification.id);
+    const notifData = detail?.notification?.data;
+    const actionId  = detail?.pressAction?.id;
+    if (!notifData) return;
+
+    if (actionId === 'accept') {
+      await handleNotificationAccept(notifData);
     }
 
-    if (type === EventType.ACTION_PRESS && detail.pressAction?.id === 'reject') {
-      await handleNotificationReject(mobile);
-      await notifee.cancelNotification(detail.notification.id);
+    if (actionId === 'reject') {
+      await handleNotificationReject(notifData?.customerMobile);
     }
+
+    await notifee.cancelNotification(detail.notification.id);
   });
 
-  notifee.onForegroundEvent(({ type, detail }) => {
-    const mobile = detail?.notification?.data?.customerMobile;
-    if (!mobile) return;
+  // Foreground
+  notifee.onForegroundEvent(async ({ type, detail }) => {
+    if (type !== EventType.ACTION_PRESS) return;
 
-    if (type === EventType.ACTION_PRESS && detail.pressAction?.id === 'accept') {
-      handleNotificationAccept(mobile);
-      notifee.cancelNotification(detail.notification.id);
+    const notifData = detail?.notification?.data;
+    const actionId  = detail?.pressAction?.id;
+    if (!notifData) return;
+
+    if (actionId === 'accept') {
+      await handleNotificationAccept(notifData);
     }
 
-    if (type === EventType.ACTION_PRESS && detail.pressAction?.id === 'reject') {
-      handleNotificationReject(mobile);
-      notifee.cancelNotification(detail.notification.id);
+    if (actionId === 'reject') {
+      await handleNotificationReject(notifData?.customerMobile);
     }
+
+    await notifee.cancelNotification(detail.notification.id);
   });
 }

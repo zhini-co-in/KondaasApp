@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { enqueue } from '../service/syncQueue';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useLocationTracking, getDistance, stopHighFrequencyTracking } from '../service/locationService';
 import API from '../api/api1';
@@ -146,8 +147,12 @@ useEffect(() => {
 )}
 
             {hasLatLong && distToLead !== null && (
-              <Text style={styles.reachDistance}>{distToLead} m</Text>
-            )}
+  <Text style={styles.reachDistance}>
+    {distToLead >= 1000
+      ? (distToLead / 1000).toFixed(1) + ' km'
+      : distToLead + ' m'}
+  </Text>
+)}
             {!hasLatLong && item.address && (
               <Text numberOfLines={2} style={{
                 fontSize: 9, color: '#888', marginTop: 4,
@@ -214,10 +219,18 @@ useEffect(() => {
       stopHighFrequencyTracking();
     }
   }, [completedLeadId]);
-  const { currentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
+  const { currentLocation, setCurrentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
 
 useEffect(() => {
-  startTracking(); 
+  // ✅ உடனே last known location load பண்ணு
+  AsyncStorage.getItem('last_known_location').then(val => {
+    if (val && isMounted.current) {
+      const loc = JSON.parse(val);
+      setCurrentLocation(loc); // hook-ல் setCurrentLocation expose பண்ணணும்
+    }
+  });
+  
+  startTracking();
   return () => {
     isMounted.current = false;
     stopTracking();
@@ -248,20 +261,31 @@ useFocusEffect(
   const [reachedModalVisible, setReachedModalVisible] = useState(false);
 const [selectedLead, setSelectedLead] = useState(null);
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
  const handleManualEnable = async (item) => {
   setInProgressLeads((prev) =>
     prev.map((l) => (l.id === item.id ? { ...l, manualSiteEnabled: true } : l))
   );
 
-  // ✅ Notification - scenarioType: 3
+  // ── Get surveyorNumber from stored user data ──
+  let surveyorNumber = '';
   try {
-    await API.post('https://kondaas-api.trisentrix-dev.workers.dev/notification/trigger', {
+    const userData = await AsyncStorage.getItem(USER_DATA);
+    const parsed = userData ? JSON.parse(userData) : null;
+    surveyorNumber = parsed?.UserInfo?.phoneNo || '';
+  } catch (e) {
+    console.log('[handleManualEnable] Failed to get surveyor number:', e?.message);
+  }
+
+  // ── Trigger notification with scenarioType: 3 ──
+  try {
+    await API.post('/notification/trigger', {
+      surveyorNumber,
       customerMobile: item.phone,
       scenarioType: 3,
     });
+    console.log('[handleManualEnable] Notification sent ✅');
   } catch (e) {
-    console.log('Notification error (reached):', e);
+    console.log('[handleManualEnable] Notification error:', e?.message);
   }
 
   setSelectedLead({ ...item, id: item.id || item._id });
