@@ -1,18 +1,26 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, Modal, TextInput, Alert, Dimensions,Linking
+  ScrollView, Modal, Alert, Dimensions, Linking
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { enqueue } from '../service/syncQueue';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useLocationTracking, getDistance, stopHighFrequencyTracking } from '../service/locationService';
 import API from '../api/api1';
+import { USER_DATA } from '../service/localStorage';
+import { updateAcceptedLeadStatus } from '../service/localLeadsStorage';
 
 const { width } = Dimensions.get('window');
 
-const LeadCard = ({ item, currentLocation, onSiteObservation, onManualEnable, onEdit, navigation }) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// LeadCard
+// ─────────────────────────────────────────────────────────────────────────────
+const LeadCard = ({
+  item, currentLocation,
+  onSiteObservation, onManualEnable, onEdit,
+  onMarkCompleted, navigation,
+}) => {
   const hasLatLong = item.latitude && item.longitude &&
     item.latitude !== '' && item.longitude !== '';
 
@@ -24,65 +32,63 @@ const LeadCard = ({ item, currentLocation, onSiteObservation, onManualEnable, on
     : null;
 
   const withinRange = distToLead !== null && distToLead <= 300;
-
   const notifiedRef = useRef(false);
 
-useEffect(() => {
-  if (withinRange && !item.manualSiteEnabled && !notifiedRef.current) {
-    notifiedRef.current = true;
-
-    API.post('https://kondaas-api.trisentrix-dev.workers.dev/notification/trigger', {
-      customerMobile: item.phone,
-      scenarioType: 3,
-    }).catch(e => console.log('Auto 300m notify error:', e));
-
-    onManualEnable(item); // ✅ auto-trigger reached flow
-  }
-}, [withinRange]);
+  useEffect(() => {
+    if (withinRange && !item.manualSiteEnabled && !notifiedRef.current) {
+      notifiedRef.current = true;
+      API.post('https://kondaas-api.trisentrix-dev.workers.dev/notification/trigger', {
+        customerMobile: item.phone,
+        scenarioType: 3,
+      }).catch(e => console.log('Auto 300m notify error:', e));
+      onManualEnable(item);
+    }
+  }, [withinRange]);
 
   const openMap = () => {
-  if (item.latitude || item.address || item.city) {
-    navigation.navigate('MapView', {
-      latitude: item.latitude,
-      longitude: item.longitude,
-      address: item.address,
-      city: item.city,
-    });
-  } else {
-    Alert.alert('Location not available', 'No coordinates or address found.');
-  }
-};
+    if (item.latitude || item.address || item.city) {
+      navigation.navigate('MapView', {
+        latitude: item.latitude,
+        longitude: item.longitude,
+        address: item.address,
+        city: item.city,
+      });
+    } else {
+      Alert.alert('Location not available', 'No coordinates or address found.');
+    }
+  };
 
   return (
     <View style={styles.card}>
 
       {/* Top row */}
       <View style={styles.rowBetween}>
-        <Text style={styles.referred}>
-          Referred by — <Text style={{ fontWeight: 'bold' }}>{item.referredBy || 'N/A'}</Text>
-        </Text>
+        <View style={styles.referredBadge}>
+          <Text style={styles.referredText}>
+            Referred by — <Text style={{ fontWeight: 'bold' }}>{item.referredBy || 'N/A'}</Text>
+          </Text>
+        </View>
         <Text style={styles.date}>{item.date}</Text>
       </View>
 
       {/* User info row */}
       <View style={styles.userRow}>
+
         <View style={styles.avatar}>
-          <Ionicons name="person-outline" size={22} color="#aaa" />
+          <Text style={styles.avatarText}>
+            {item.name ? item.name.charAt(0).toUpperCase() : '?'}
+          </Text>
         </View>
 
         <View style={{ flex: 1 }}>
           <Text style={styles.name}>{item.name}</Text>
           <TouchableOpacity
-  onPress={() => {
-    if (item.phone) {
-      Linking.openURL(`tel:${item.phone}`);
-    }
-  }}
-  style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
->
-  <Ionicons name="call-outline" size={12} color="#25D366" />
-  <Text style={styles.subText}>{item.phone}</Text>
-</TouchableOpacity>
+            onPress={() => { if (item.phone) Linking.openURL(`tel:${item.phone}`); }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+          >
+            <Ionicons name="call-outline" size={12} color="#25D366" />
+            <Text style={styles.subText}>{item.phone}</Text>
+          </TouchableOpacity>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Ionicons name="location-outline" size={12} color="#555" />
             <Text style={styles.subText}>{item.city}</Text>
@@ -95,64 +101,70 @@ useEffect(() => {
           </View>
         </View>
 
+        {/* Right side — status buttons */}
         {item.status === 'completed' ? (
-          <View style={{
-            backgroundColor: '#22c55e',
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-            borderRadius: 8,
-          }}>
-            <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>
-              ✓ Completed
-            </Text>
+          <View style={styles.completedPill}>
+            <Ionicons name="checkmark-circle" size={14} color="#3B6D11" />
+            <Text style={styles.completedPillText}>Completed</Text>
           </View>
 
         ) : (item.manualSiteEnabled || (hasLatLong && withinRange)) ? (
-          <View style={{ alignItems: 'center', gap: 6 }}>
-            <TouchableOpacity style={styles.smallSiteBtn} onPress={() => onSiteObservation(item)}>
+          <View style={{ alignItems: 'center', gap: 5 }}>
+            <TouchableOpacity
+              style={styles.smallSiteBtn}
+              onPress={() => onSiteObservation(item)}
+            >
               <Text style={styles.smallSiteBtnText}>Site{'\n'}Observation</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-  style={[styles.commonBtn, { backgroundColor: '#3b82f6', marginTop: 6 }]}
-  onPress={() => onEdit(item)}
->
-  <Ionicons name="create-outline" size={20} color="#fff" />
-  <Text style={[styles.commonBtnText, { marginLeft: 5 }]}>
-    Edit
-  </Text>
-</TouchableOpacity>
+              style={[styles.commonBtn, { backgroundColor: '#3b82f6' }]}
+              onPress={() => onEdit(item)}
+            >
+              <Ionicons name="create-outline" size={13} color="#fff" style={{ marginRight: 3 }} />
+              <Text style={styles.commonBtnText}>Edit</Text>
+            </TouchableOpacity>
 
+            <TouchableOpacity
+              style={[styles.commonBtn, { backgroundColor: '#22c55e' }]}
+              onPress={() => onMarkCompleted(item)}
+            >
+              <Ionicons name="checkmark-done-outline" size={13} color="#fff" style={{ marginRight: 3 }} />
+              <Text style={styles.commonBtnText}>Completed</Text>
+            </TouchableOpacity>
           </View>
 
         ) : (
           <View style={styles.reachBtnWrapper}>
             <TouchableOpacity
-  style={[styles.commonBtn, { backgroundColor: '#f97316' }]}
-  onPress={() => onManualEnable(item)}
->
-  <Ionicons name="navigate-outline" size={14} color="#fff" style={{ marginRight: 4 }} />
-  <Text style={styles.commonBtnText}>Reached</Text>
-</TouchableOpacity>
+              style={[styles.commonBtn, { backgroundColor: '#f97316' }]}
+              onPress={() => onManualEnable(item)}
+            >
+              <Ionicons name="navigate-outline" size={14} color="#fff" style={{ marginRight: 4 }} />
+              <Text style={styles.commonBtnText}>Reached</Text>
+            </TouchableOpacity>
 
-            {/* Map button only before reached */}
-{!item.manualSiteEnabled && (
-  <TouchableOpacity
-  style={[styles.commonBtn, { backgroundColor: '#0ea5e9', marginTop: 6 }]}
-  onPress={openMap}
->
-  <Ionicons name="map-outline" size={14} color="#fff" style={{ marginRight: 4 }} />
-  <Text style={styles.commonBtnText}>Open Map</Text>
-</TouchableOpacity>
-)}
+            {!item.manualSiteEnabled && (
+              <TouchableOpacity
+                style={[styles.commonBtn, { backgroundColor: '#0ea5e9', marginTop: 6 }]}
+                onPress={openMap}
+              >
+                <Ionicons name="map-outline" size={14} color="#fff" style={{ marginRight: 4 }} />
+                <Text style={styles.commonBtnText}>Open Map</Text>
+              </TouchableOpacity>
+            )}
 
             {hasLatLong && distToLead !== null && (
-  <Text style={styles.reachDistance}>
-    {distToLead >= 1000
-      ? (distToLead / 1000).toFixed(1) + ' km'
-      : distToLead + ' m'}
-  </Text>
-)}
+              <View style={styles.distanceBox}>
+                <Text style={styles.distanceLabel}>📍 Distance</Text>
+                <Text style={styles.reachDistance}>
+                  {distToLead >= 1000
+                    ? (distToLead / 1000).toFixed(1) + ' km'
+                    : distToLead + ' m'}
+                </Text>
+              </View>
+            )}
+
             {!hasLatLong && item.address && (
               <Text numberOfLines={2} style={{
                 fontSize: 9, color: '#888', marginTop: 4,
@@ -173,23 +185,13 @@ useEffect(() => {
           <Text style={{ fontSize: 12, fontWeight: '600', color: '#555', marginBottom: 2 }}>Comment</Text>
           <Text numberOfLines={2} style={styles.comment}>{item.comment}</Text>
         </View>
-        <TouchableOpacity
-  disabled={!item.comment || item.comment.length <= 200}
->
-  <Text
-    style={[
-      styles.seeMore,
-      {
-        color:
-          item.comment && item.comment.length > 200
-            ? '#1E88E5'
-            : '#ccc',
-      },
-    ]}
-  >
-    See more
-  </Text>
-</TouchableOpacity>
+        <TouchableOpacity disabled={!item.comment || item.comment.length <= 200}>
+          <Text style={[styles.seeMore, {
+            color: item.comment && item.comment.length > 200 ? '#1E88E5' : '#ccc',
+          }]}>
+            See more
+          </Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -203,13 +205,12 @@ const InProgressScreen = () => {
   const route = useRoute();
   const isMounted = useRef(true);
   const { lead, completedLeadId } = route.params || {};
-  const formCompletedRef = useRef(null);
 
   const [inProgressLeads, setInProgressLeads] = useState(
-  lead ? [{ ...lead, id: lead.id || lead._id }] : []
-);
+    lead ? [{ ...lead, id: lead.id || lead._id }] : []
+  );
 
-useEffect(() => {
+  useEffect(() => {
     if (completedLeadId) {
       setInProgressLeads((prev) =>
         prev.map((l) =>
@@ -219,170 +220,169 @@ useEffect(() => {
       stopHighFrequencyTracking();
     }
   }, [completedLeadId]);
+
   const { currentLocation, setCurrentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
 
-useEffect(() => {
-  // ✅ உடனே last known location load பண்ணு
-  AsyncStorage.getItem('last_known_location').then(val => {
-    if (val && isMounted.current) {
-      const loc = JSON.parse(val);
-      setCurrentLocation(loc); // hook-ல் setCurrentLocation expose பண்ணணும்
-    }
-  });
-  
-  startTracking();
-  return () => {
-    isMounted.current = false;
-    stopTracking();
-    stopHighFrequencyTracking();
-  };
-}, []);
+  useEffect(() => {
+    AsyncStorage.getItem('last_known_location').then(val => {
+      if (val && isMounted.current) {
+        setCurrentLocation(JSON.parse(val));
+      }
+    });
+    startTracking();
+    return () => {
+      isMounted.current = false;
+      stopTracking();
+      stopHighFrequencyTracking();
+    };
+  }, []);
 
-useFocusEffect(
-  React.useCallback(() => {
-    const completedId = route.params?.completedLeadId;
-    if (!completedId) return;
-
-    navigation.setParams({ completedLeadId: null });
-
-    setInProgressLeads((prev) =>
-      prev.map((l) =>
-        l.id === completedId ? { ...l, status: 'completed' } : l
-      )
-    );
-    stopHighFrequencyTracking();
-
-  }, [route.params?.completedLeadId])
-);
-
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editLead, setEditLead] = useState(null);
-  const [editForm, setEditForm] = useState({});
-  const [reachedModalVisible, setReachedModalVisible] = useState(false);
-const [selectedLead, setSelectedLead] = useState(null);
-
- const handleManualEnable = async (item) => {
-  setInProgressLeads((prev) =>
-    prev.map((l) => (l.id === item.id ? { ...l, manualSiteEnabled: true } : l))
+  useFocusEffect(
+    React.useCallback(() => {
+      const completedId = route.params?.completedLeadId;
+      if (!completedId) return;
+      navigation.setParams({ completedLeadId: null });
+      setInProgressLeads((prev) =>
+        prev.map((l) =>
+          l.id === completedId ? { ...l, status: 'completed' } : l
+        )
+      );
+      stopHighFrequencyTracking();
+    }, [route.params?.completedLeadId])
   );
 
-  // ── Get surveyorNumber from stored user data ──
-  let surveyorNumber = '';
-  try {
-    const userData = await AsyncStorage.getItem(USER_DATA);
-    const parsed = userData ? JSON.parse(userData) : null;
-    surveyorNumber = parsed?.UserInfo?.phoneNo || '';
-  } catch (e) {
-    console.log('[handleManualEnable] Failed to get surveyor number:', e?.message);
-  }
+  const [reachedModalVisible, setReachedModalVisible] = useState(false);
+  const [selectedLead, setSelectedLead] = useState(null);
 
-  // ── Trigger notification with scenarioType: 3 ──
-  try {
-    await API.post('/notification/trigger', {
-      surveyorNumber,
-      customerMobile: item.phone,
-      scenarioType: 3,
-    });
-    console.log('[handleManualEnable] Notification sent ✅');
-  } catch (e) {
-    console.log('[handleManualEnable] Notification error:', e?.message);
-  }
+  // ✅ Custom Completed Confirmation Modal state
+  const [completedModalVisible, setCompletedModalVisible] = useState(false);
+  const [completedTargetLead, setCompletedTargetLead] = useState(null);
 
-  setSelectedLead({ ...item, id: item.id || item._id });
-  setReachedModalVisible(true);
-};
+  // ── Handlers ─────────────────────────────────────────────────────────────
 
- const handleSiteObservation = (item) => {
-  const leadToPass = {
-    ...item,
-    id: item.id || item._id,
+  const handleManualEnable = async (item) => {
+    setInProgressLeads((prev) =>
+      prev.map((l) => (l.id === item.id ? { ...l, manualSiteEnabled: true } : l))
+    );
+
+    let surveyorNumber = '';
+    try {
+      const userData = await AsyncStorage.getItem(USER_DATA);
+      const parsed = userData ? JSON.parse(userData) : null;
+      surveyorNumber = parsed?.UserInfo?.phoneNo || '';
+    } catch (e) {
+      console.log('[handleManualEnable] Failed to get surveyor number:', e?.message);
+    }
+
+    try {
+      await API.post('/notification/trigger', {
+        surveyorNumber,
+        customerMobile: item.phone,
+        scenarioType: 3,
+      });
+      console.log('[handleManualEnable] Notification sent ✅');
+    } catch (e) {
+      console.log('[handleManualEnable] Notification error:', e?.message);
+    }
+
+    setSelectedLead({ ...item, id: item.id || item._id });
+    setReachedModalVisible(true);
   };
-  
-  console.log('Navigating to Form with lead:', JSON.stringify(leadToPass));
 
-  navigation.navigate('Form', {
-    category: 'site_observation',
-    lead: leadToPass,
-  });
-};
+  const handleSiteObservation = (item) => {
+    const leadToPass = { ...item, id: item.id || item._id };
+    navigation.navigate('Form', {
+      category: 'site_observation',
+      lead: leadToPass,
+    });
+  };
 
   const handleEdit = (item) => {
-    setEditLead(item);
-    setEditForm({
-      name: item.name || '',
-      phone: item.phone || '',
-      whatsappNo: item.whatsappNo || '',
-      city: item.city || '',
-      comment: item.comment || '',
-      address: item.address || '',
-      email: item.email || '',
-      referredBy: item.referredBy || '',
-      latitude: item.latitude || '',
-      longitude: item.longitude || '',
+    navigation.navigate('Form', {
+      category: 'site_observation',
+      lead: { ...item, id: item.id || item._id },
+      mode: 'edit',
     });
-    setEditModalVisible(true);
   };
 
-  const confirmEdit = async () => {
-    try {
-      await API.put('/order/update', {
-        mobile: editForm.phone,
-        name: editForm.name,
-        whatsappNo: editForm.whatsappNo || editForm.phone,
-        city: editForm.city,
-        comment: editForm.comment,
-        address: editForm.address || null,
-        email: editForm.email || null,
-        referredBy: editForm.referredBy,
-        latitude: editForm.latitude || null,
-        longitude: editForm.longitude || null,
-      });
-      setInProgressLeads((prev) =>
-        prev.map((l) => l.id === editLead.id ? { ...l, ...editForm } : l)
-      );
-      setEditModalVisible(false);
-      Alert.alert('Success', 'Lead updated successfully!');
-    } catch (err) {
-      Alert.alert('Error', err?.response?.data?.error || 'Failed to update.');
-    }
+  // ✅ Show custom completed modal
+  const handleMarkCompleted = (item) => {
+    setCompletedTargetLead(item);
+    setCompletedModalVisible(true);
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+const confirmMarkCompleted = async () => {
+  const item = completedTargetLead;
+  const leadId = item.id || item._id;
+
+  setCompletedModalVisible(false);
+
+  try {
+    // ✅ Update order status
+    await API.put('/order/updatestatus', {
+      mobile: item.phone,
+      status: 'completed',
+    });
+
+    // ✅ Trigger completion notification
+    await API.post('https://board.trisentrix.com/notification/trigger', {
+      customerMobile: item.phone,
+      scenarioType: 4,
+    });
+
+    // ✅ Local storage update
+    await updateAcceptedLeadStatus(leadId, 'completed');
+
+    // ✅ UI update
+    setInProgressLeads((prev) =>
+      prev.map((l) =>
+        l.id === leadId
+          ? { ...l, status: 'completed' }
+          : l
+      )
+    );
+
+    stopHighFrequencyTracking();
+
+    console.log('Completed notification sent ✅');
+
+  } catch (err) {
+    console.log('Completed notification error:', err);
+
+    Alert.alert(
+      'Oops!',
+      'Something went wrong. Please try again.'
+    );
+  }
+};
+
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <View style={{ flex: 1, backgroundColor: '#F5F5F5' }}>
 
       <View style={styles.header}>
-  <TouchableOpacity onPress={() => {
-  const hasIncomplete = inProgressLeads.some(l => l.status !== 'completed');
-  
-  if (hasIncomplete) {
-    Alert.alert(
-      'Warning',
-      'Form not submitted yet.\nDo you want to exit without submitting?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Yes, Exit', 
-          onPress: () => {
-            // Form submit ஆகல → status inprogress ஆகவே விடு (backend-ல மாற்ற வேண்டாம்)
+        <TouchableOpacity onPress={() => {
+          const hasIncomplete = inProgressLeads.some(l => l.status !== 'completed');
+          if (hasIncomplete) {
+            Alert.alert(
+              'Hold on!',
+              'You have an unsubmitted form. Are you sure you want to leave?',
+              [
+                { text: 'Stay', style: 'cancel' },
+                { text: 'Leave Anyway', onPress: () => navigation.goBack() },
+              ]
+            );
+          } else {
             navigation.goBack();
-          } 
-        },
-      ]
-    );
-  } else {
-    navigation.goBack();
-  }
-}}>
-  <Ionicons name="arrow-back" size={24} color="#ED1C25" />
-</TouchableOpacity>
-  <Text style={styles.headerTitle}>Lead - Inprogress</Text>
-  <View style={{ width: 24 }} />
-</View>
+          }
+        }}>
+          <Ionicons name="arrow-back" size={24} color="#ED1C25" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Lead - Inprogress</Text>
+        <View style={{ width: 24 }} />
+      </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 30 }}>
-
-        {/* ── Lead Cards ── */}
         <View style={{ padding: 15, paddingTop: 20 }}>
           {inProgressLeads.map((item) => (
             <LeadCard
@@ -392,144 +392,142 @@ const [selectedLead, setSelectedLead] = useState(null);
               onSiteObservation={handleSiteObservation}
               onManualEnable={handleManualEnable}
               onEdit={handleEdit}
+              onMarkCompleted={handleMarkCompleted}
               navigation={navigation}
             />
           ))}
         </View>
       </ScrollView>
 
-      {/* ── Edit Modal ── */}
+      {/* ── Reached Modal ── */}
       <Modal
-        visible={editModalVisible}
+        visible={reachedModalVisible}
         transparent
-        animationType="slide"
-        onRequestClose={() => setEditModalVisible(false)}
+        animationType="fade"
+        onRequestClose={() => setReachedModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalBox, { maxHeight: '85%' }]}>
-            <Text style={styles.modalTitle}>Edit Lead</Text>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {[
-                { label: 'Name', key: 'name' },
-                { label: 'Phone', key: 'phone' },
-                { label: 'WhatsApp No', key: 'whatsappNo' },
-                { label: 'City', key: 'city' },
-                { label: 'Email', key: 'email' },
-                { label: 'Referred By', key: 'referredBy' },
-                { label: 'Address', key: 'address' },
-                { label: 'Latitude', key: 'latitude' },
-                { label: 'Longitude', key: 'longitude' },
-                { label: 'Comment', key: 'comment' },
-              ].map(({ label, key }) => (
-                <View key={key} style={{ marginBottom: 12 }}>
-                  <Text style={styles.modalLabel}>{label}</Text>
-                  <TextInput
-                    style={[styles.modalInput,
-                      { minHeight: key === 'comment' || key === 'address' ? 70 : 44 }]}
-                    value={editForm[key]}
-                    onChangeText={(val) => setEditForm((prev) => ({ ...prev, [key]: val }))}
-                    multiline={key === 'comment' || key === 'address'}
-                    placeholderTextColor="#aaa"
-                  />
-                </View>
-              ))}
-            </ScrollView>
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
-              <TouchableOpacity
-                style={[styles.modalSaveBtn, { flex: 1, backgroundColor: '#aaa' }]}
-                onPress={() => setEditModalVisible(false)}
-              >
-                <Text style={styles.modalSaveBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalSaveBtn, { flex: 1 }]}
-                onPress={confirmEdit}
-              >
-                <Text style={styles.modalSaveBtnText}>Update</Text>
-              </TouchableOpacity>
+          <View style={[styles.modalBox, { alignItems: 'center', paddingVertical: 28 }]}>
+            <View style={{
+              backgroundColor: '#fef2f2', borderRadius: 50,
+              padding: 14, marginBottom: 14,
+            }}>
+              <Ionicons name="location" size={32} color="#ED1C25" />
             </View>
+            <Text style={{
+              fontSize: 17, fontWeight: 'bold', color: '#222',
+              marginBottom: 4, textAlign: 'center',
+            }}>
+              You've Reached the Location!
+            </Text>
+            <Text style={{ fontSize: 13, color: '#888', marginBottom: 24, textAlign: 'center' }}>
+              Do you want to start Site Observation?
+            </Text>
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#ED1C25', width: '100%',
+                paddingVertical: 13, borderRadius: 8,
+                alignItems: 'center', marginBottom: 10,
+              }}
+              onPress={() => {
+                setReachedModalVisible(false);
+                handleSiteObservation(selectedLead);
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>
+                🏗️  Start Site Observation
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#f1f1f1', width: '100%',
+                paddingVertical: 13, borderRadius: 8, alignItems: 'center',
+              }}
+              onPress={() => setReachedModalVisible(false)}
+            >
+              <Text style={{ color: '#555', fontSize: 14, fontWeight: '600' }}>Cancel</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
+
+      {/* ── ✅ Custom Completed Confirmation Modal ── */}
       <Modal
-  visible={reachedModalVisible}
-  transparent
-  animationType="fade"
-  onRequestClose={() => setReachedModalVisible(false)}
->
-  <View style={styles.modalOverlay}>
-    <View style={[styles.modalBox, { alignItems: 'center', paddingVertical: 28 }]}>
-
-      {/* Icon */}
-      <View style={{
-        backgroundColor: '#fef2f2',
-        borderRadius: 50,
-        padding: 14,
-        marginBottom: 14,
-      }}>
-        <Ionicons name="location" size={32} color="#ED1C25" />
-      </View>
-
-      {/* Title */}
-      <Text style={{
-        fontSize: 17,
-        fontWeight: 'bold',
-        color: '#222',
-        marginBottom: 4,
-        textAlign: 'center',
-      }}>
-        You've Reached the Location!
-      </Text>
-
-      {/* Subtitle */}
-      <Text style={{
-        fontSize: 13,
-        color: '#888',
-        marginBottom: 24,
-        textAlign: 'center',
-      }}>
-        Do you want to start Site Observation?
-      </Text>
-
-      {/* Site Observation Button */}
-      <TouchableOpacity
-        style={{
-          backgroundColor: '#ED1C25',
-          width: '100%',
-          paddingVertical: 13,
-          borderRadius: 8,
-          alignItems: 'center',
-          marginBottom: 10,
-        }}
-        onPress={() => {
-          setReachedModalVisible(false);
-          handleSiteObservation(selectedLead);
-        }}
+        visible={completedModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCompletedModalVisible(false)}
       >
-        <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>
-          🏗️  Start Site Observation
-        </Text>
-      </TouchableOpacity>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { alignItems: 'center', paddingVertical: 30 }]}>
 
-      {/* Cancel Button */}
-      <TouchableOpacity
-        style={{
-          backgroundColor: '#f1f1f1',
-          width: '100%',
-          paddingVertical: 13,
-          borderRadius: 8,
-          alignItems: 'center',
-        }}
-        onPress={() => setReachedModalVisible(false)}
-      >
-        <Text style={{ color: '#555', fontSize: 14, fontWeight: '600' }}>
-          Cancel
-        </Text>
-      </TouchableOpacity>
+            {/* Green check icon */}
+            <View style={{
+              backgroundColor: '#f0fdf4', borderRadius: 50,
+              padding: 16, marginBottom: 16,
+            }}>
+              <Ionicons name="checkmark-circle" size={40} color="#22c55e" />
+            </View>
 
-    </View>
-  </View>
-</Modal>
+            <Text style={{
+              fontSize: 18, fontWeight: 'bold', color: '#111',
+              marginBottom: 6, textAlign: 'center',
+            }}>
+              Wrap It Up?
+            </Text>
+
+            <Text style={{
+              fontSize: 13, color: '#666',
+              marginBottom: 6, textAlign: 'center', lineHeight: 20,
+            }}>
+              You're about to mark
+            </Text>
+
+            <Text style={{
+              fontSize: 14, fontWeight: '700', color: '#22c55e',
+              marginBottom: 6, textAlign: 'center',
+            }}>
+              {completedTargetLead?.name}
+            </Text>
+
+            <Text style={{
+              fontSize: 13, color: '#666',
+              marginBottom: 26, textAlign: 'center', lineHeight: 20,
+            }}>
+              as completed. This means the job is done{'\n'}and the lead will be closed. ✅
+            </Text>
+
+            {/* Yes button */}
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#22c55e', width: '100%',
+                paddingVertical: 13, borderRadius: 8,
+                alignItems: 'center', marginBottom: 10,
+              }}
+              onPress={confirmMarkCompleted}
+            >
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>
+                Yes, Mark as Completed 🎉
+              </Text>
+            </TouchableOpacity>
+
+            {/* Not yet button */}
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#f1f1f1', width: '100%',
+                paddingVertical: 13, borderRadius: 8, alignItems: 'center',
+              }}
+              onPress={() => setCompletedModalVisible(false)}
+            >
+              <Text style={{ color: '#555', fontSize: 14, fontWeight: '600' }}>
+                Not Yet
+              </Text>
+            </TouchableOpacity>
+
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 };
@@ -546,119 +544,65 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff', elevation: 4,
   },
   headerTitle: { fontSize: 17, fontWeight: 'bold', color: '#333' },
-
-  // ── Card ──
   card: {
     backgroundColor: '#fff', marginBottom: 12,
-    borderRadius: 10, padding: 12, elevation: 3,
+    borderRadius: 12, padding: 14, elevation: 3,
   },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between' },
-  referred: { fontSize: 12, color: '#E53935' },
-  date: { fontSize: 12, color: '#888' },
+  rowBetween: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+  },
+  referredBadge: {
+    backgroundColor: '#FCEBEB', paddingHorizontal: 8,
+    paddingVertical: 3, borderRadius: 20, alignSelf: 'flex-start',
+  },
+  referredText: { fontSize: 11, color: '#A32D2D' },
+  date: { fontSize: 11, color: '#888' },
   userRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
   avatar: {
     width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#f0f0f0', marginRight: 10,
+    backgroundColor: '#E6F1FB', marginRight: 10,
     justifyContent: 'center', alignItems: 'center',
   },
+  avatarText: { fontSize: 16, fontWeight: '600', color: '#185FA5' },
   name: { fontSize: 16, fontWeight: 'bold' },
   subText: { fontSize: 12, color: '#555' },
   commentRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   comment: { flex: 1, fontSize: 12, color: '#555' },
   seeMore: { fontSize: 12, color: '#1E88E5' },
-
-  // ── Buttons ──
+  completedPill: {
+    backgroundColor: '#EAF3DE', paddingHorizontal: 10,
+    paddingVertical: 6, borderRadius: 20,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+  },
+  completedPillText: { color: '#3B6D11', fontSize: 12, fontWeight: '600' },
   reachBtnWrapper: { alignItems: 'center' },
   commonBtn: {
-  width: 100,              // 👈 same width
-  height: 36,              // 👈 same height
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
-  borderRadius: 8,
-},
-
-commonBtnText: {
-  color: '#fff',
-  fontSize: 11,
-  fontWeight: 'bold',
-},
-  reachBtn: {
-    backgroundColor: '#f97316', flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8,
+    width: 100, height: 36, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center', borderRadius: 8,
   },
-  reachBtnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-  reachDistance: { fontSize: 10, color: '#f97316', marginTop: 3, fontWeight: '600' },
+  commonBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  distanceBox: {
+    backgroundColor: '#fff7ed', borderWidth: 1.5,
+    borderColor: '#f97316', borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 4,
+    marginTop: 6, alignItems: 'center',
+  },
+  distanceLabel: { fontSize: 10, color: '#f97316', fontWeight: '600' },
+  reachDistance: {
+    fontSize: 17, color: '#f97316', fontWeight: '800',
+    letterSpacing: 0.5, lineHeight: 22,
+  },
   smallSiteBtn: {
     backgroundColor: '#ED1C25', paddingHorizontal: 10,
-    paddingVertical: 8, borderRadius: 6, alignItems: 'center',
+    paddingVertical: 8, borderRadius: 6, alignItems: 'center', width: 100,
   },
   smallSiteBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold', textAlign: 'center' },
-  editBtn: {
-    backgroundColor: '#3b82f6', flexDirection: 'row',
-    alignItems: 'center', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6,
-  },
-  editBtnText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
-
-  // ── Map ──
-  mapContainer: {
-    marginHorizontal: 15, marginBottom: 20,
-    borderRadius: 16, overflow: 'hidden',
-    elevation: 4, backgroundColor: '#fff',
-  },
-  map: { width: '100%', height: 280 },
-  liveBadge: {
-    position: 'absolute', top: 10, left: 10, zIndex: 10,
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#fff', paddingHorizontal: 10,
-    paddingVertical: 4, borderRadius: 20, elevation: 5,
-  },
-  liveDot: {
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: '#22c55e', marginRight: 5,
-  },
-  liveText: { fontSize: 11, fontWeight: 'bold', color: '#22c55e' },
-  surveyorMarker: {
-    backgroundColor: '#ED1C25', padding: 8, borderRadius: 50,
-    elevation: 5, borderWidth: 2, borderColor: '#fff',
-  },
-  leadMarker: {
-    backgroundColor: '#22c55e', padding: 8, borderRadius: 50,
-    elevation: 5, borderWidth: 2, borderColor: '#fff',
-  },
-  distanceBar: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 12, paddingHorizontal: 20,
-    backgroundColor: '#fff',
-  },
-  distanceItem: { flex: 1, alignItems: 'center' },
-  distanceValue: { fontSize: 13, fontWeight: 'bold', color: '#333', marginTop: 2 },
-  distanceLabel: { fontSize: 10, color: '#999', marginTop: 1 },
-  distanceDivider: { width: 1, height: 36, backgroundColor: '#eee' },
-
-  // ── No location ──
-  noLocationBox: { alignItems: 'center', paddingVertical: 30, marginHorizontal: 15 },
-  noLocationText: { color: '#bbb', marginTop: 8, fontSize: 13 },
-
-  // ── Modal ──
   modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'center', alignItems: 'center',
   },
-  modalBox: { backgroundColor: '#fff', width: '85%', borderRadius: 12, padding: 20, elevation: 10 },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 16, color: '#222' },
-  modalLabel: { fontSize: 13, color: '#444', marginBottom: 6 },
-  modalInput: {
-    borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
-    padding: 10, fontSize: 13, color: '#333', textAlignVertical: 'top',
+  modalBox: {
+    backgroundColor: '#fff', width: '85%',
+    borderRadius: 16, padding: 20, elevation: 10,
   },
-  modalSaveBtn: { backgroundColor: '#ED1C25', paddingVertical: 13, borderRadius: 8, alignItems: 'center' },
-  modalSaveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
-  iconBtn: {
-  backgroundColor: '#3b82f6',
-  padding: 8,
-  borderRadius: 50,
-  justifyContent: 'center',
-  alignItems: 'center',
-},
 });

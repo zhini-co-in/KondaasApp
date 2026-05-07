@@ -25,7 +25,7 @@ import {
   getDistance, useLocationTracking,
   requestLocationPermissions, requestIOSLocationPermission, isGPSEnabled,
   startHighFrequencyTracking,
-  stopHighFrequencyTracking, 
+  stopHighFrequencyTracking,
 } from '../service/locationService';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -50,21 +50,31 @@ const LeadCard = ({
       cardType === 'unaccepted' && { borderLeftWidth: 4, borderLeftColor: '#ED1C25' },
       cardType === 'completed'  && { borderLeftWidth: 4, borderLeftColor: '#22c55e' },
     ]}>
+
+      {/* Top row */}
       <View style={styles.rowBetween}>
-        <Text style={styles.referred}>
-          Referred by — <Text style={{ fontWeight: 'bold' }}>{item.referredBy || 'N/A'}</Text>
-        </Text>
+        {/* ✅ Referred by — pill badge */}
+        <View style={styles.referredBadge}>
+          <Text style={styles.referredText}>
+            Referred by — <Text style={{ fontWeight: 'bold' }}>{item.referredBy || 'N/A'}</Text>
+          </Text>
+        </View>
         <Text style={styles.date}>{item.date}</Text>
       </View>
 
       <View style={styles.userRow}>
+
+        {/* ✅ Avatar — initials circle */}
         <View style={styles.avatar}>
-          <Ionicons name="person-outline" size={22} color="#aaa" />
+          <Text style={styles.avatarText}>
+            {item.name ? item.name.charAt(0).toUpperCase() : '?'}
+          </Text>
         </View>
+
         <View style={{ flex: 1 }}>
           <Text style={styles.name}>{item.name}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Ionicons name="call-outline" size={12} color="#555" />
+            <Ionicons name="call-outline" size={12} color="#25D366" />
             <Text style={styles.subText}>{item.phone}</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -79,6 +89,7 @@ const LeadCard = ({
           </View>
         </View>
 
+        {/* Unaccepted — accept / reject icons */}
         {cardType === 'unaccepted' && (
           <View style={styles.iconContainer}>
             <TouchableOpacity style={styles.iconBtn} onPress={() => onAccept(item)}>
@@ -90,14 +101,20 @@ const LeadCard = ({
           </View>
         )}
 
+        {/* Accepted — start / resume / completed */}
         {cardType === 'accepted' && (
           <View style={{ alignItems: 'center', gap: 6 }}>
             {item.status === 'completed' ? (
-              <View style={{ backgroundColor: '#22c55e', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}>
-                <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>✓ Completed</Text>
+              // ✅ Completed pill
+              <View style={styles.completedPill}>
+                <Ionicons name="checkmark-circle" size={14} color="#3B6D11" />
+                <Text style={styles.completedPillText}>Completed</Text>
               </View>
             ) : item.status === 'inprogress' ? (
-              <TouchableOpacity style={[styles.startBtn, { backgroundColor: '#f97316' }]} onPress={() => onStart(item.id)}>
+              <TouchableOpacity
+                style={[styles.startBtn, { backgroundColor: '#f97316' }]}
+                onPress={() => onStart(item.id)}
+              >
                 <Ionicons name="play-circle-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
                 <Text style={styles.startBtnText}>Resume</Text>
               </TouchableOpacity>
@@ -110,20 +127,27 @@ const LeadCard = ({
           </View>
         )}
 
+        {/* Completed card type */}
         {cardType === 'completed' && (
-          <View style={{ backgroundColor: '#22c55e', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}>
-            <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>✓ Completed</Text>
+          <View style={styles.completedPill}>
+            <Ionicons name="checkmark-circle" size={14} color="#3B6D11" />
+            <Text style={styles.completedPillText}>Completed</Text>
           </View>
         )}
       </View>
 
-      <View style={[styles.commentRow, { borderTopWidth: 0.5, borderTopColor: '#eee', marginTop: 8, paddingTop: 8 }]}>
+      {/* Comment */}
+      <View style={[styles.commentRow, {
+        borderTopWidth: 0.5, borderTopColor: '#eee', marginTop: 8, paddingTop: 8,
+      }]}>
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 12, fontWeight: '600', color: '#555', marginBottom: 2 }}>Comment</Text>
           <Text numberOfLines={2} style={styles.comment}>{item.comment}</Text>
         </View>
         <TouchableOpacity disabled={!item.comment || item.comment.length <= 200}>
-          <Text style={[styles.seeMore, { color: item.comment && item.comment.length > 200 ? '#1E88E5' : '#ccc' }]}>
+          <Text style={[styles.seeMore, {
+            color: item.comment && item.comment.length > 200 ? '#1E88E5' : '#ccc',
+          }]}>
             See more
           </Text>
         </TouchableOpacity>
@@ -142,32 +166,29 @@ const SurveyerScreen = () => {
 
   const { currentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
 
-  const [isOn, setIsOn]                   = useState(false);
-  const [leads, setLeads]                 = useState([]);       // unaccepted
-  const [acceptedLeads, setAcceptedLeads] = useState([]);       // accepted + inprogress
-  const [completedLeads, setCompletedLeads] = useState([]);     // completed
-  const [leadsLoading, setLeadsLoading]   = useState(false);
-  const [activeFilter, setActiveFilter]   = useState('all');
-  const [isOnline, setIsOnline]           = useState(true);
-  const [pendingCount, setPendingCount]   = useState(0);
+  const [isOn, setIsOn]                     = useState(false);
+  const [leads, setLeads]                   = useState([]);
+  const [acceptedLeads, setAcceptedLeads]   = useState([]);
+  const [completedLeads, setCompletedLeads] = useState([]);
+  const [leadsLoading, setLeadsLoading]     = useState(false);
+  const [activeFilter, setActiveFilter]     = useState('all');
+  const [isOnline, setIsOnline]             = useState(true);
+  const [pendingCount, setPendingCount]     = useState(0);
 
-  // Reject modal
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectComment, setRejectComment]           = useState('');
   const [rejectLeadId, setRejectLeadId]             = useState(null);
 
-  // ── Net watcher — auto sync when net comes back ───────────────────────────
+  // ── Net watcher ───────────────────────────────────────────────────────────
   useEffect(() => {
     const unsub = NetInfo.addEventListener(async (state) => {
       const online = !!state.isConnected && !!state.isInternetReachable;
       setIsOnline(online);
-
       if (online) {
         console.log('[SurveyerScreen] Net restored — running sync queue...');
         const result = await processSyncQueue();
         if (result.synced > 0) {
           console.log(`[SurveyerScreen] Synced ${result.synced} offline actions`);
-          // Refresh from server after sync
           await fetchAndMergeLeads();
         }
         setPendingCount(0);
@@ -217,7 +238,7 @@ const SurveyerScreen = () => {
     }, [route.params?.completedIds])
   );
 
-  // ── Restore state on app open ─────────────────────────────────────────────
+  // ── Restore state ─────────────────────────────────────────────────────────
   const restoreState = async () => {
     const saved = await AsyncStorage.getItem('surveyer_is_on');
     if (saved === 'true') {
@@ -225,15 +246,11 @@ const SurveyerScreen = () => {
       if (Platform.OS === 'android') NativeModules.StartStopService?.startService();
       startTracking();
     }
-
-    // 1. Load local instantly
     await loadLocalLeads();
-
-    // 2. Sync in background
     await fetchAndMergeLeads();
   };
 
-  // ── Load from local storage ───────────────────────────────────────────────
+  // ── Load local ────────────────────────────────────────────────────────────
   const loadLocalLeads = async () => {
     const local = await getAcceptedLeads();
     if (!isMounted.current) return;
@@ -241,7 +258,7 @@ const SurveyerScreen = () => {
     setCompletedLeads(local.filter((l) => l.status === 'completed'));
   };
 
-  // ── Fetch from API + merge ────────────────────────────────────────────────
+  // ── Fetch + merge ─────────────────────────────────────────────────────────
   const fetchAndMergeLeads = async () => {
     setLeadsLoading(true);
     try {
@@ -271,54 +288,44 @@ const SurveyerScreen = () => {
       setCompletedLeads(merged.filter((l) => l.status === 'completed'));
 
     } catch (err) {
-      // Offline — local already loaded
       console.log('[SurveyerScreen] Offline, using local data');
     } finally {
       if (isMounted.current) setLeadsLoading(false);
     }
   };
 
-  // ── Try API (fire-and-forget) ─────────────────────────────────────────────
+  // ── Try API ───────────────────────────────────────────────────────────────
   const tryApi = async (fn) => {
     try { await fn(); }
     catch (e) { console.log('[SurveyerScreen] API failed (offline):', e?.message); }
   };
 
- // ── Accept ────────────────────────────────────────────────────────────────
-const handleAccept = async (item) => {
-  // Local first
-  await saveAcceptedLead(item);
-  setLeads((prev) => prev.filter((l) => l.id !== item.id));
-  setAcceptedLeads((prev) => {
-    if (prev.some((l) => l.id === item.id)) return prev;
-    return [...prev, { ...item, status: 'accepted' }];
-  });
+  // ── Accept ────────────────────────────────────────────────────────────────
+  const handleAccept = async (item) => {
+    await saveAcceptedLead(item);
+    setLeads((prev) => prev.filter((l) => l.id !== item.id));
+    setAcceptedLeads((prev) => {
+      if (prev.some((l) => l.id === item.id)) return prev;
+      return [...prev, { ...item, status: 'accepted' }];
+    });
 
-  // ── Get surveyor number from stored user data ──
-  let surveyorNumber = '';
-  try {
-    const userData = await AsyncStorage.getItem(USER_DATA);
-    const parsed = userData ? JSON.parse(userData) : null;
-    surveyorNumber = parsed?.UserInfo?.phoneNo || '';
-  } catch (e) {
-    console.log('[handleAccept] Failed to get surveyor number:', e?.message);
-  }
+    let surveyorNumber = '';
+    try {
+      const userData = await AsyncStorage.getItem(USER_DATA);
+      const parsed = userData ? JSON.parse(userData) : null;
+      surveyorNumber = parsed?.UserInfo?.phoneNo || '';
+    } catch (e) {
+      console.log('[handleAccept] Failed to get surveyor number:', e?.message);
+    }
 
-  const payload = {
-    mobile: item.phone,
-    surveyorNumber,
+    const payload = { mobile: item.phone, surveyorNumber };
+    await enqueue(`accept_${item.id}`, 'ACCEPT_LEAD', payload);
+
+    if (isOnline) {
+      tryApi(() => API.post('/order/accept', payload));
+      tryApi(() => API.put('/order/updatestatus', { mobile: item.phone, status: 'accepted' }));
+    }
   };
-
-  // Queue for sync (offline support)
-  await enqueue(`accept_${item.id}`, 'ACCEPT_LEAD', payload);
-
-  // Try API immediately if online
-  // Try API immediately if online
-if (isOnline) {
-  tryApi(() => API.post('/order/accept', payload));
-  tryApi(() => API.put('/order/updatestatus', { mobile: item.phone, status: 'accepted' }));
-}
-};
 
   // ── Reject ────────────────────────────────────────────────────────────────
   const handleReject = (id) => {
@@ -353,44 +360,41 @@ if (isOnline) {
   };
 
   // ── Start / Resume ────────────────────────────────────────────────────────
-const handleStart = async (id) => {
+  const handleStart = async (id) => {
     const lead = acceptedLeads.find((l) => l.id === id);
     if (!lead) return;
-     let etaText = 'N/A';
-     let totalMins = 0;
-  const hasLatLong = lead.latitude && lead.longitude;
-  if (currentLocation && hasLatLong) {
-    const distMeters = Math.round(getDistance(
-      currentLocation.latitude, currentLocation.longitude,
-      parseFloat(lead.latitude), parseFloat(lead.longitude)
-    ));
-    const speed = distMeters <= 300 ? 1.4 : 8.3;
-    totalMins = Math.round(distMeters / speed / 60);
-    if (totalMins < 1) {
-      etaText = 'Less than a minute';
-    } else if (totalMins < 60) {
-      etaText = `${totalMins} min`;
-    } else {
-      const hrs = Math.floor(totalMins / 60);
-      const mins = totalMins % 60;
-      etaText = mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`;
-    }
-  }
 
-    // Local first
+    let etaText = 'N/A';
+    let totalMins = 0;
+    const hasLatLong = lead.latitude && lead.longitude;
+    if (currentLocation && hasLatLong) {
+      const distMeters = Math.round(getDistance(
+        currentLocation.latitude, currentLocation.longitude,
+        parseFloat(lead.latitude), parseFloat(lead.longitude)
+      ));
+      const speed = distMeters <= 300 ? 1.4 : 8.3;
+      totalMins = Math.round(distMeters / speed / 60);
+      if (totalMins < 1) {
+        etaText = 'Less than a minute';
+      } else if (totalMins < 60) {
+        etaText = `${totalMins} min`;
+      } else {
+        const hrs = Math.floor(totalMins / 60);
+        const mins = totalMins % 60;
+        etaText = mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`;
+      }
+    }
+
     await updateAcceptedLeadStatus(id, 'inprogress');
     setAcceptedLeads((prev) =>
       prev.map((l) => l.id === id ? { ...l, status: 'inprogress' } : l)
     );
 
-    // Queue
     await enqueue(`status_inprogress_${id}`, 'STATUS_UPDATE', {
       mobile: lead.phone, status: 'inprogress',
     });
 
-    // Try API + notification if online
     if (isOnline) {
-      // ── Get surveyor number ──
       let surveyorNumber = '';
       try {
         const userData = await AsyncStorage.getItem(USER_DATA);
@@ -400,7 +404,6 @@ const handleStart = async (id) => {
         console.log('[handleStart] Failed to get surveyor number:', e?.message);
       }
 
-      // ── இரண்டும் call பண்ணு ──
       tryApi(() => API.put('/order/updatestatus', { mobile: lead.phone, status: 'inprogress' }));
       tryApi(() => API.post('/order/inprogress', { mobile: lead.phone, surveyorNumber }));
 
@@ -416,8 +419,8 @@ const handleStart = async (id) => {
         customerMobile: lead.phone, scenarioType: 1, eta: totalMins,
       });
     }
-startHighFrequencyTracking(() => currentLocation);
 
+    startHighFrequencyTracking(() => currentLocation);
     navigation.navigate('InProgress', { lead: { ...lead, status: 'inprogress' } });
   };
 
@@ -477,58 +480,61 @@ startHighFrequencyTracking(() => currentLocation);
     <View style={{ flex: 1 }}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
-      {/* ── OFF STATE ────────────────────────────────────────────────────── */}
-{!isOn && (
-  <LinearGradient colors={['#F00001', '#B00100']} style={{ flex: 1 }}>
-    <TouchableOpacity style={styles.offLogoutBtn} onPress={handleLogout}>
-      <Ionicons name="log-out-outline" size={28} color="#fff" />
-    </TouchableOpacity>
-    <View style={styles.offToggleBtn}>
-      <Switch
-        trackColor={{ false: '#ffffff88', true: '#fff' }}
-        thumbColor="#ED1C25" value={isOn} onValueChange={handleToggle}
-      />
-    </View>
-
-    <ScrollView
-      contentContainerStyle={{ paddingTop: 60, paddingBottom: 30 }}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={{ alignItems: 'center', paddingTop: 20, marginBottom: 20 }}>
-        <Image source={require('../../assets/images/kondass.png')} style={styles.logo} resizeMode="contain" />
-      </View>
-      <View style={styles.offTextContainer}>
-        <Text style={styles.welcome}>Welcome!</Text>
-        <Text style={styles.message}>Let's get started! Turn on availability!</Text>
-      </View>
-
-      {/* ── Unaccepted Leads (OFF state) ── */}
-      {leads.length > 0 && (
-        <>
-          <View style={[styles.sectionHeader, { marginTop: 10 }]}>
-            <View style={[styles.sectionDot, { backgroundColor: '#fff' }]} />
-            <Text style={[styles.sectionTitle, { color: '#fff' }]}>New Leads</Text>
+      {/* ── OFF STATE ─────────────────────────────────────────────────────── */}
+      {!isOn && (
+        <LinearGradient colors={['#F00001', '#B00100']} style={{ flex: 1 }}>
+          <TouchableOpacity style={styles.offLogoutBtn} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={28} color="#fff" />
+          </TouchableOpacity>
+          <View style={styles.offToggleBtn}>
+            <Switch
+              trackColor={{ false: '#ffffff88', true: '#fff' }}
+              thumbColor="#ED1C25" value={isOn} onValueChange={handleToggle}
+            />
           </View>
-          {leadsLoading
-            ? <ActivityIndicator size="large" color="#fff" style={{ marginTop: 20 }} />
-            : leads.map((item) => (
-                <LeadCard
-                  key={item.id}
-                  item={item}
-                  currentLocation={currentLocation}
-                  cardType="unaccepted"
-                  onAccept={handleAccept}
-                  onReject={handleReject}
-                />
-              ))
-          }
-        </>
-      )}
-    </ScrollView>
-  </LinearGradient>
-)}
 
-      {/* ── ON STATE ─────────────────────────────────────────────────────── */}
+          <ScrollView
+            contentContainerStyle={{ paddingTop: 60, paddingBottom: 30 }}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={{ alignItems: 'center', paddingTop: 20, marginBottom: 20 }}>
+              <Image
+                source={require('../../assets/images/kondass.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            </View>
+            <View style={styles.offTextContainer}>
+              <Text style={styles.welcome}>Welcome!</Text>
+              <Text style={styles.message}>Let's get started! Turn on availability!</Text>
+            </View>
+
+            {leads.length > 0 && (
+              <>
+                <View style={[styles.sectionHeader, { marginTop: 10 }]}>
+                  <View style={[styles.sectionDot, { backgroundColor: '#fff' }]} />
+                  <Text style={[styles.sectionTitle, { color: '#fff' }]}>New Leads</Text>
+                </View>
+                {leadsLoading
+                  ? <ActivityIndicator size="large" color="#fff" style={{ marginTop: 20 }} />
+                  : leads.map((item) => (
+                      <LeadCard
+                        key={item.id}
+                        item={item}
+                        currentLocation={currentLocation}
+                        cardType="unaccepted"
+                        onAccept={handleAccept}
+                        onReject={handleReject}
+                      />
+                    ))
+                }
+              </>
+            )}
+          </ScrollView>
+        </LinearGradient>
+      )}
+
+      {/* ── ON STATE ──────────────────────────────────────────────────────── */}
       {isOn && (
         <>
           <View style={styles.fixedTopBar}>
@@ -541,11 +547,10 @@ startHighFrequencyTracking(() => currentLocation);
             />
           </View>
 
-          {/* Offline banner */}
           {!isOnline && (
             <View style={styles.offlineBanner}>
               <Ionicons name="cloud-offline-outline" size={14} color="#fff" style={{ marginRight: 6 }} />
-              <Text style={styles.offlineBannerText}>Offline </Text>
+              <Text style={styles.offlineBannerText}>Offline</Text>
             </View>
           )}
 
@@ -559,13 +564,17 @@ startHighFrequencyTracking(() => currentLocation);
               <Text style={styles.sectionTitle}>Leads - New</Text>
             </View>
 
-            {leadsLoading && <ActivityIndicator size="large" color="#ED1C25" style={{ marginTop: 30 }} />}
+            {leadsLoading && (
+              <ActivityIndicator size="large" color="#ED1C25" style={{ marginTop: 30 }} />
+            )}
             {!leadsLoading && leads.length === 0 && (
               <Text style={styles.emptyText}>No new leads available.</Text>
             )}
             {!leadsLoading && leads.map((item) => (
-              <LeadCard key={item.id} item={item} currentLocation={currentLocation}
-                cardType="unaccepted" onAccept={handleAccept} onReject={handleReject} />
+              <LeadCard
+                key={item.id} item={item} currentLocation={currentLocation}
+                cardType="unaccepted" onAccept={handleAccept} onReject={handleReject}
+              />
             ))}
 
             {/* Accepted / Completed */}
@@ -573,7 +582,9 @@ startHighFrequencyTracking(() => currentLocation);
               <>
                 <View style={[styles.sectionHeader, { justifyContent: 'space-between' }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <View style={[styles.sectionDot, { backgroundColor: activeFilter === 'completed' ? '#22c55e' : '#fd9104' }]} />
+                    <View style={[styles.sectionDot, {
+                      backgroundColor: activeFilter === 'completed' ? '#22c55e' : '#fd9104',
+                    }]} />
                     <Text style={styles.sectionTitle}>
                       {activeFilter === 'completed' ? 'Leads - Completed' : 'Leads - Accepted'}
                     </Text>
@@ -581,15 +592,27 @@ startHighFrequencyTracking(() => currentLocation);
                   <View style={{ flexDirection: 'row', gap: 6 }}>
                     <TouchableOpacity
                       onPress={() => setActiveFilter('all')}
-                      style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12, backgroundColor: activeFilter === 'all' ? '#ED1C25' : '#e5e7eb' }}
+                      style={{
+                        paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12,
+                        backgroundColor: activeFilter === 'all' ? '#ED1C25' : '#e5e7eb',
+                      }}
                     >
-                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: activeFilter === 'all' ? '#fff' : '#555' }}>All</Text>
+                      <Text style={{
+                        fontSize: 12, fontWeight: 'bold',
+                        color: activeFilter === 'all' ? '#fff' : '#555',
+                      }}>All</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => setActiveFilter('completed')}
-                      style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12, backgroundColor: activeFilter === 'completed' ? '#22c55e' : '#e5e7eb' }}
+                      style={{
+                        paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12,
+                        backgroundColor: activeFilter === 'completed' ? '#22c55e' : '#e5e7eb',
+                      }}
                     >
-                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: activeFilter === 'completed' ? '#fff' : '#555' }}>Completed</Text>
+                      <Text style={{
+                        fontSize: 12, fontWeight: 'bold',
+                        color: activeFilter === 'completed' ? '#fff' : '#555',
+                      }}>Completed</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -597,8 +620,10 @@ startHighFrequencyTracking(() => currentLocation);
                 {activeFilter === 'all' && (
                   <>
                     {acceptedLeads.map((item) => (
-                      <LeadCard key={item.id} item={item} currentLocation={currentLocation}
-                        cardType="accepted" onStart={handleStart} />
+                      <LeadCard
+                        key={item.id} item={item} currentLocation={currentLocation}
+                        cardType="accepted" onStart={handleStart}
+                      />
                     ))}
                     {completedLeads.length > 0 && (
                       <>
@@ -609,7 +634,10 @@ startHighFrequencyTracking(() => currentLocation);
                           </View>
                         </View>
                         {completedLeads.map((item) => (
-                          <LeadCard key={item.id} item={item} currentLocation={currentLocation} cardType="completed" />
+                          <LeadCard
+                            key={item.id} item={item}
+                            currentLocation={currentLocation} cardType="completed"
+                          />
                         ))}
                       </>
                     )}
@@ -622,7 +650,10 @@ startHighFrequencyTracking(() => currentLocation);
                 {activeFilter === 'completed' && (
                   completedLeads.length > 0
                     ? completedLeads.map((item) => (
-                        <LeadCard key={item.id} item={item} currentLocation={currentLocation} cardType="completed" />
+                        <LeadCard
+                          key={item.id} item={item}
+                          currentLocation={currentLocation} cardType="completed"
+                        />
                       ))
                     : <Text style={styles.emptyText}>No completed leads yet.</Text>
                 )}
@@ -632,9 +663,11 @@ startHighFrequencyTracking(() => currentLocation);
         </>
       )}
 
-      {/* ── Reject Modal ─────────────────────────────────────────────────── */}
-      <Modal visible={rejectModalVisible} transparent animationType="fade"
-        onRequestClose={() => setRejectModalVisible(false)}>
+      {/* ── Reject Modal ──────────────────────────────────────────────────── */}
+      <Modal
+        visible={rejectModalVisible} transparent animationType="fade"
+        onRequestClose={() => setRejectModalVisible(false)}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Reject Reason</Text>
@@ -650,11 +683,18 @@ startHighFrequencyTracking(() => currentLocation);
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <TouchableOpacity
                 style={[styles.modalSaveBtn, { flex: 1, backgroundColor: '#aaa' }]}
-                onPress={() => { setRejectModalVisible(false); setRejectLeadId(null); setRejectComment(''); }}
+                onPress={() => {
+                  setRejectModalVisible(false);
+                  setRejectLeadId(null);
+                  setRejectComment('');
+                }}
               >
                 <Text style={styles.modalSaveBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalSaveBtn, { flex: 1 }]} onPress={confirmReject}>
+              <TouchableOpacity
+                style={[styles.modalSaveBtn, { flex: 1 }]}
+                onPress={confirmReject}
+              >
                 <Text style={styles.modalSaveBtnText}>Save</Text>
               </TouchableOpacity>
             </View>
@@ -673,37 +713,124 @@ export default SurveyerScreen;
 const styles = StyleSheet.create({
   logo: { width: 200, height: 100 },
   offLogoutBtn: { position: 'absolute', top: 55, left: 20, zIndex: 10 },
-  offToggleBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10, backgroundColor: '#fff', borderRadius: 20, paddingHorizontal: 4, paddingVertical: 2, elevation: 4 },
+  offToggleBtn: {
+    position: 'absolute', top: 50, right: 20, zIndex: 10,
+    backgroundColor: '#fff', borderRadius: 20,
+    paddingHorizontal: 4, paddingVertical: 2, elevation: 4,
+  },
   offTextContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   welcome: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
   message: { marginTop: 10, color: '#ffffffcc', textAlign: 'center', paddingHorizontal: 30 },
-  fixedTopBar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 50, paddingBottom: 12, backgroundColor: '#fff', elevation: 6 },
-  offlineBanner: { position: 'absolute', top: 90, left: 0, right: 0, zIndex: 99, backgroundColor: '#f97316', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 },
+  fixedTopBar: {
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingTop: 50, paddingBottom: 12,
+    backgroundColor: '#fff', elevation: 6,
+  },
+  offlineBanner: {
+    position: 'absolute', top: 90, left: 0, right: 0, zIndex: 99,
+    backgroundColor: '#f97316', flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 8,
+  },
   offlineBannerText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingTop: 16, paddingBottom: 6 },
+  sectionHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 15, paddingTop: 16, paddingBottom: 6,
+  },
   sectionDot: { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
   sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#333' },
-  emptyText: { textAlign: 'center', marginTop: 40, color: '#999', fontSize: 14, paddingHorizontal: 30 },
-  card: { backgroundColor: '#fff', marginHorizontal: 15, marginBottom: 12, borderRadius: 10, padding: 12, elevation: 3 },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between' },
-  referred: { fontSize: 12, color: '#E53935' },
-  date: { fontSize: 12, color: '#888' },
+  emptyText: {
+    textAlign: 'center', marginTop: 40,
+    color: '#999', fontSize: 14, paddingHorizontal: 30,
+  },
+
+  // ── Card ──
+  card: {
+    backgroundColor: '#fff', marginHorizontal: 15, marginBottom: 12,
+    borderRadius: 12, padding: 14, elevation: 3,
+  },
+  rowBetween: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+  },
+
+  // ✅ Referred by pill badge
+  referredBadge: {
+    backgroundColor: '#FCEBEB',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
+  referredText: {
+    fontSize: 11, color: '#A32D2D',
+  },
+
+  date: { fontSize: 11, color: '#888' },
   userRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#f0f0f0', marginRight: 10, justifyContent: 'center', alignItems: 'center' },
+
+  // ✅ Avatar — initials circle
+  avatar: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: '#E6F1FB', marginRight: 10,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: 16, fontWeight: '600', color: '#185FA5',
+  },
+
   name: { fontSize: 16, fontWeight: 'bold' },
   subText: { fontSize: 12, color: '#555' },
   iconContainer: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   iconBtn: { padding: 4 },
-  commentRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 8 },
+  commentRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'flex-start', marginTop: 8,
+  },
   comment: { flex: 1, fontSize: 12, color: '#555' },
   seeMore: { fontSize: 12 },
-  startBtn: { backgroundColor: '#22c55e', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+
+  // ✅ Completed pill
+  completedPill: {
+    backgroundColor: '#EAF3DE',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  completedPillText: {
+    color: '#3B6D11', fontSize: 12, fontWeight: '600',
+  },
+
+  startBtn: {
+    backgroundColor: '#22c55e', flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
+  },
   startBtnText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
-  modalBox: { backgroundColor: '#fff', width: '85%', borderRadius: 12, padding: 20, elevation: 10 },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 16, color: '#222' },
+
+  // ── Modal ──
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  modalBox: {
+    backgroundColor: '#fff', width: '85%',
+    borderRadius: 12, padding: 20, elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 18, fontWeight: 'bold',
+    textAlign: 'center', marginBottom: 16, color: '#222',
+  },
   modalLabel: { fontSize: 13, color: '#444', marginBottom: 6 },
-  modalInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 10, fontSize: 13, color: '#333', textAlignVertical: 'top', minHeight: 90, marginBottom: 16 },
-  modalSaveBtn: { backgroundColor: '#ED1C25', paddingVertical: 13, borderRadius: 8, alignItems: 'center' },
+  modalInput: {
+    borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
+    padding: 10, fontSize: 13, color: '#333',
+    textAlignVertical: 'top', minHeight: 90, marginBottom: 16,
+  },
+  modalSaveBtn: {
+    backgroundColor: '#ED1C25', paddingVertical: 13,
+    borderRadius: 8, alignItems: 'center',
+  },
   modalSaveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
 });
