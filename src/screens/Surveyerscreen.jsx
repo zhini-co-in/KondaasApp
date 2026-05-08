@@ -224,19 +224,24 @@ const SurveyerScreen = () => {
 
   // ── Focus — completed leads from InProgress ───────────────────────────────
   useFocusEffect(
-    React.useCallback(() => {
-      const completedIds = route.params?.completedIds;
-      if (!completedIds || completedIds.length === 0) return;
-      navigation.setParams({ completedIds: null });
+  React.useCallback(() => {
+    const completedIds = route.params?.completedIds;
+    if (!completedIds || completedIds.length === 0) return;
+    navigation.setParams({ completedIds: null });
 
-      setAcceptedLeads((prev) => {
-        const toMove = prev.filter((l) => completedIds.includes(l.id));
-        if (toMove.length === 0) return prev;
-        setCompletedLeads((c) => [...c, ...toMove.map((l) => ({ ...l, status: 'completed' }))]);
-        return prev.filter((l) => !completedIds.includes(l.id));
-      });
-    }, [route.params?.completedIds])
-  );
+    // ✅ acceptedLeads-ஐ directly read பண்ணாம, functional update use பண்ணு
+    setAcceptedLeads((prev) => {
+      const toMove = prev.filter((l) => completedIds.includes(l.id));
+      if (toMove.length > 0) {
+        setCompletedLeads((c) => [
+          ...c.filter((cl) => !toMove.some((m) => m.id === cl.id)), // duplicate avoid
+          ...toMove.map((l) => ({ ...l, status: 'completed' })),
+        ]);
+      }
+      return prev.filter((l) => !completedIds.includes(l.id));
+    });
+  }, [route.params?.completedIds])
+);
 
   // ── Restore state ─────────────────────────────────────────────────────────
   const restoreState = async () => {

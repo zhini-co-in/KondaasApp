@@ -4,12 +4,15 @@ import {
   ScrollView, Modal, Alert, Dimensions, Linking
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { SCREEN_NAMES } from '../constants/screenNames';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useLocationTracking, getDistance, stopHighFrequencyTracking } from '../service/locationService';
 import API from '../api/api1';
 import { USER_DATA } from '../service/localStorage';
 import { updateAcceptedLeadStatus } from '../service/localLeadsStorage';
+import { enqueue } from '../service/syncQueue';
 
 const { width } = Dimensions.get('window');
 
@@ -60,8 +63,6 @@ const LeadCard = ({
 
   return (
     <View style={styles.card}>
-
-      {/* Top row */}
       <View style={styles.rowBetween}>
         <View style={styles.referredBadge}>
           <Text style={styles.referredText}>
@@ -71,9 +72,7 @@ const LeadCard = ({
         <Text style={styles.date}>{item.date}</Text>
       </View>
 
-      {/* User info row */}
       <View style={styles.userRow}>
-
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
             {item.name ? item.name.charAt(0).toUpperCase() : '?'}
@@ -101,7 +100,6 @@ const LeadCard = ({
           </View>
         </View>
 
-        {/* Right side — status buttons */}
         {item.status === 'completed' ? (
           <View style={styles.completedPill}>
             <Ionicons name="checkmark-circle" size={14} color="#3B6D11" />
@@ -110,13 +108,9 @@ const LeadCard = ({
 
         ) : (item.manualSiteEnabled || (hasLatLong && withinRange)) ? (
           <View style={{ alignItems: 'center', gap: 5 }}>
-            <TouchableOpacity
-              style={styles.smallSiteBtn}
-              onPress={() => onSiteObservation(item)}
-            >
+            <TouchableOpacity style={styles.smallSiteBtn} onPress={() => onSiteObservation(item)}>
               <Text style={styles.smallSiteBtnText}>Site{'\n'}Observation</Text>
             </TouchableOpacity>
-
             <TouchableOpacity
               style={[styles.commonBtn, { backgroundColor: '#3b82f6' }]}
               onPress={() => onEdit(item)}
@@ -124,7 +118,6 @@ const LeadCard = ({
               <Ionicons name="create-outline" size={13} color="#fff" style={{ marginRight: 3 }} />
               <Text style={styles.commonBtnText}>Edit</Text>
             </TouchableOpacity>
-
             <TouchableOpacity
               style={[styles.commonBtn, { backgroundColor: '#22c55e' }]}
               onPress={() => onMarkCompleted(item)}
@@ -177,7 +170,6 @@ const LeadCard = ({
         )}
       </View>
 
-      {/* Comment */}
       <View style={[styles.commentRow, {
         borderTopWidth: 0.5, borderTopColor: '#eee', marginTop: 8, paddingTop: 8,
       }]}>
@@ -209,25 +201,34 @@ const InProgressScreen = () => {
   const [inProgressLeads, setInProgressLeads] = useState(
     lead ? [{ ...lead, id: lead.id || lead._id }] : []
   );
+  const [reachedModalVisible, setReachedModalVisible]   = useState(false);
+  const [selectedLead, setSelectedLead]                 = useState(null);
+  const [completedModalVisible, setCompletedModalVisible] = useState(false);
+  const [completedTargetLead, setCompletedTargetLead]   = useState(null);
+  const [isOnline, setIsOnline]                         = useState(true);
+
+  const { currentLocation, setCurrentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
+
+  // ✅ Net watcher
+  useEffect(() => {
+    const unsub = NetInfo.addEventListener((state) => {
+      setIsOnline(!!state.isConnected && !!state.isInternetReachable);
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     if (completedLeadId) {
       setInProgressLeads((prev) =>
-        prev.map((l) =>
-          l.id === completedLeadId ? { ...l, status: 'completed' } : l
-        )
+        prev.map((l) => l.id === completedLeadId ? { ...l, status: 'completed' } : l)
       );
       stopHighFrequencyTracking();
     }
   }, [completedLeadId]);
 
-  const { currentLocation, setCurrentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
-
   useEffect(() => {
     AsyncStorage.getItem('last_known_location').then(val => {
-      if (val && isMounted.current) {
-        setCurrentLocation(JSON.parse(val));
-      }
+      if (val && isMounted.current) setCurrentLocation(JSON.parse(val));
     });
     startTracking();
     return () => {
@@ -243,57 +244,35 @@ const InProgressScreen = () => {
       if (!completedId) return;
       navigation.setParams({ completedLeadId: null });
       setInProgressLeads((prev) =>
-        prev.map((l) =>
-          l.id === completedId ? { ...l, status: 'completed' } : l
-        )
+        prev.map((l) => l.id === completedId ? { ...l, status: 'completed' } : l)
       );
       stopHighFrequencyTracking();
     }, [route.params?.completedLeadId])
   );
 
-  const [reachedModalVisible, setReachedModalVisible] = useState(false);
-  const [selectedLead, setSelectedLead] = useState(null);
-
-  // ✅ Custom Completed Confirmation Modal state
-  const [completedModalVisible, setCompletedModalVisible] = useState(false);
-  const [completedTargetLead, setCompletedTargetLead] = useState(null);
-
-  // ── Handlers ─────────────────────────────────────────────────────────────
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleManualEnable = async (item) => {
     setInProgressLeads((prev) =>
       prev.map((l) => (l.id === item.id ? { ...l, manualSiteEnabled: true } : l))
     );
-
     let surveyorNumber = '';
     try {
       const userData = await AsyncStorage.getItem(USER_DATA);
       const parsed = userData ? JSON.parse(userData) : null;
       surveyorNumber = parsed?.UserInfo?.phoneNo || '';
-    } catch (e) {
-      console.log('[handleManualEnable] Failed to get surveyor number:', e?.message);
-    }
-
+    } catch (e) {}
     try {
-      await API.post('/notification/trigger', {
-        surveyorNumber,
-        customerMobile: item.phone,
-        scenarioType: 3,
-      });
-      console.log('[handleManualEnable] Notification sent ✅');
-    } catch (e) {
-      console.log('[handleManualEnable] Notification error:', e?.message);
-    }
-
+      await API.post('/notification/trigger', { surveyorNumber, customerMobile: item.phone, scenarioType: 3 });
+    } catch (e) {}
     setSelectedLead({ ...item, id: item.id || item._id });
     setReachedModalVisible(true);
   };
 
   const handleSiteObservation = (item) => {
-    const leadToPass = { ...item, id: item.id || item._id };
     navigation.navigate('Form', {
       category: 'site_observation',
-      lead: leadToPass,
+      lead: { ...item, id: item.id || item._id },
     });
   };
 
@@ -305,58 +284,68 @@ const InProgressScreen = () => {
     });
   };
 
-  // ✅ Show custom completed modal
   const handleMarkCompleted = (item) => {
     setCompletedTargetLead(item);
     setCompletedModalVisible(true);
   };
 
-const confirmMarkCompleted = async () => {
+  const confirmMarkCompleted = async () => {
   const item = completedTargetLead;
   const leadId = item.id || item._id;
 
   setCompletedModalVisible(false);
 
-  try {
-    // ✅ Update order status
-    await API.put('/order/updatestatus', {
-      mobile: item.phone,
-      status: 'completed',
-    });
-
-    // ✅ Trigger completion notification
-    await API.post('https://board.trisentrix.com/notification/trigger', {
-      customerMobile: item.phone,
-      scenarioType: 4,
-    });
-
-    // ✅ Local storage update
-    await updateAcceptedLeadStatus(leadId, 'completed');
-
-    // ✅ UI update
-    setInProgressLeads((prev) =>
-      prev.map((l) =>
-        l.id === leadId
-          ? { ...l, status: 'completed' }
-          : l
-      )
+  // Step 1 — Local update
+  await updateAcceptedLeadStatus(leadId, 'completed');
+  
+  setInProgressLeads((prev) => {
+    const updated = prev.map((l) =>
+      l.id === leadId ? { ...l, status: 'completed' } : l
     );
-
     stopHighFrequencyTracking();
 
-    console.log('Completed notification sent ✅');
+    // ✅ Updated list-ல் இருந்து completedIds எடு, then navigate
+    const completedIds = updated
+      .filter((l) => l.status === 'completed')
+      .map((l) => l.id);
 
-  } catch (err) {
-    console.log('Completed notification error:', err);
+    // ✅ Automatic-ஆ SurveyerScreen-க்கு போ
+setTimeout(() => {
+  navigation.navigate(SCREEN_NAMES.SURVEYER_SCREEN, { completedIds });
+}, 300);
 
-    Alert.alert(
-      'Oops!',
-      'Something went wrong. Please try again.'
-    );
+    return updated;
+  });
+
+  // Step 2 — API / Queue (unchanged)
+  if (isOnline) {
+    try {
+      await API.put('/order/updatestatus', { mobile: item.phone, status: 'completed' });
+    } catch (err) {
+      await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', {
+        mobile: item.phone, status: 'completed',
+      });
+    }
+    try {
+      await API.post('/notification/trigger', {
+        customerMobile: item.phone, scenarioType: 4,
+      });
+    } catch (err) {
+      await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
+        customerMobile: item.phone, scenarioType: 4,
+      });
+    }
+  } else {
+    await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', {
+      mobile: item.phone, status: 'completed',
+    });
+    await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
+      customerMobile: item.phone, scenarioType: 4,
+    });
   }
 };
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <View style={{ flex: 1, backgroundColor: '#F5F5F5' }}>
 
@@ -364,14 +353,10 @@ const confirmMarkCompleted = async () => {
         <TouchableOpacity onPress={() => {
           const hasIncomplete = inProgressLeads.some(l => l.status !== 'completed');
           if (hasIncomplete) {
-            Alert.alert(
-              'Hold on!',
-              'You have an unsubmitted form. Are you sure you want to leave?',
-              [
-                { text: 'Stay', style: 'cancel' },
-                { text: 'Leave Anyway', onPress: () => navigation.goBack() },
-              ]
-            );
+            Alert.alert('Hold on!', 'You have an unsubmitted form. Are you sure you want to leave?', [
+              { text: 'Stay', style: 'cancel' },
+              { text: 'Leave Anyway', onPress: () => navigation.goBack() },
+            ]);
           } else {
             navigation.goBack();
           }
@@ -381,6 +366,14 @@ const confirmMarkCompleted = async () => {
         <Text style={styles.headerTitle}>Lead - Inprogress</Text>
         <View style={{ width: 24 }} />
       </View>
+
+      {/* ✅ Offline banner */}
+      {!isOnline && (
+        <View style={styles.offlineBanner}>
+          <Ionicons name="cloud-offline-outline" size={14} color="#fff" style={{ marginRight: 6 }} />
+          <Text style={styles.offlineBannerText}>Offline — changes will sync when connected</Text>
+        </View>
+      )}
 
       <ScrollView contentContainerStyle={{ paddingBottom: 30 }}>
         <View style={{ padding: 15, paddingTop: 20 }}>
@@ -400,49 +393,27 @@ const confirmMarkCompleted = async () => {
       </ScrollView>
 
       {/* ── Reached Modal ── */}
-      <Modal
-        visible={reachedModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setReachedModalVisible(false)}
-      >
+      <Modal visible={reachedModalVisible} transparent animationType="fade"
+        onRequestClose={() => setReachedModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalBox, { alignItems: 'center', paddingVertical: 28 }]}>
-            <View style={{
-              backgroundColor: '#fef2f2', borderRadius: 50,
-              padding: 14, marginBottom: 14,
-            }}>
+            <View style={{ backgroundColor: '#fef2f2', borderRadius: 50, padding: 14, marginBottom: 14 }}>
               <Ionicons name="location" size={32} color="#ED1C25" />
             </View>
-            <Text style={{
-              fontSize: 17, fontWeight: 'bold', color: '#222',
-              marginBottom: 4, textAlign: 'center',
-            }}>
+            <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#222', marginBottom: 4, textAlign: 'center' }}>
               You've Reached the Location!
             </Text>
             <Text style={{ fontSize: 13, color: '#888', marginBottom: 24, textAlign: 'center' }}>
               Do you want to start Site Observation?
             </Text>
             <TouchableOpacity
-              style={{
-                backgroundColor: '#ED1C25', width: '100%',
-                paddingVertical: 13, borderRadius: 8,
-                alignItems: 'center', marginBottom: 10,
-              }}
-              onPress={() => {
-                setReachedModalVisible(false);
-                handleSiteObservation(selectedLead);
-              }}
+              style={{ backgroundColor: '#ED1C25', width: '100%', paddingVertical: 13, borderRadius: 8, alignItems: 'center', marginBottom: 10 }}
+              onPress={() => { setReachedModalVisible(false); handleSiteObservation(selectedLead); }}
             >
-              <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>
-                🏗️  Start Site Observation
-              </Text>
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>🏗️  Start Site Observation</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={{
-                backgroundColor: '#f1f1f1', width: '100%',
-                paddingVertical: 13, borderRadius: 8, alignItems: 'center',
-              }}
+              style={{ backgroundColor: '#f1f1f1', width: '100%', paddingVertical: 13, borderRadius: 8, alignItems: 'center' }}
               onPress={() => setReachedModalVisible(false)}
             >
               <Text style={{ color: '#555', fontSize: 14, fontWeight: '600' }}>Cancel</Text>
@@ -451,79 +422,53 @@ const confirmMarkCompleted = async () => {
         </View>
       </Modal>
 
-      {/* ── ✅ Custom Completed Confirmation Modal ── */}
-      <Modal
-        visible={completedModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCompletedModalVisible(false)}
-      >
+      {/* ── Completed Confirmation Modal ── */}
+      <Modal visible={completedModalVisible} transparent animationType="fade"
+        onRequestClose={() => setCompletedModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalBox, { alignItems: 'center', paddingVertical: 30 }]}>
-
-            {/* Green check icon */}
-            <View style={{
-              backgroundColor: '#f0fdf4', borderRadius: 50,
-              padding: 16, marginBottom: 16,
-            }}>
+            <View style={{ backgroundColor: '#f0fdf4', borderRadius: 50, padding: 16, marginBottom: 16 }}>
               <Ionicons name="checkmark-circle" size={40} color="#22c55e" />
             </View>
-
-            <Text style={{
-              fontSize: 18, fontWeight: 'bold', color: '#111',
-              marginBottom: 6, textAlign: 'center',
-            }}>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#111', marginBottom: 6, textAlign: 'center' }}>
               Wrap It Up?
             </Text>
-
-            <Text style={{
-              fontSize: 13, color: '#666',
-              marginBottom: 6, textAlign: 'center', lineHeight: 20,
-            }}>
+            <Text style={{ fontSize: 13, color: '#666', marginBottom: 6, textAlign: 'center', lineHeight: 20 }}>
               You're about to mark
             </Text>
-
-            <Text style={{
-              fontSize: 14, fontWeight: '700', color: '#22c55e',
-              marginBottom: 6, textAlign: 'center',
-            }}>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#22c55e', marginBottom: 6, textAlign: 'center' }}>
               {completedTargetLead?.name}
             </Text>
-
-            <Text style={{
-              fontSize: 13, color: '#666',
-              marginBottom: 26, textAlign: 'center', lineHeight: 20,
-            }}>
+            <Text style={{ fontSize: 13, color: '#666', marginBottom: 20, textAlign: 'center', lineHeight: 20 }}>
               as completed. This means the job is done{'\n'}and the lead will be closed. ✅
             </Text>
 
-            {/* Yes button */}
+            {/* ✅ Offline warning inside modal */}
+            {!isOnline && (
+              <View style={{
+                backgroundColor: '#fff7ed', borderRadius: 8,
+                paddingHorizontal: 12, paddingVertical: 8,
+                marginBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 6,
+              }}>
+                <Ionicons name="cloud-offline-outline" size={14} color="#f97316" />
+                <Text style={{ fontSize: 12, color: '#f97316', fontWeight: '600', flex: 1 }}>
+                  You're offline. This will sync when connected.
+                </Text>
+              </View>
+            )}
+
             <TouchableOpacity
-              style={{
-                backgroundColor: '#22c55e', width: '100%',
-                paddingVertical: 13, borderRadius: 8,
-                alignItems: 'center', marginBottom: 10,
-              }}
+              style={{ backgroundColor: '#22c55e', width: '100%', paddingVertical: 13, borderRadius: 8, alignItems: 'center', marginBottom: 10 }}
               onPress={confirmMarkCompleted}
             >
-              <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>
-                Yes, Mark as Completed 🎉
-              </Text>
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>Yes, Mark as Completed 🎉</Text>
             </TouchableOpacity>
-
-            {/* Not yet button */}
             <TouchableOpacity
-              style={{
-                backgroundColor: '#f1f1f1', width: '100%',
-                paddingVertical: 13, borderRadius: 8, alignItems: 'center',
-              }}
+              style={{ backgroundColor: '#f1f1f1', width: '100%', paddingVertical: 13, borderRadius: 8, alignItems: 'center' }}
               onPress={() => setCompletedModalVisible(false)}
             >
-              <Text style={{ color: '#555', fontSize: 14, fontWeight: '600' }}>
-                Not Yet
-              </Text>
+              <Text style={{ color: '#555', fontSize: 14, fontWeight: '600' }}>Not Yet</Text>
             </TouchableOpacity>
-
           </View>
         </View>
       </Modal>
@@ -544,13 +489,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff', elevation: 4,
   },
   headerTitle: { fontSize: 17, fontWeight: 'bold', color: '#333' },
+  offlineBanner: {
+    backgroundColor: '#f97316', flexDirection: 'row',
+    alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8,
+  },
+  offlineBannerText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   card: {
     backgroundColor: '#fff', marginBottom: 12,
     borderRadius: 12, padding: 14, elevation: 3,
   },
-  rowBetween: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-  },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   referredBadge: {
     backgroundColor: '#FCEBEB', paddingHorizontal: 8,
     paddingVertical: 3, borderRadius: 20, alignSelf: 'flex-start',
@@ -588,10 +536,7 @@ const styles = StyleSheet.create({
     marginTop: 6, alignItems: 'center',
   },
   distanceLabel: { fontSize: 10, color: '#f97316', fontWeight: '600' },
-  reachDistance: {
-    fontSize: 17, color: '#f97316', fontWeight: '800',
-    letterSpacing: 0.5, lineHeight: 22,
-  },
+  reachDistance: { fontSize: 17, color: '#f97316', fontWeight: '800', letterSpacing: 0.5, lineHeight: 22 },
   smallSiteBtn: {
     backgroundColor: '#ED1C25', paddingHorizontal: 10,
     paddingVertical: 8, borderRadius: 6, alignItems: 'center', width: 100,
@@ -601,8 +546,5 @@ const styles = StyleSheet.create({
     flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'center', alignItems: 'center',
   },
-  modalBox: {
-    backgroundColor: '#fff', width: '85%',
-    borderRadius: 16, padding: 20, elevation: 10,
-  },
+  modalBox: { backgroundColor: '#fff', width: '85%', borderRadius: 16, padding: 20, elevation: 10 },
 });

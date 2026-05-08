@@ -179,9 +179,6 @@ export const getUnsyncedForms = async () => {
     .map(([leadId, v]) => ({ leadId, ...v }));
 };
 
-/**
- * ஒரு lead-ஓட saved form data return பண்ணு (draft restore-க்கு).
- */
 export const getSavedFormData = async (leadId) => {
   const all = (await _load(FORMS_KEY)) ?? {};
   return all[leadId]?.formData ?? null;
