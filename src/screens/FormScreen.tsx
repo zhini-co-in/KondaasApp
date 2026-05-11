@@ -334,7 +334,7 @@ const FormScreen = ({
         {
           name: 'InProgress',
           params: {
-            lead: { ...lead }, // ✅ status மாத்தல — as-is pass பண்ணு
+            lead: { ...lead, manualSiteEnabled: true }, // ✅ status மாத்தல — as-is pass பண்ணு
             completedLeadId: null, // ✅ null — auto-complete trigger ஆகாது
           },
         },

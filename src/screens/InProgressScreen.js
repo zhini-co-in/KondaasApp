@@ -237,6 +237,18 @@ const InProgressScreen = () => {
       stopHighFrequencyTracking();
     };
   }, []);
+  // route.params.lead மாறும்போது state sync பண்ணு
+useEffect(() => {
+  const updatedLead = route.params?.lead;
+  if (!updatedLead) return;
+  setInProgressLeads((prev) =>
+    prev.map((l) =>
+      l.id === (updatedLead.id || updatedLead._id)
+        ? { ...l, manualSiteEnabled: updatedLead.manualSiteEnabled ?? l.manualSiteEnabled }
+        : l
+    )
+  );
+}, [route.params?.lead]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -249,6 +261,7 @@ const InProgressScreen = () => {
       stopHighFrequencyTracking();
     }, [route.params?.completedLeadId])
   );
+  
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -304,7 +317,6 @@ const InProgressScreen = () => {
     );
     stopHighFrequencyTracking();
 
-    // ✅ Updated list-ல் இருந்து completedIds எடு, then navigate
     const completedIds = updated
       .filter((l) => l.status === 'completed')
       .map((l) => l.id);
