@@ -12,18 +12,15 @@ import {
      TextInput,
      Alert,
 } from "react-native";
-import firestore from "@react-native-firebase/firestore";
-import CryptoJS from "crypto-js";
+import NetInfo from "@react-native-community/netinfo";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
-import { fetchStationList } from "../api/api";
 import Loader from "../components/Loader";
-import { getStorageData, USER_DATA } from "../service/localStorage";
+import { getStorageData, storeData, USER_DATA } from "../service/localStorage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import LinearGradient from "react-native-linear-gradient";
-import SolarParseUtil from '../utils/SolarParseUtil';
-import { saveMailCredentials } from "../service/mailCredentials";
+import { saveMailCredentials, fetchStationList } from "../api/api1";
 const ProfileScreen = ({ route, navigation }) => {
     const { stationId } = route.params || {};
     const [showLogoutPopup, setShowLogoutPopup] = useState(false);
@@ -34,89 +31,139 @@ const ProfileScreen = ({ route, navigation }) => {
 const [email, setEmail] = useState("");
 const [password, setPassword] = useState("");
 const [showPassword, setShowPassword] = useState(false);
+// ProfileScreen-ல handleUpdateCredentials replace பண்ணுங்க
 const handleUpdateCredentials = async () => {
+  try {
+    const stored = await getStorageData(USER_DATA);
+    const parsed = stored ? JSON.parse(stored) : null;
+    const phoneNo = parsed?.UserInfo?.phoneNo;
+    const authToken = parsed?.authToken || parsed?.UserInfo?.authToken;
 
-  const result = await saveMailCredentials(email, password);
+    if (!phoneNo || !authToken) {
+      Alert.alert("Error", "User session expired. Please login again.");
+      return;
+    }
 
-  if (result.success) {
-    Alert.alert("Success", result.message);
-    setShowCredentialPopup(false);
-    setEmail("");
-    setPassword("");
-  } else {
-    Alert.alert("Error", result.message);
+    const res = await fetch("https://board.trisentrix.com/solarman/user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-auth-token": authToken,
+      },
+      body: JSON.stringify({
+        ...parsed,
+        UserInfo: {
+          ...parsed.UserInfo,
+          email:    email.trim(),
+          password: password,
+        },
+      }),
+    });
+
+    const data = await res.json();
+    console.log("✅ Credentials update response:", JSON.stringify(data));
+
+    if (data?.success || res.ok) {
+      // ✅ AsyncStorage-லயும் update பண்ணு
+      const updatedData = {
+        ...parsed,
+        UserInfo: { ...parsed.UserInfo, email: email.trim(), password },
+      };
+      await storeData(USER_DATA, JSON.stringify(updatedData));
+      setUserData(updatedData);
+
+      Alert.alert("Success", "Credentials updated successfully!");
+      setShowCredentialPopup(false);
+      setEmail("");
+      setPassword("");
+    } else {
+      Alert.alert("Error", data?.error || "Update failed");
+    }
+  } catch (e) {
+    console.log("Update credentials error:", e.message);
+    Alert.alert("Error", "Something went wrong");
   }
-
 };
 
     useEffect(() => {
-        const loadUserData = async () => {
-            try {
-                const data = await getStorageData(USER_DATA);
-                if (data) {
-                    const parsedData = JSON.parse(data);
-                    setUserData(parsedData);
-                }
-            } catch (error) {
-                console.error("Error loading user data:", error);
+    const loadUserData = async () => {
+        try {
+            const data = await getStorageData(USER_DATA);
+            if (data) {
+                const parsedData = JSON.parse(data);
+                console.log("🧪 Full userData:", JSON.stringify(parsedData, null, 2)); // ✅ இதை add பண்ணு
+                setUserData(parsedData);
             }
-        };
-
-        loadUserData();
-    }, []);
+        } catch (error) {
+            console.error("Error loading user data:", error);
+        }
+    };
+    loadUserData();
+}, []);
     useEffect(() => {
         loadStations();
     }, []);
 
-    const loadStations = async () => {
-        try {
-            console.log("Fetching station list...");
-            setLoading(true);
+const loadStations = async () => {
+  try {
+    setLoading(true);
 
-            const response = await fetchStationList();
-            console.log("Full Response:", JSON.stringify(response, null, 2));
+    // ✅ Cache இருந்தா உடனே show
+    const userData = await getStorageData(USER_DATA);
+    const parsedUser = userData ? JSON.parse(userData) : null;
+    const phoneNo = parsedUser?.UserInfo?.phoneNo;
+    const STATIONS_KEY = `stations_data_${phoneNo}`;
 
-            let stationArray = [];
+    const cached = await getStorageData(STATIONS_KEY);
+    if (cached) {
+      const stationArray = JSON.parse(cached);
+      const selected = stationArray.find((st) => st.id === stationId);
+      if (selected) setStationData(selected);
+    }
 
-            if (Array.isArray(response)) {
-                stationArray = response;
-            } else if (response && response.stationList) {
-                stationArray = response.stationList;
-            } else {
-                console.log("No valid station list found in response");
-            }
-            const selected = stationArray.find((st) => st.id === stationId);
+    // ✅ Offline-ல return
+    const net = await NetInfo.fetch();
+    if (!net.isConnected) { setLoading(false); return; }
 
-            if (selected) {
-                console.log("✅ Selected Station:", selected);
-                setStationData(selected); // Store in state
-                await SolarParseUtil.clear();
-                const parsed = SolarParseUtil.parseAndSave(selected);
-            } else {
-                console.log("⚠️ No station found for ID:", stationId);
-            }
+    const response = await fetchStationList();
+    let stationArray = Array.isArray(response) ? response : (response?.stationList || response?.stations || []);
+    const selected = stationArray.find((st) => st.id === stationId);
+    if (selected) setStationData(selected);
 
-        } catch (error) {
-            console.log("Error fetching stations:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
+  } catch (error) {
+    console.log("Error fetching stations:", error);
+  } finally {
+    setLoading(false);
+  }
+};
 
-    const handleLogout = async () => {
-        try {
-            await AsyncStorage.removeItem(USER_DATA);
-            await SolarParseUtil.clear();
-            console.log(" USER_DATA  cleared successfully.");
-            setShowLogoutPopup(false);
-            navigation.reset({
-                index: 0,
-                routes: [{ name: "Login" }],
-            });
-        } catch (error) {
-            console.error(" Error during logout:", error);
-        }
-    };
+const handleLogout = async () => {
+  const data = await getStorageData(USER_DATA);
+  const parsed = data ? JSON.parse(data) : null;
+  const phoneNo = parsed?.UserInfo?.phoneNo;
+  const devicelist = parsed?.devicelist || [];
+
+  await AsyncStorage.removeItem(USER_DATA);
+
+  if (phoneNo) {
+    // ✅ Savings clear
+    await AsyncStorage.removeItem(`savings_data_${phoneNo}`);
+    // ✅ Stations clear
+    await AsyncStorage.removeItem(`stations_data_${phoneNo}`);
+  }
+
+  // ✅ Station-wise cache clear
+  for (const device of devicelist) {
+    const id = device?.id;
+    if (id) {
+      await AsyncStorage.removeItem(`today_gen_${id}`);
+      await AsyncStorage.removeItem(`lifetime_${id}`);
+    }
+  }
+
+  setShowLogoutPopup(false);
+  navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+};
 
     return (
         <SafeAreaView style={styles.container}>
@@ -145,11 +192,11 @@ const handleUpdateCredentials = async () => {
                             </Text>
                         </View>
                         <View style={styles.contactRow}>
-                            <Ionicons name="mail-outline" size={16} color="#555" />
-                            <Text style={styles.contactText}>
-                                {userData?.UserInfo?.email || "Not available"}
-                            </Text>
-                        </View>
+    <Ionicons name="mail-outline" size={16} color="#555" />
+    <Text style={styles.contactText}>
+        {userData?.UserInfo?.email || userData?.email || "Not available"}
+    </Text>
+</View>
                     </View>
 
                     <MaterialIcons name="verified-user" size={26} color="#ED1C25" />

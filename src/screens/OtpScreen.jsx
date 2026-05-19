@@ -9,207 +9,327 @@ import {
   ScrollView,
   Alert,
   StatusBar,
+  Platform,
+  PermissionsAndroid,
 } from "react-native";
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView } from "react-native-safe-area-context";
 import DeviceInfo from "react-native-device-info";
-import firestore from "@react-native-firebase/firestore";
 import auth from "@react-native-firebase/auth";
-import Loader from "../components/Loader";
-import { storeData, USER_DATA } from "../service/localStorage";
-import { setToken, getSolarmanToken } from "../api/api";
-import { SOLARMAN_CONFIG } from "../api/solarmanAuth";
-import NetInfo from "@react-native-community/netinfo";
 import messaging from "@react-native-firebase/messaging";
 import LinearGradient from "react-native-linear-gradient";
-import { PermissionsAndroid, Platform } from "react-native";
-import { SCREEN_NAMES } from '../constants/screenNames';
+import NetInfo from "@react-native-community/netinfo";
+
+import Loader from "../components/Loader";
+import { storeData, USER_DATA } from "../service/localStorage";
+import { SCREEN_NAMES } from "../constants/screenNames";
+
+const BASE_URL = "https://board.trisentrix.com";
+
+const generateAuthToken = () => {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  return Array.from({ length: 64 }, () =>
+    chars[Math.floor(Math.random() * chars.length)]
+  ).join("");
+};
+
+// deviceId எப்பவும் body-ல இருக்கும்
+const apiCall = async (url, body, authToken = null) => {
+  const headers = { "Content-Type": "application/json" };
+  if (authToken) headers["x-auth-token"] = authToken;
+  const res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+  return res.json();
+};
 
 const OtpScreen = ({ navigation, route }) => {
-  const [loading, setLoading] = useState(false);
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [error, setError] = useState(false);
+  const [loading, setLoading]           = useState(false);
+  const [otp, setOtp]                   = useState(["", "", "", "", "", ""]);
   const [errorMessage, setErrorMessage] = useState("");
+  const [timer, setTimer]               = useState(30);
+  const [canResend, setCanResend]       = useState(false);
+  const [confirmation, setConfirmation] = useState(route.params.confirmation);
 
-  const [timer, setTimer] = useState(30);
-  const [canResend, setCanResend] = useState(false);
-
-  const [confirmation, setConfirmation] = useState(route.params.confirmation ?? null);
   const inputs = useRef([]);
   const { verificationId, phoneNumber } = route.params;
 
+  // ─── Countdown timer ─────────────────────────────────────────
   useEffect(() => {
-    if (timer > 0) {
-      const interval = setInterval(() => setTimer((t) => t - 1), 1000);
-      return () => clearInterval(interval);
-    } else {
-      setCanResend(true);
-    }
+    if (timer <= 0) { setCanResend(true); return; }
+    const id = setInterval(() => setTimer((t) => t - 1), 1000);
+    return () => clearInterval(id);
   }, [timer]);
 
+  // ─── OTP input handling ──────────────────────────────────────
   const handleChange = (text, index) => {
     if (text.length > 1) text = text.slice(-1);
     const newOtp = [...otp];
     newOtp[index] = text;
     setOtp(newOtp);
-    setError(false);
-    if (text && index < otp.length - 1) inputs.current[index + 1].focus();
+    setErrorMessage("");
+    if (text && index < otp.length - 1) inputs.current[index + 1]?.focus();
   };
 
+  const handleBackspace = (key, index) => {
+    if (key === "Backspace" && otp[index] === "" && index > 0) {
+      const newOtp = [...otp];
+      newOtp[index - 1] = "";
+      setOtp(newOtp);
+      inputs.current[index - 1]?.focus();
+    }
+  };
+
+  // ─── FCM token ───────────────────────────────────────────────
+  const getFcmToken = async () => {
+    try {
+      if (Platform.OS === "android" && Platform.Version >= 33) {
+        await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+        );
+      }
+      const status = await messaging().requestPermission();
+      const allowed =
+        status === messaging.AuthorizationStatus.AUTHORIZED ||
+        status === messaging.AuthorizationStatus.PROVISIONAL;
+
+      if (allowed) {
+        await messaging().registerDeviceForRemoteMessages();
+        return await messaging().getToken();
+      }
+    } catch (e) {
+      console.log("FCM error:", e.message);
+    }
+    return null;
+  };
+
+  // ─── Main login flow ─────────────────────────────────────────
   const handleAutoLogin = async (credential, phone) => {
     try {
       setLoading(true);
 
-      const result = await auth().signInWithCredential(credential);
-
-
+      // 1️⃣ Firebase verify
+      await auth().signInWithCredential(credential);
       const cleanPhone = phone?.replace("+91", "").trim();
 
-      const appInfo = { version: "1.0.0", buildNo: "1", lastLogin: new Date().toISOString() };
-      const platformInfo = { os: DeviceInfo.getSystemName(), version: DeviceInfo.getSystemVersion() };
+      // 2️⃣ FCM token & Device info
+      const fcmToken  = await getFcmToken();
+      const deviceId  = await DeviceInfo.getUniqueId(); // ← ஒரே இடத்துல பிடிக்கிறோம்
+      const osName    = DeviceInfo.getSystemName();
+      const osVersion = DeviceInfo.getSystemVersion();
 
-      const userRef = firestore().collection("userDetails").doc(cleanPhone);
-      const docSnap = await userRef.get();
+      // 3️⃣ Generate authToken for this device
+      const authToken = generateAuthToken();
+      console.log("🔐 authToken generated:", authToken.slice(0, 16) + "...");
+      console.log("📱 deviceId:", deviceId);
 
-      let userData;
-      if (docSnap.exists) {
-        userData = docSnap.data() || {};
-        const userInfo = userData.UserInfo || {};
-        if (Object.keys(userInfo).length === 0) {
-          userData.UserInfo = { phoneNo: cleanPhone, name: "", deviceId: "", email: "", password: "", unitsrupees: "4" };
-          await userRef.set({ UserInfo: userData.UserInfo }, { merge: true });
-        }
-        await userRef.set({ AppInfo: appInfo, PlatformInfo: platformInfo }, { merge: true });
-      } else {
-        userData = { AppInfo: appInfo, PlatformInfo: platformInfo, UserInfo: { phoneNo: cleanPhone, name: "", deviceId: "", email: "", password: "", unitsrupees: "4" } };
-        await userRef.set(userData);
+      const now = new Date().toISOString();
+
+      // 4️⃣ Build the current device object
+      const currentDevice = {
+        deviceId,
+        os:         osName,
+        version:    osVersion,
+        authToken,
+        fcmToken:   fcmToken || null,
+        lastUsedAt: now,
+      };
+
+      // 5️⃣ Initial SAVE — deviceId body-ல அனுப்பு
+      const initialPayload = {
+        deviceId,                          // ← server require பண்றது
+        AppInfo: { buildNo: "1", version: "1.0.0", lastLogin: now },
+        PlatformInfo: { devices: [currentDevice] },
+        UserInfo: { phoneNo: cleanPhone, role: "user" },
+        devicelist: [],
+      };
+
+      try {
+        const saveJson = await apiCall(`${BASE_URL}/solarman/user`, initialPayload);
+        console.log("💾 Initial save response:", JSON.stringify(saveJson));
+      } catch (e) {
+        console.log("Initial save error:", e.message);
       }
 
-      // FCM Token
-      // FCM Token
-// --- FCM Token Logic Start ---      
-let fcmToken = null;
+      // 6️⃣ GET existing user data — deviceId அனுப்பு
+      let existingData = {};
+      try {
+        const getJson = await apiCall(
+          `${BASE_URL}/solarman/get`,
+          { phoneNo: cleanPhone, deviceId, token: authToken }, // ← deviceId add
+          authToken
+        );
+        console.log("📦 GET user response:", JSON.stringify(getJson, null, 2));
 
-try {
-  // 1. Specifically request Android 13+ permission
-  if (Platform.OS === 'android' && Platform.Version >= 33) {
-    const status = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-    );
-    if (status !== PermissionsAndroid.RESULTS.GRANTED) {
-      console.log("Permission denied for notifications");
-      // Optional: You can choose to throw an error here or proceed with fcmToken = null
-    }
-  }
+        if (getJson?.success && getJson?.data) {
+          existingData = getJson.data;
+        } else if (getJson?.UserInfo || getJson?.phoneNo) {
+          existingData = getJson;
+        }
+      } catch (e) {
+        console.log("GET user error:", e.message);
+      }
 
-  // 2. Request Firebase Messaging permission (handles iOS and internal FCM state)
-  const authStatus = await messaging().requestPermission();
-  const enabled =
-    authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-    authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+      console.log("📦 existingData full:", JSON.stringify(existingData, null, 2));
 
-  if (enabled) {
-    // 3. Register device (Critical for Android 13+)
-    await messaging().registerDeviceForRemoteMessages();
-    
-    // 4. Fetch the actual token
-    fcmToken = await messaging().getToken();
-    console.log("FCM TOKEN SUCCESS:", fcmToken);
-  } else {
-    console.log("Messaging permission not enabled");
-  }
+      // ─── Merge devices list ───────────────────────────────────
+      const existingDevices = existingData?.PlatformInfo?.devices || [];
+      const otherDevices    = existingDevices.filter((d) => d.deviceId !== deviceId);
+      const mergedDevices   = [...otherDevices, currentDevice];
 
-} catch (err) {
-  console.log("FCM ERROR DETAIL:", err);
-  // Instead of a hard Alert that stops login, consider logging it 
-  // and allowing the user into the app without push notifications.
-}
-// --- FCM Token Logic End ---
+      // ─── Role & credentials ───────────────────────────────────
+      // Server may return email/password/role at top-level OR inside UserInfo
+      const userInfo = existingData?.UserInfo || {};
+      const role     = userInfo?.role      || existingData?.role     || "user";
+      const email    = userInfo?.email     || existingData?.email    || null;
+      const password = userInfo?.password  || existingData?.password || null;
 
-      await userRef.set({ UserInfo: { ...userData.UserInfo, fcmToken } }, { merge: true });
+      console.log("👤 Role:", role);
+      console.log("📧 email:", email);
+      console.log("🔑 password:", password ? "EXISTS" : "MISSING");
 
-      // Solarman token
-      const { email, password } = userData.UserInfo || {};
+      // 7️⃣ Fetch Solarman accessToken — deviceId அனுப்பு
       let accessToken = null;
       if (email && password) {
-        const tokenData = await getSolarmanToken(SOLARMAN_CONFIG.appId, SOLARMAN_CONFIG.appSecret, email, password, SOLARMAN_CONFIG.language);
-        if (tokenData?.access_token) accessToken = tokenData.access_token;
+        try {
+          const tokenJson = await apiCall(
+            `${BASE_URL}/solarman/token`,
+            { email, password, deviceId, phoneNo: cleanPhone } // ← deviceId add
+          );
+          console.log("🎟 Token response:", JSON.stringify(tokenJson));
+          if (tokenJson?.access_token) {
+            accessToken = tokenJson.access_token;
+            console.log("✅ accessToken obtained");
+          } else {
+            console.log("❌ Token not in response");
+          }
+        } catch (e) {
+          console.log("Token fetch error:", e.message);
+        }
+      } else {
+        console.log("⚠️ Skipping token — email/password missing");
       }
 
-      const finalData = {
-  ...userData,
-  AppInfo: appInfo,
-  PlatformInfo: platformInfo,
-  accessToken: accessToken || null,
-  UserInfo: {
-    ...userData.UserInfo,
-    phoneNo: cleanPhone,
-    fcmToken: fcmToken || null,
-  },
-};
+      // 8️⃣ Fetch stations — deviceId அனுப்பு
+      let devicelist = existingData.devicelist || [];
+      if (accessToken) {
+        try {
+          const stationsJson = await apiCall(
+            `${BASE_URL}/solarman/stations`,
+            { token: accessToken, phoneNo: cleanPhone, deviceId }, // ← deviceId add
+            authToken
+          );
+          console.log("🏭 Stations response:", JSON.stringify(stationsJson));
 
-await storeData(USER_DATA, JSON.stringify(finalData));
+          const rawList = stationsJson?.stations || stationsJson?.stationList || [];
+          console.log("📡 Station count:", rawList.length);
 
- const role = userData?.userroles?.role || userData?.UserInfo?.Role || "";
+          if (rawList.length > 0) {
+            devicelist = rawList.map((station) => ({
+              id:   station.id,
+              name: station.name || "",
+              installationAmount:
+                (existingData.devicelist || []).find((d) => d.id === station.id)
+                  ?.installationAmount ?? "",
+            }));
+            console.log("✅ devicelist built:", devicelist.length, "stations");
+          }
+        } catch (e) {
+          console.log("Stations fetch error:", e.message);
+        }
+      } else {
+        console.log("⚠️ No accessToken — skipping stations fetch");
+      }
 
-if (role === "surveyer") {
-  navigation.reset({
-    index: 0,
-    routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }],
-  });
-} 
-else if (email && password) {
-  navigation.reset({
-    index: 0,
-    routes: [{ name: SCREEN_NAMES.MAIN }],
-  });
-} 
-else {
-  navigation.reset({
-    index: 0,
-    routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }],
-  });
-}
+      // 9️⃣ Final SAVE — deviceId அனுப்பு
+      const finalPayload = {
+        ...existingData,
+        deviceId,                          // ← server require பண்றது
+        AppInfo: {
+          ...(existingData.AppInfo || {}),
+          buildNo:   "1",
+          version:   "1.0.0",
+          lastLogin: now,
+        },
+        PlatformInfo: { devices: mergedDevices },
+        UserInfo: {
+          ...userInfo,
+          phoneNo:  cleanPhone,
+          email:    email    || null,
+          password: password || null,
+          role,
+        },
+        devicelist,
+      };
+
+      try {
+        await apiCall(`${BASE_URL}/solarman/user`, finalPayload);
+        console.log("✅ Final user data saved with", devicelist.length, "stations");
+      } catch (e) {
+        console.log("Final save error:", e.message);
+      }
+
+      // 🔟 AsyncStorage save
+      const localData = {
+        ...finalPayload,
+        accessToken,
+        authToken,   // ← current device's authToken shortcut
+      };
+      await storeData(USER_DATA, JSON.stringify(localData));
+      console.log(
+        "💾 Saved | accessToken:", accessToken ? "YES" : "NO",
+        "| stations:", devicelist.length,
+        "| devices:", mergedDevices.length
+      );
+
+      // 1️⃣1️⃣ Navigate — role based
+      if (role === "surveyer") {
+        console.log("✅ Surveyer → SurveyerScreen");
+        navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }] });
+      } else if (email && email.trim() !== "") {
+        console.log("✅ Email found → MainScreen");
+        navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.MAIN }] });
+      } else {
+        console.log("⚠️ No email → ProductsHomeScreen");
+        navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }] });
+      }
 
     } catch (err) {
-      Alert.alert("Login Failed", err.message || "Something went wrong during auto-login");
+      console.log("Login error:", err.message);
+      Alert.alert("Login Failed", err.message || "Something went wrong");
     } finally {
       setLoading(false);
     }
   };
 
+  // ─── Confirm OTP ─────────────────────────────────────────────
+  const handleConfirm = async () => {
+    const net = await NetInfo.fetch();
+    if (!net.isConnected) {
+      Alert.alert("No Internet", "No network connection available");
+      return;
+    }
 
-const handleConfirm = async () => {
-  const net = await NetInfo.fetch();
-  if (!net.isConnected) {
-    Alert.alert("No Internet", "No network connection available");
-    return;
-  }
+    const otpCode = otp.join("");
+    if (otpCode.length < 6) {
+      setErrorMessage("Please enter the full 6-digit OTP");
+      return;
+    }
 
-  const otpCode = otp.join("");
+    try {
+      setLoading(true);
+      setErrorMessage("");
+      const credential = auth.PhoneAuthProvider.credential(verificationId, otpCode);
+      await handleAutoLogin(credential, phoneNumber);
+    } catch (err) {
+      setErrorMessage(err.message || "OTP verification failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  if (otpCode.length < 6) {
-    setErrorMessage("Please enter full OTP");
-    return;
-  }
-
-  try {
-    setLoading(true);
-
-    const credential = auth.PhoneAuthProvider.credential(
-      verificationId,
-      otpCode
-    );
-
-    await handleAutoLogin(credential, phoneNumber);
-    setErrorMessage("");
-
-  } catch (err) {
-    setErrorMessage(err.message || "OTP verification failed");
-  } finally {
-    setLoading(false);
-  }
-};
-
+  // ─── Resend OTP ──────────────────────────────────────────────
   const handleResendOtp = async () => {
     const net = await NetInfo.fetch();
     if (!net.isConnected) {
@@ -221,52 +341,36 @@ const handleConfirm = async () => {
       setLoading(true);
       setCanResend(false);
       setTimer(30);
-
-      const confirmationResult = await auth().signInWithPhoneNumber(phoneNumber);
-      setConfirmation(confirmationResult);
       setOtp(["", "", "", "", "", ""]);
-
+      const result = await auth().signInWithPhoneNumber(phoneNumber);
+      setConfirmation(result);
       Alert.alert("OTP Sent", "A new OTP has been sent to your phone number.");
-
-    } catch (error) {
+    } catch (e) {
       setCanResend(true);
-      Alert.alert("Error", "Failed to resend OTP. Please try again later.");
+      Alert.alert("Error", "Failed to resend OTP. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  const requestFCMPermission = async () => {
-    if (Platform.OS === "android" && Platform.Version >= 33) {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-      );
-      console.log("🔔 Notification permission:", granted);
-    }
+  // ─── UI ───────────────────────────────────────────────────────
+  const otpFilled = otp.join("").length === 6;
 
-    const authStatus = await messaging().requestPermission();
-    console.log("📩 FCM permission status:", authStatus);
-  };
   return (
     <View style={{ flex: 1 }}>
-      {/* 2. TRANSLUCENT STATUS BAR: Makes the system bar invisible so the gradient flows up */}
-      <StatusBar 
-        translucent 
-        backgroundColor="transparent" 
-        barStyle="light-content" 
-      />
-
-      {/* 3. WRAP EVERYTHING IN THE MAIN GRADIENT */}
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
       <LinearGradient
-        colors={['#F00001', '#B00100']}
+        colors={["#F00001", "#B00100"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={{ flex: 1 }}
       >
-        <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
-          <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-            
-            {/* 4. HEADER: Removed extra LinearGradient/Background to use parent's unique color shadow */}
+        <SafeAreaView style={{ flex: 1 }} edges={["bottom"]}>
+          <ScrollView
+            contentContainerStyle={{ flexGrow: 1 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* Logo */}
             <View style={styles.header}>
               <Image
                 source={require("../../assets/images/kondass.png")}
@@ -274,89 +378,86 @@ const handleConfirm = async () => {
                 resizeMode="contain"
               />
             </View>
-          <View style={styles.bottomContainer}>
-            <View style={styles.indicatorWrapper}>
-              <View style={styles.indicator}></View>
-            </View>
 
-            <View style={styles.welcomeContainer}>
-              <Text style={styles.welcomeText}>Welcome</Text>
-              <Text style={styles.subText}>Enter the OTP sent to your phone</Text>
-            </View>
+            {/* White card */}
+            <View style={styles.card}>
+              <View style={styles.indicatorWrapper}>
+                <View style={styles.indicator} />
+              </View>
 
-            <View style={styles.welcomeContainer}>
-              <Text style={styles.welcomeText}>OTP Number</Text>
-            </View>
+              <Text style={styles.title}>Welcome</Text>
+              <Text style={styles.subtitle}>Enter the OTP sent to your phone</Text>
 
-            <View style={styles.otpContainer}>
-              {otp.map((digit, index) => (
-                <TextInput
-                  key={index}
-                  ref={(ref) => (inputs.current[index] = ref)}
-                  style={[styles.otpInput, error && styles.errorBorder]}
-                  value={digit}
-                  onChangeText={(text) => handleChange(text, index)}
-                  keyboardType="number-pad"
-                  maxLength={1}
-                  returnKeyType="next"
-                   textContentType="oneTimeCode"   // iOS OTP autofill
-      autoComplete="sms-otp"          // Android OTP autofill
-      importantForAutofill="yes"
-                   onKeyPress={({ nativeEvent }) => {
-        if (nativeEvent.key === "Backspace") {
-          if (otp[index] === "" && index > 0) {
-            const newOtp = [...otp];
-            newOtp[index - 1] = "";
-            setOtp(newOtp);
-            inputs.current[index - 1].focus();
-          }
-        }
-      }}
-                />
-              ))}
-            </View>
+              <Text style={styles.label}>OTP Number</Text>
 
-            {errorMessage ? (
-              <Text style={styles.errorText}>{errorMessage}</Text>
-            ) : null}
+              {/* OTP boxes */}
+              <View style={styles.otpRow}>
+                {otp.map((digit, index) => (
+                  <TextInput
+                    key={index}
+                    ref={(ref) => (inputs.current[index] = ref)}
+                    style={[
+                      styles.otpBox,
+                      errorMessage ? styles.otpBoxError : null,
+                    ]}
+                    value={digit}
+                    onChangeText={(text) => handleChange(text, index)}
+                    onKeyPress={({ nativeEvent }) =>
+                      handleBackspace(nativeEvent.key, index)
+                    }
+                    keyboardType="number-pad"
+                    maxLength={1}
+                    returnKeyType="next"
+                    textContentType="oneTimeCode"
+                    autoComplete="sms-otp"
+                    importantForAutofill="yes"
+                  />
+                ))}
+              </View>
 
-            <TouchableOpacity
-              style={[
-                styles.confirmButton,
-                { opacity: otp.join("").length === 6 ? 1 : 0.5 }
-              ]}
-              disabled={otp.join("").length !== 6}
-              onPress={handleConfirm}
-            >
-              <Text style={styles.confirmText}>Confirm</Text>
-            </TouchableOpacity>
-
-
-            <View style={styles.resendContainer}>
-              {canResend ? (
-                <TouchableOpacity onPress={handleResendOtp}>
-                  <Text style={styles.resendText}>Resend OTP</Text>
-                </TouchableOpacity>
-              ) : (
-                <Text style={styles.timerText}>Resend available in {timer}s</Text>
+              {!!errorMessage && (
+                <Text style={styles.errorText}>{errorMessage}</Text>
               )}
-            </View>
-            <TouchableOpacity
-              style={styles.changeNumberContainer}
-              onPress={() => navigation.navigate(SCREEN_NAMES.LOGIN)}
-            >
-              <Text style={styles.changeNumberText}>
-                Wrong number? <Text style={styles.changeLink}>Change Phone Number</Text>
-              </Text>
-            </TouchableOpacity>
 
-          </View>
-        </ScrollView>
-        {loading && <Loader />}
+              {/* Confirm button */}
+              <TouchableOpacity
+                style={[styles.confirmBtn, { opacity: otpFilled ? 1 : 0.45 }]}
+                disabled={!otpFilled}
+                onPress={handleConfirm}
+              >
+                <Text style={styles.confirmText}>Confirm</Text>
+              </TouchableOpacity>
+
+              {/* Resend */}
+              <View style={styles.resendRow}>
+                {canResend ? (
+                  <TouchableOpacity onPress={handleResendOtp}>
+                    <Text style={styles.resendText}>Resend OTP</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.timerText}>
+                    Resend available in {timer}s
+                  </Text>
+                )}
+              </View>
+
+              {/* Change number */}
+              <TouchableOpacity
+                style={styles.changeRow}
+                onPress={() => navigation.navigate(SCREEN_NAMES.LOGIN)}
+              >
+                <Text style={styles.changeText}>
+                  Wrong number?{" "}
+                  <Text style={styles.changeLink}>Change Phone Number</Text>
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+
+          {loading && <Loader />}
         </SafeAreaView>
       </LinearGradient>
-      </View>
-      
+    </View>
   );
 };
 
@@ -367,10 +468,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingTop: 60,
-    paddingBottom:40,
+    paddingBottom: 40,
   },
   logo: { width: 200, height: 100 },
-  bottomContainer: {
+  card: {
     backgroundColor: "#fff",
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
@@ -380,16 +481,15 @@ const styles = StyleSheet.create({
   },
   indicatorWrapper: { alignItems: "center", marginBottom: 25 },
   indicator: { width: 40, height: 4, backgroundColor: "#ddd", borderRadius: 2 },
-  welcomeContainer: { alignItems: "flex-start", marginBottom: 10 },
-  welcomeText: { fontSize: 16, fontWeight: "600", color: "#1A1A1A" },
-  subText: { color: "#555", fontSize: 14 },
-  otpContainer: {
+  title:    { fontSize: 16, fontWeight: "600", color: "#1A1A1A", marginBottom: 4 },
+  subtitle: { fontSize: 14, color: "#555", marginBottom: 20 },
+  label:    { fontSize: 16, fontWeight: "600", color: "#1A1A1A", marginBottom: 12 },
+  otpRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 10,
     marginBottom: 10,
   },
-  otpInput: {
+  otpBox: {
     borderWidth: 1,
     borderColor: "#ddd",
     borderRadius: 10,
@@ -399,15 +499,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#000",
   },
-  errorBorder: { borderColor: "red" },
+  otpBoxError: { borderColor: "red" },
   errorText: {
     color: "red",
     fontSize: 13,
-    marginTop: 5,
-    marginLeft: 2,
+    marginTop: 4,
+    marginBottom: 4,
     fontWeight: "500",
   },
-  confirmButton: {
+  confirmBtn: {
     backgroundColor: "#444",
     width: "100%",
     paddingVertical: 14,
@@ -415,24 +515,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 10,
   },
-  changeNumberContainer: {
-    alignItems: "center",
-    marginTop: 15,
-  },
-  changeNumberText: {
-    color: "#555",
-    fontSize: 14,
-  },
-  changeLink: {
-    color: "#fb0404",
-    fontWeight: "600",
-    textDecorationLine: "underline",
-  },
   confirmText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  changeNumberContainer: { alignItems: "center", marginTop: 15 },
-  changeNumberText: { color: "#555", fontSize: 14 },
-  changeLink: { color: "#fb0404", fontWeight: "600", textDecorationLine: "underline" },
-  resendContainer: { alignItems: "center", marginTop: 15 },
+  resendRow:  { alignItems: "center", marginTop: 15 },
   resendText: { color: "#fb0404", fontSize: 15, fontWeight: "600" },
-  timerText: { color: "#777", fontSize: 14 },
+  timerText:  { color: "#777", fontSize: 14 },
+  changeRow:  { alignItems: "center", marginTop: 15 },
+  changeText: { color: "#555", fontSize: 14 },
+  changeLink: { color: "#fb0404", fontWeight: "600", textDecorationLine: "underline" },
 });

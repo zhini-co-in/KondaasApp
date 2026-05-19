@@ -18,7 +18,7 @@ import firestore from "@react-native-firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { USER_DATA } from "../service/localStorage";
 import Loader from "../components/Loader";
-import { fetchStationDevices, fetchStationList } from "../api/api";
+import { fetchStationDevices, fetchStationList } from "../api/api1";
 import NetInfo from '@react-native-community/netinfo';
 import LinearGradient from "react-native-linear-gradient";
 const CreateTicketScreen = ({ route, navigation }) => {

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
-  
   ScrollView,
   StatusBar,
   TouchableOpacity,
@@ -12,16 +11,17 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import MultiLineChart from "../components/MultiLineChart";
-import { fetchHistoricalData } from "../api/api";
+import { fetchHistoricalData } from "../api/api1";
 import Loader from "../components/Loader";
-import { getStorageData, USER_DATA } from "../service/localStorage";
-import NetInfo from '@react-native-community/netinfo';
+import { getStorageData, storeData, USER_DATA, getSavingsKey } from "../service/localStorage";
+import NetInfo from "@react-native-community/netinfo";
 import firestore from "@react-native-firebase/firestore";
-import { SCREEN_NAMES } from '../constants/screenNames';
+import { SCREEN_NAMES } from "../constants/screenNames";
 
 const KondaasAssuredScreen = ({ navigation, route }) => {
   const { stationId } = route.params || {};
-  console.log(" Received Station ID:", stationId);
+
+  // ✅ முதல்ல எல்லா useState
   const [chartData, setChartData] = useState([]);
   const [labels, setLabels] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -29,20 +29,33 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
   const [UserInfo, setUserInfo] = useState(null);
   const [percentAbove, setPercentAbove] = useState(0);
   const [committedUnits, setCommittedUnits] = useState(0);
+  const [currentMonthSavings, setCurrentMonthSavings] = useState(0);
 
+  // ✅ useState-க்கு கீழே மட்டும் இதை வை
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const monthLabel = now.toLocaleString("en-US", { month: "short", year: "numeric" });
+
+  // ─── Load user info + savings ─────────────────────────────────────────────
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
         const data = await getStorageData(USER_DATA);
-        if (data) {
-          const parsed = JSON.parse(data);
-          console.log("Loaded User Info Raw:", parsed);
-          setUserInfo(parsed.UserInfo || parsed);
-        } else {
-          console.warn(" No User Info found in storage");
+        if (!data) return;
+
+        const parsed = JSON.parse(data);
+        console.log("Loaded User Info Raw:", parsed);
+        setUserInfo(parsed.UserInfo || parsed);
+
+        const phoneNo = parsed?.UserInfo?.phoneNo || parsed?.phoneNo;
+        const deviceId = parsed?.deviceId;
+        const authToken = parsed?.authToken || parsed?.UserInfo?.authToken;
+
+        if (phoneNo) {
+          await fetchCurrentMonthSavings(phoneNo, stationId, deviceId, authToken);
         }
       } catch (err) {
-        console.error(" Error loading user info:", err);
+        console.error("Error loading user info:", err);
       }
     };
 
@@ -50,25 +63,69 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
     loadData();
   }, []);
 
-
-  const unitsRupees = parseFloat(UserInfo?.unitsrupees || 0);
-  console.log("⚡ Units Rupees:", unitsRupees);
-
-  const totalGenerated = parseFloat(totals.generated || 0);
-  const totalSavings = (totalGenerated * unitsRupees).toFixed(0);
-
+  // ─── Interval refresh ─────────────────────────────────────────────────────
   useEffect(() => {
-    loadData();
-
     const interval = setInterval(() => {
-      const currentDate = new Date().getDate();
-      if (currentDate !== new Date().getDate()) {
-        loadData();
-      }
+      loadData();
     }, 3600000);
     return () => clearInterval(interval);
   }, []);
 
+  // ─── Fetch current month savings from cache or API ────────────────────────
+  const fetchCurrentMonthSavings = async (phoneNo, stationId, deviceId, authToken) => {
+    try {
+      // ✅ Cache key — stationId per station
+      const SAVINGS_KEY = `${getSavingsKey(phoneNo)}_${stationId}`;
+      const cached = await getStorageData(SAVINGS_KEY);
+
+      if (cached) {
+        const parsedCache = JSON.parse(cached);
+        const monthlyRecords = parsedCache.monthlyRecords || {};
+        const thisMonthCost = monthlyRecords[currentMonthKey]?.cost || 0;
+        console.log("💰 Cache savings for", currentMonthKey, ":", thisMonthCost);
+        setCurrentMonthSavings(thisMonthCost);
+        return; // ✅ Cache hit — API call வேண்டாம்
+      }
+
+      // ✅ Cache miss — API call
+      const net = await NetInfo.fetch();
+      if (!net.isConnected) return;
+
+      const res = await fetch("https://board.trisentrix.com/savings/calculate-savings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-auth-token": authToken,
+        },
+        body: JSON.stringify({ phoneNo, stationId, deviceId }), // ✅ deviceId add
+      });
+
+      const data = await res.json();
+      console.log("💰 Savings API:", JSON.stringify(data));
+
+      if (data?.success && data?.data?.monthlyRecords) {
+        const monthlyRecords = data.data.monthlyRecords;
+
+        // ✅ Current month cost மட்டும் எடு
+        const thisMonthCost = monthlyRecords[currentMonthKey]?.cost || 0;
+        setCurrentMonthSavings(thisMonthCost);
+
+        // ✅ Cache save
+        const totalCost = Object.values(monthlyRecords)
+          .reduce((sum, rec) => sum + (rec.cost || 0), 0)
+          .toLocaleString("en-IN", { minimumFractionDigits: 2 });
+
+        await storeData(
+          SAVINGS_KEY,
+          JSON.stringify({ totalCost, monthlyRecords })
+        );
+      }
+    } catch (e) {
+      console.log("Savings fetch error:", e);
+    }
+  };
+
+  // ─── Load chart data ──────────────────────────────────────────────────────
   const loadData = async () => {
     try {
       setLoading(true);
@@ -76,54 +133,80 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
       const year = today.getFullYear();
       const month = String(today.getMonth() + 1).padStart(2, "0");
       const day = String(today.getDate()).padStart(2, "0");
+      const CACHE_KEY = `kondaas_${stationId}_${year}_${month}`;
+
+      // ✅ Cache இருந்தா உடனே show
+      const cached = await getStorageData(CACHE_KEY);
+      if (cached) {
+        const c = JSON.parse(cached);
+        setTotals(c.totals);
+        setChartData(c.chartData);
+        setLabels(c.labels);
+        setPercentAbove(c.percentAbove);
+      }
+
+      // ✅ Offline-ல return
+      const net = await NetInfo.fetch();
+      if (!net.isConnected) {
+        setLoading(false);
+        return;
+      }
+
       const startTime = `${year}-${month}-01`;
       const endTime = `${year}-${month}-${day}`;
-      const body = {
-        stationId,
-        timeType: 2,
-        startTime,
-        endTime,
-      };
-      console.log(" Request Body:", JSON.stringify(body, null, 2));
-      const data = await fetchHistoricalData(body);
-      console.log(" Full API Response:", data);
+      const data = await fetchHistoricalData({ stationId, timeType: 2, startTime, endTime });
 
-      if (data?.success && Array.isArray(data.stationDataItems)) {
+      if (data?.stationDataItems && Array.isArray(data.stationDataItems)) {
         const values = data.stationDataItems.map((item) =>
           parseFloat(item.generationValue || 0)
         );
-
-        const labels = data.stationDataItems.map((item) =>
-          item.day?.toString() || ""
+        const newLabels = data.stationDataItems.map(
+          (item) => item.day?.toString() || ""
         );
-
         const committedValues = values.map((v) => v * 0.9);
         const totalGenerated = values.reduce((sum, v) => sum + v, 0);
         const totalCommitted = committedValues.reduce((sum, v) => sum + v, 0);
-        setTotals({
+
+        const newTotals = {
           generated: totalGenerated.toFixed(0),
           committed: totalCommitted.toFixed(0),
-        });
-        setChartData([
+        };
+        const newChartData = [
           { label: "Generated (kWh)", values, color: "#EF4444" },
           { label: "Committed (kWh)", values: committedValues, color: "#FF8A80" },
-        ]);
+        ];
 
-        setLabels(labels);
-        await loadComitted(totalGenerated.toFixed(0));
+        setTotals(newTotals);
+        setChartData(newChartData);
+        setLabels(newLabels);
 
-        console.log(" Labels (Days):", labels);
-        console.log(" Generated Values:", values);
+        await loadCommitted(totalGenerated.toFixed(0));
+
+        // ✅ percent calculate பண்ணி cache save
+        const committed = committedUnits > 0 ? committedUnits : 1;
+        const percent = ((totalGenerated / committed) * 100).toFixed(1);
+
+        await storeData(
+          CACHE_KEY,
+          JSON.stringify({
+            totals: newTotals,
+            chartData: newChartData,
+            labels: newLabels,
+            percentAbove: percent,
+          })
+        );
       } else {
-        console.log(" Unexpected API format:", data);
+        console.log("Unexpected API format:", data);
       }
     } catch (err) {
-      console.error(" Failed to fetch historical data:", err);
+      console.error("Failed to fetch historical data:", err);
     } finally {
       setLoading(false);
     }
   };
-  const loadComitted = async (generatedUnits) => {
+
+  // ─── Load committed units from Firestore ──────────────────────────────────
+  const loadCommitted = async (generatedUnits) => {
     try {
       const snapshot = await firestore().collection("comittedUnits").get();
 
@@ -149,6 +232,14 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
       console.log("🔥 Error fetching committed units:", error);
     }
   };
+
+  // ─── Display savings (current month only) ────────────────────────────────
+  const totalSavings = currentMonthSavings.toLocaleString("en-IN", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
@@ -162,8 +253,7 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.subtitle}>
-          Showing generation for{" "}
-          {new Date().toLocaleString("en-US", { month: "short", year: "numeric" })}
+          Showing generation for {monthLabel}
         </Text>
 
         <View style={styles.unitsRow}>
@@ -171,7 +261,6 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
             <Text style={styles.unitLabel}>GENERATED</Text>
             <Text style={styles.unitValue}>{totals.generated} Units</Text>
           </View>
-
           <View style={styles.unitBox}>
             <Text style={styles.unitLabel}>COMMITTED</Text>
             <Text style={styles.unitValue}>{totals.committed} Units</Text>
@@ -179,14 +268,14 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
         </View>
 
         <View style={styles.chartContainer}>
-  {chartData.length > 0 ? (
-    <MultiLineChart datasets={chartData} labels={labels} />
-  ) : (
-    <Text style={{ textAlign: "center", color: "#888" }}>
-      No data available
-    </Text>
-  )}
-</View>
+          {chartData.length > 0 ? (
+            <MultiLineChart datasets={chartData} labels={labels} />
+          ) : (
+            <Text style={{ textAlign: "center", color: "#888" }}>
+              No data available
+            </Text>
+          )}
+        </View>
 
         <View style={[styles.infoCard, { backgroundColor: "#E6F9EF" }]}>
           <View style={styles.iconCircleGreen}>
@@ -195,22 +284,22 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
           <Text style={styles.infoText}>
             Your Solar home has generated{" "}
             <Text style={{ fontWeight: "900" }}>{percentAbove}%</Text> above{" "}
-
             <Text style={{ fontWeight: "900" }}>Kondaas Assured™</Text> target!
           </Text>
         </View>
 
+        {/* ✅ Current month savings மட்டும் காட்டுது */}
         <View style={[styles.infoCard, { backgroundColor: "#FFF4F4" }]}>
           <View style={styles.iconCircleRed}>
             <Ionicons name="wallet-outline" size={18} color="#E60000" />
           </View>
           <Text style={styles.infoText}>
             Your Solar home has saved{" "}
-            <Text style={{ fontWeight: "700" }}>₹{totalSavings}</Text> until{" "}
-
-            {new Date().toLocaleString("en-US", { month: "short", year: "numeric" })}
+            <Text style={{ fontWeight: "700" }}>₹{totalSavings}</Text>{" "}
+            in <Text style={{ fontWeight: "700" }}>{monthLabel}</Text>
           </Text>
         </View>
+
         <TouchableOpacity
           style={styles.reachUsButton}
           activeOpacity={0.8}
@@ -218,14 +307,11 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
             navigation.navigate(SCREEN_NAMES.POWER_GENERATION, { stationId })
           }
         >
-       <Text style={styles.reachUsText}>
-  View More Insights{" "}
-  <Text style={styles.bigArrow}>→</Text>
-</Text>
-
-       
+          <Text style={styles.reachUsText}>
+            View More Insights{" "}
+            <Text style={styles.bigArrow}>→</Text>
+          </Text>
         </TouchableOpacity>
-
       </ScrollView>
 
       {loading && <Loader />}
@@ -235,10 +321,8 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
 
 export default KondaasAssuredScreen;
 
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -249,9 +333,7 @@ const styles = StyleSheet.create({
   },
   backButton: { marginRight: 10 },
   headerTitle: { fontSize: 18, fontWeight: "700", color: "#000" },
-
   scroll: { padding: 16, paddingBottom: 40 },
-
   subtitle: {
     textAlign: "center",
     color: "#666",
@@ -266,26 +348,10 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingHorizontal: 10,
   },
-  unitBox: {
-    alignItems: "center",
-  },
-  unitLabel: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#555",
-  },
-  unitValue: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#111",
-  },
-
-  chartContainer: {
-  alignItems: "center",
-  marginTop: 10,
-  marginBottom: 15,
-},
-
+  unitBox: { alignItems: "center" },
+  unitLabel: { fontSize: 10, fontWeight: "600", color: "#555" },
+  unitValue: { fontSize: 16, fontWeight: "700", color: "#111" },
+  chartContainer: { alignItems: "center", marginTop: 10, marginBottom: 15 },
   infoCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -306,45 +372,22 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   infoText: { flex: 1, fontSize: 13, color: "#333" },
-
-  footerLink: {
-    color: "#E60000",
-    marginTop: 10,
-    fontSize: 15,
+  reachUsButton: {
+    flexDirection: "row",
+    marginTop: 12,
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    height: 56,
     width: "100%",
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
   },
- reachUsButton: {
-  flexDirection: "row",
-  marginTop: 12,
-  alignItems: "center",
-  justifyContent: "space-between",
-  backgroundColor: "#fff",
-  borderRadius: 16,
-  paddingHorizontal: 14,
-  height: 56,             
-  width: "100%",
-  elevation: 3,
-  shadowColor: "#000",
-  shadowOpacity: 0.12,
-  shadowRadius: 6,
-  shadowOffset: { width: 0, height: 3 },
-},
-
-arrowIcon: {
-  color: "#E60000",
-  fontSize: 20,
-  fontWeight: "700",
-},
-reachUsText: {
-  color: "#E60000",
-  fontSize: 16,
-  fontWeight: "600",
-},
-
-bigArrow: {
-  fontSize: 20,     
-  fontWeight: "700",
-},
-
-
+  reachUsText: { color: "#E60000", fontSize: 16, fontWeight: "600" },
+  bigArrow: { fontSize: 20, fontWeight: "700" },
 });

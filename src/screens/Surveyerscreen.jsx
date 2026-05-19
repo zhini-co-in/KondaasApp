@@ -389,6 +389,14 @@ const SurveyerScreen = () => {
         etaText = mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`;
       }
     }
+    let mapsUrl = '';
+  if (currentLocation && hasLatLong) {
+    mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.latitude},${currentLocation.longitude}&destination=${lead.latitude},${lead.longitude}`;
+  } else if (hasLatLong) {
+    mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lead.latitude},${lead.longitude}`;
+  } else if (lead.address || lead.city) {
+    mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lead.address || lead.city)}`;
+  }
 
     await updateAcceptedLeadStatus(id, 'inprogress');
     setAcceptedLeads((prev) =>
@@ -414,14 +422,14 @@ const SurveyerScreen = () => {
 
       try {
         await API.post('/notification/trigger', {
-          surveyorNumber, customerMobile: lead.phone, scenarioType: 1, eta: totalMins,
+          surveyorNumber, customerMobile: lead.phone, scenarioType: 1, eta: totalMins, mapsUrl,
         });
       } catch (e) {
         console.log('[SurveyerScreen] Notification error:', e?.message);
       }
     } else {
       await enqueue(`notif_start_${id}`, 'NOTIFICATION', {
-        customerMobile: lead.phone, scenarioType: 1, eta: totalMins,
+        customerMobile: lead.phone, scenarioType: 1, eta: totalMins, mapsUrl,
       });
     }
 
