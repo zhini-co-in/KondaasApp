@@ -13,7 +13,7 @@ import ProfileImg from "../../assets/images/Round.png";
 import Loader from "../components/Loader";
 import NetInfo from "@react-native-community/netinfo";
 import { getStorageData, storeData, USER_DATA, getSavingsKey, getStationsKey, getTodayGenKey, getLifetimeKey } from "../service/localStorage";
-import { saveStations, getInstallationAmount, fetchHistoricalData, fetchRealTimeData, fetchStationList } from "../api/api1";
+import { saveStations, getInstallationAmount, fetchHistoricalData, fetchRealTimeData, fetchStationList, fetchSavings } from "../api/api1";
 import messaging from '@react-native-firebase/messaging';
 import notifee from '@notifee/react-native';
 import FontStyles from "../constants/fonts";
@@ -58,19 +58,27 @@ const MainScreen = ({ navigation }) => {
     }).start();
   }, [progressPercent]);
 
-// ✅ Merge into one
+  // ─── Load data when station selected ─────────────────────────────────────
 useEffect(() => {
   if (!selectedStationId) return;
-  loadTodayGeneration(selectedStationId);
-  getRealTimeGeneration(selectedStationId);
-  (async () => {
-    const amt = await getInstallationAmount(selectedStationId);
-    setInstallationAmount(amt);
-  })();
-  if (userInfo?.UserInfo?.phoneNo) {
-    fetchTotalSavings(userInfo.UserInfo.phoneNo, selectedStationId);
-  }
-}, [selectedStationId]);
+  if (!userInfo?.UserInfo?.phoneNo) return; // ← இதை add
+
+  loadRealTimeData(selectedStationId);
+
+  getInstallationAmount(selectedStationId).then(setInstallationAmount);
+
+  fetchTotalSavings(userInfo.UserInfo.phoneNo, selectedStationId);
+
+}, [selectedStationId, userInfo?.UserInfo?.phoneNo]);
+
+  // ─── Auto-refresh every 5 minutes ────────────────────────────────────────
+  useEffect(() => {
+    if (!selectedStationId) return;
+    const interval = setInterval(() => {
+      loadRealTimeData(selectedStationId);
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [selectedStationId]);
 
   // ─── Load user on focus ───────────────────────────────────────────────────
   useFocusEffect(
@@ -181,158 +189,163 @@ useEffect(() => {
     }));
   }
 
-const loadStations = async () => {
-  try {
-    setLoading(true);
-    const phoneNo = userInfo?.UserInfo?.phoneNo;
-    const STATIONS_KEY = getStationsKey(phoneNo);
+  const loadStations = async () => {
+    try {
+      setLoading(true);
+      const phoneNo = userInfo?.UserInfo?.phoneNo;
+      const STATIONS_KEY = getStationsKey(phoneNo);
 
-    const cached = await getStorageData(STATIONS_KEY);
-    if (cached) {
-      const processed = JSON.parse(cached);
+      // ─── Cache-ல இருந்தா உடனே show பண்ணு ───────────────────
+      const cached = await getStorageData(STATIONS_KEY);
+      if (cached) {
+        const processed = JSON.parse(cached);
+        setStations(processed);
+        if (processed.length > 0) {
+          const first = processed[0];
+          setSelectedStation(0);
+          setSelectedStationId(first.id);
+          setProgressPercent(first.progressPercent || 0);
+          setProgressColor(first.progressColor === "green" ? "#2ecc71" : "#f39c12");
+          // ✅ FIX 4: cache hit-ல data load பண்றோம் — useEffect [selectedStationId]
+          //    trigger ஆகும்போது loadRealTimeData + fetchTotalSavings call ஆகும்
+          //    இங்க தனியா call பண்ண வேண்டாம்
+        }
+      }
+
+      const net = await NetInfo.fetch();
+      if (!net.isConnected) return;
+
+      // ─── Network fresh data ───────────────────────────────────
+      const response = await fetchStationList();
+      let stationArray = Array.isArray(response) ? response : (response?.stationList || []);
+      const processed = processStations(stationArray);
       setStations(processed);
+
       if (processed.length > 0) {
         const first = processed[0];
         setSelectedStation(0);
         setSelectedStationId(first.id);
         setProgressPercent(first.progressPercent || 0);
         setProgressColor(first.progressColor === "green" ? "#2ecc71" : "#f39c12");
-
-        // ✅ Cache-லயே data load பண்ணு
-        loadTodayGeneration(first.id);
-        getRealTimeGeneration(first.id);
-        if (phoneNo) fetchTotalSavings(phoneNo, first.id);
+        // ✅ useEffect [selectedStationId] trigger ஆகும் — தனியா call வேண்டாம்
       }
+
+      await storeData(STATIONS_KEY, JSON.stringify(processed));
+
+    } catch (error) {
+      console.log("Error fetching stations:", error);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  // ─── REALTIME DATA — today + lifetime ஒரே call-ல் ────────────────────────
+  // ✅ FIX 3: பழைய code-ல் loadTodayGeneration + getRealTimeGeneration
+const loadRealTimeData = async (stationId) => {
+  try {
+    const TODAY_KEY    = getTodayGenKey(stationId);
+    const LIFETIME_KEY = getLifetimeKey(stationId);
+
+    // Cache show பண்ணு
+    const cachedToday    = await getStorageData(TODAY_KEY);
+    const cachedLifetime = await getStorageData(LIFETIME_KEY);
+    if (cachedToday)    setTodayGeneration(JSON.parse(cachedToday));
+    if (cachedLifetime) setLifetimeGeneration(JSON.parse(cachedLifetime));
 
     const net = await NetInfo.fetch();
     if (!net.isConnected) return;
 
-    const response = await fetchStationList();
-    let stationArray = Array.isArray(response) ? response : (response?.stationList || []);
-    const processed = processStations(stationArray);
-    setStations(processed);
+    // ─── Today units — history API timeType:1 ────────────────
+    const now   = new Date();
+    const y     = now.getFullYear();
+    const m     = String(now.getMonth() + 1).padStart(2, "0");
+    const d     = String(now.getDate()).padStart(2, "0");
+    const today = `${y}-${m}-${d}`;
 
-    if (processed.length > 0) {
-      const first = processed[0];
-      setSelectedStation(0);
-      setSelectedStationId(first.id);
-      setProgressPercent(first.progressPercent || 0);
-      setProgressColor(first.progressColor === "green" ? "#2ecc71" : "#f39c12");
+    const historyRes = await fetchHistoricalData({
+      stationId,
+      timeType:  1,
+      startTime: today,
+      endTime:   today,
+    });
 
-      // ✅ Fresh data load பண்ணு
-      loadTodayGeneration(first.id);
-      getRealTimeGeneration(first.id);
-      if (phoneNo) fetchTotalSavings(phoneNo, first.id);
-    }
+    const items = historyRes?.stationDataItems || [];
+    console.log("📊 today history items:", items.length);
+    if (items.length > 0) console.log("📊 sample item:", JSON.stringify(items[0]));
 
-    await storeData(STATIONS_KEY, JSON.stringify(processed));
+    let totalKwh = 0;
+    items.forEach(item => {
+      if (item.dateTime != null && item.generationPower != null) {
+        const kwh = (Number(item.generationPower) * 5) / (60 * 1000);
+        totalKwh += kwh;
+      }
+    });
+
+    const todayVal = parseFloat(totalKwh.toFixed(1));
+    setTodayGeneration(todayVal);
+    await storeData(TODAY_KEY, JSON.stringify(todayVal));
+    console.log("✅ todayGeneration:", todayVal);
+
+    // ✅ Lifetime — fetchTotalSavings-ல் set ஆகும்
+    // இங்க தனியா call வேண்டாம்
 
   } catch (error) {
-    console.log("Error fetching stations:", error);
-  } finally {
-    setLoading(false);
+    console.error("❌ loadRealTimeData error:", error);
   }
 };
 
-  const loadTodayGeneration = async (stationId) => {
-    try {
-      const TODAY_KEY = getTodayGenKey(stationId);
-
-      const cached = await getStorageData(TODAY_KEY);
-      if (cached) setTodayGeneration(JSON.parse(cached));
-
-      const net = await NetInfo.fetch();
-      if (!net.isConnected) return;
-
-      const today = new Date();
-      const dateString = today.toISOString().split("T")[0];
-      const response = await fetchHistoricalData({
-        stationId, timeType: 2,
-        startTime: dateString, endTime: dateString,
-      });
-
-      if (response?.stationDataItems?.length > 0) {
-        console.log("📊 stationDataItem:", JSON.stringify(response.stationDataItems[0]));
-        const val = response.stationDataItems[0].generationValue?.toFixed(1) || 0;
-        setTodayGeneration(val);
-        await storeData(TODAY_KEY, JSON.stringify(val));
-      } else {
-        setTodayGeneration(0);
-      }
-    } catch (error) {
-      console.error("Error fetching today's generation:", error);
-    }
-  };
-
-  const getRealTimeGeneration = async (stationId) => {
-    try {
-      const LIFETIME_KEY = getLifetimeKey(stationId);
-
-      const cached = await getStorageData(LIFETIME_KEY);
-      if (cached) setLifetimeGeneration(JSON.parse(cached));
-
-      const net = await NetInfo.fetch();
-      if (!net.isConnected) return;
-
-      const response = await fetchRealTimeData({ stationId });
-      if (response?.generationTotal !== undefined) {
-        setLifetimeGeneration(response.generationTotal);
-        await storeData(LIFETIME_KEY, JSON.stringify(response.generationTotal));
-      }
-    } catch (error) {
-      console.error("Error fetching real-time data:", error);
-    }
-  };
-
-  // ✅ stationId parameter accept பண்றது — stale closure fix
+  // ─── TOTAL SAVINGS ────────────────────────────────────────────────────────
+  // ✅ FIX 1: x-device-id header add பண்ணினோம் — இல்லன்னா backend 401 return பண்ணும்
+  // ✅ FIX 2: endpoint /savings/calculate-savings → /solarman/calculate-savings
 const fetchTotalSavings = async (phoneNo, stationId = selectedStationId) => {
   try {
-    const SAVINGS_KEY = getSavingsKey(phoneNo) + `_${stationId}`;
+    const SAVINGS_KEY  = getSavingsKey(phoneNo) + `_${stationId}`;
+    const LIFETIME_KEY = getLifetimeKey(stationId);
 
-    const userData = await getStorageData(USER_DATA);
-    const parsed = JSON.parse(userData);
-    const authToken = parsed?.authToken || parsed?.UserInfo?.authToken;
-    const deviceId = parsed?.deviceId; // ✅ deviceId எடு
-
+    // Cache
     const cached = await getStorageData(SAVINGS_KEY);
     if (cached) {
       const parsedCache = JSON.parse(cached);
       setTotalCost(`₹ ${parsedCache.totalCost}`);
+      // ✅ cache-ல் lifetime இருந்தா set பண்ணு
+      if (parsedCache.cumulativeUnits) {
+        setLifetimeGeneration(parsedCache.cumulativeUnits);
+      }
     }
 
     const net = await NetInfo.fetch();
     if (!net.isConnected) return;
 
-    const res = await fetch("https://board.trisentrix.com/savings/calculate-savings", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-auth-token": authToken,
-      },
-      body: JSON.stringify({ phoneNo, stationId, deviceId }), // ✅ deviceId add பண்ணு
-    });
+    const data = await fetchSavings(phoneNo, stationId);
 
-    const data = await res.json();
-    console.log("💰 Savings API response:", JSON.stringify(data));
+    if (data?.success && data?.data) {
+      const cumulativeCost  = data.data.cumulativeCost ?? 
+        Object.values(data.data.monthlyRecords || {})
+          .reduce((sum, r) => sum + (r.cost || 0), 0);
 
-    if (data?.success && data?.data?.monthlyRecords) {
-      const records = data.data.monthlyRecords;
-      const total = Object.values(records).reduce((sum, rec) => sum + (rec.cost || 0), 0);
-      const formatted = total.toLocaleString("en-IN", { 
-        minimumFractionDigits: 2, 
-        maximumFractionDigits: 2 
+      // ✅ Lifetime units set பண்ணு
+      const cumulativeUnits = data.data.cumulativeUnits ?? 0;
+      setLifetimeGeneration(cumulativeUnits);
+      await storeData(LIFETIME_KEY, JSON.stringify(cumulativeUnits));
+      console.log("✅ lifetimeGeneration:", cumulativeUnits);
+
+      const formatted = cumulativeCost.toLocaleString("en-IN", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
       });
+
       setTotalCost(`₹ ${formatted}`);
+      // ✅ cumulativeUnits-ஐயும் cache-ல் save பண்ணு
       await storeData(SAVINGS_KEY, JSON.stringify({ 
-        totalCost: formatted, 
-        monthlyRecords: records 
+        totalCost: formatted,
+        cumulativeUnits,
       }));
     } else {
+      console.log("⚠️ Savings error:", data?.error);
       setTotalCost("₹ 0.00");
     }
   } catch (e) {
-    console.log("Savings fetch error:", e);
+    console.log("Savings fetch error:", e.message);
     setTotalCost("₹ 0.00");
   }
 };
@@ -448,14 +461,7 @@ const fetchTotalSavings = async (phoneNo, stationId = selectedStationId) => {
                       setProgressPercent(item.progressPercent || 0);
                       setProgressColor(item.progressColor === "green" ? "#2ecc71" : "#f39c12");
                       setVisible(false);
-
-                      // ✅ New station-க்கு data reload
-                      loadTodayGeneration(item.id);
-                      getRealTimeGeneration(item.id);
-
-                      // ✅ Savings new stationId-உடன் fetch
-                      const phoneNo = userInfo?.UserInfo?.phoneNo;
-                      if (phoneNo) fetchTotalSavings(phoneNo, item.id);
+                      // ✅ useEffect [selectedStationId] trigger ஆகும் — தனியா call வேண்டாம்
                     }}
                   >
                     <Image source={LightBg} style={styles.familyImg} />

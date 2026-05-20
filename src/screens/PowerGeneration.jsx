@@ -84,85 +84,76 @@ const PowerGenerationScreen = ({ navigation, route }) => {
     date.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
   const formatYearOnly = (date) => date.getFullYear().toString();
 
-  // ✅ Fix — stations cache-இல இருந்து எடுக்கணும்
-useEffect(() => {
-  const loadCapacity = async () => {
-    try {
-      const stored = await getStorageData(USER_DATA);
-      const parsed = stored ? JSON.parse(stored) : null;
-      const phoneNo = parsed?.UserInfo?.phoneNo;
-      if (!phoneNo) return;
-
-      const STATIONS_KEY = `stations_data_${phoneNo}`;
-      const cached = await getStorageData(STATIONS_KEY);
-      if (cached) {
-        const stationList = JSON.parse(cached);
-        const found = stationList.find(s => String(s.id) === String(stationId));
-        if (found?.installedCapacity) {
-          setTotalInstalledCapacity(found.installedCapacity);
-          console.log("⚡ installedCapacity:", found.installedCapacity);
-        }
-      }
-    } catch (e) {
-      console.log("Capacity load error:", e.message);
-    }
-  };
-  if (stationId) loadCapacity();
-}, [stationId]);
-
+  // ─── Load installed capacity from stations cache ──────────────────────────
   useEffect(() => {
-const fetchUserData = async () => {
-  try {
-    const data = await getStorageData(USER_DATA);
-
-    if (!data || data === "undefined" || data === "null") return;
-
-    let parsed;
-    try {
-      parsed = JSON.parse(data);
-    } catch (parseErr) {
-      console.warn("Corrupt USER_DATA, clearing:", parseErr);
-      await AsyncStorage.removeItem(USER_DATA);
-      return;
-    }
-
-    setUserData(parsed.UserInfo || parsed);
-
-    const phoneNo = parsed?.UserInfo?.phoneNo || parsed?.phoneNo;
-    if (phoneNo) {
-      const SAVINGS_KEY = getSavingsKey(phoneNo);
-      const cached = await getStorageData(SAVINGS_KEY);
-      if (cached) {
-        const parsedCache = JSON.parse(cached);
-        setMonthlyRecords(parsedCache.monthlyRecords || {});
-      } else {
-        const authToken = parsed?.authToken || parsed?.UserInfo?.authToken;
-const res = await fetch("https://board.trisentrix.com/savings/calculate-savings", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "x-auth-token": authToken,
-  },
-  body: JSON.stringify({ phoneNo, stationId }),
-});
-        const savingsData = await res.json();
-        if (savingsData?.success && savingsData?.data?.monthlyRecords) {
-          setMonthlyRecords(savingsData.data.monthlyRecords);
-          const total = Object.values(savingsData.data.monthlyRecords)
-            .reduce((sum, rec) => sum + (rec.cost || 0), 0);
-          const formatted = total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-          await storeData(SAVINGS_KEY, JSON.stringify({
-            totalCost: formatted,
-            monthlyRecords: savingsData.data.monthlyRecords
-          }));
+    const loadCapacity = async () => {
+      try {
+        const stored = await getStorageData(USER_DATA);
+        const parsed = stored ? JSON.parse(stored) : null;
+        const phoneNo = parsed?.UserInfo?.phoneNo;
+        if (!phoneNo) return;
+        const STATIONS_KEY = `stations_data_${phoneNo}`;
+        const cached = await getStorageData(STATIONS_KEY);
+        if (cached) {
+          const stationList = JSON.parse(cached);
+          const found = stationList.find(s => String(s.id) === String(stationId));
+          if (found?.installedCapacity) {
+            setTotalInstalledCapacity(found.installedCapacity);
+          }
         }
+      } catch (e) {
+        console.log("Capacity load error:", e.message);
       }
-    }
-  } catch (err) {
-    console.error("Error loading user data:", err);
-  }
-};
-fetchUserData();
+    };
+    if (stationId) loadCapacity();
+  }, [stationId]);
+
+  // ─── Load user data & monthly savings ────────────────────────────────────
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const data = await getStorageData(USER_DATA);
+        if (!data || data === "undefined" || data === "null") return;
+        let parsed;
+        try { parsed = JSON.parse(data); }
+        catch (parseErr) {
+          console.warn("Corrupt USER_DATA, clearing:", parseErr);
+          await AsyncStorage.removeItem(USER_DATA);
+          return;
+        }
+        setUserData(parsed.UserInfo || parsed);
+        const phoneNo = parsed?.UserInfo?.phoneNo || parsed?.phoneNo;
+        if (phoneNo) {
+          const SAVINGS_KEY = getSavingsKey(phoneNo);
+          const cached = await getStorageData(SAVINGS_KEY);
+          if (cached) {
+            const parsedCache = JSON.parse(cached);
+            setMonthlyRecords(parsedCache.monthlyRecords || {});
+          } else {
+            const authToken = parsed?.authToken || parsed?.UserInfo?.authToken;
+            const res = await fetch("https://board.trisentrix.com/savings/calculate-savings", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "x-auth-token": authToken },
+              body: JSON.stringify({ phoneNo, stationId }),
+            });
+            const savingsData = await res.json();
+            if (savingsData?.success && savingsData?.data?.monthlyRecords) {
+              setMonthlyRecords(savingsData.data.monthlyRecords);
+              const total = Object.values(savingsData.data.monthlyRecords)
+                .reduce((sum, rec) => sum + (rec.cost || 0), 0);
+              const formatted = total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              await storeData(SAVINGS_KEY, JSON.stringify({
+                totalCost: formatted,
+                monthlyRecords: savingsData.data.monthlyRecords
+              }));
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error loading user data:", err);
+      }
+    };
+    fetchUserData();
   }, []);
 
   const isFutureDisabled = () => {
@@ -216,253 +207,276 @@ fetchUserData();
     }
   };
 
-  const loadCommittedUnits = (generated) => {
-    if (totalInstalledCapacity <= 0) { setPotentialUnits(0); setPercentGenerated(0); return; }
-    const potential = calculateCommittedUnits(totalInstalledCapacity, selectedTab, currentDate);
-    setPotentialUnits(potential);
-    const percent = potential > 0 ? Number(((generated / potential) * 100).toFixed(1)) : 0;
-    setPercentGenerated(percent);
-    setStatusColor("#4CAF50");
-  };
+  const fetchGenerationData = async (tab) => {
+    const dateKey = tab === "Day" ? formatDate(currentDate)
+      : tab === "Week" ? formatDate(currentDate)
+      : tab === "Month" ? `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`
+      : currentDate.getFullYear().toString();
 
-const fetchGenerationData = async (tab) => {
-  const dateKey = tab === "Day" ? formatDate(currentDate)
-    : tab === "Week" ? formatDate(currentDate)
-    : tab === "Month" ? `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`
-    : currentDate.getFullYear().toString();
+    const HISTORY_KEY = getHistoryKey(stationId, tab, dateKey);
 
-  const HISTORY_KEY = getHistoryKey(stationId, tab, dateKey);
-
-  // ✅ Cache இருந்தா உடனே show
- // ✅ Cache இருந்தா உடனே show
-const cached = await getStorageData(HISTORY_KEY);
-if (cached) {
-  const parsedCache = JSON.parse(cached);
-  const cachedChart = parsedCache.chartData;
-
-  // ✅ colors function மறுபடியும் add பண்ணு
-  if (cachedChart?.datasets?.[0]?.data && tab !== "Day") {
-    const data = cachedChart.datasets[0].data;
-    const maxVal = Math.max(...data);
-    const maxIdx = data.indexOf(maxVal);
-    cachedChart.datasets[0].colors = data.map((_, i) => () => i === maxIdx ? "#1F4FFF" : "#B8C7FF");
-  }
-
-  setChartData(cachedChart);
-  setTotalGenerated(parsedCache.totalGenerated);
-  setTotalSaved(parsedCache.totalSaved);
-  setPotentialUnits(parsedCache.potentialUnits || 0);
-  setPercentGenerated(parsedCache.percentGenerated || 0);
-}
-
-  // ✅ Offline-ல return
-  const net = await NetInfo.fetch();
-  if (!net.isConnected) return;
-
-  setLoading(true);
-
-  try {
-    if (tab === "Month") {
-      const year = currentDate.getFullYear();
-      const month = String(currentDate.getMonth() + 1).padStart(2, "0");
-      const isCurrentMonth = year === new Date().getFullYear() && Number(month) === new Date().getMonth() + 1;
-      let lastDay = new Date(year, Number(month), 0).getDate();
-      if (isCurrentMonth) lastDay = new Date().getDate();
-
-      const apiData = await getHistory({
-        stationId, timeType: 2,
-        startTime: `${year}-${month}-01`,
-        endTime: `${year}-${month}-${lastDay.toString().padStart(2, "0")}`,
-      }) || { stationDataItems: [] };
-
-      const dayMap = {};
-      (apiData?.stationDataItems || []).forEach(item => {
-        const d = Number(item.day);
-        if (d >= 1 && d <= lastDay) dayMap[d] = Number(item.generationValue) || 0;
-      });
-
-      const labels = [], dataPoints = [];
-      for (let d = 1; d <= lastDay; d++) {
-        labels.push(d.toString());
-        dataPoints.push(dayMap[d] ?? 0);
-      }
-
-      const totalThisMonth = dataPoints.reduce((sum, v) => sum + v, 0);
-      setTotalGenerated(Number(totalThisMonth.toFixed(1)));
-
-      const monthKey = `${year}-${month}`;
-      const monthlyCost = monthlyRecords[monthKey]?.cost ?? Number((totalThisMonth * rate).toFixed(0));
-      setTotalSaved(monthlyCost);
-
-      const potential = calculateCommittedUnits(totalInstalledCapacity, tab, currentDate);
-      setPotentialUnits(Number(potential.toFixed(1)));
-      const percent = potential > 0 ? Number((totalThisMonth / potential * 100).toFixed(1)) : 0;
-      setPercentGenerated(percent);
-      setStatusColor("#4CAF50");
-
-      const maxVal = dataPoints.length ? Math.max(...dataPoints) : 0;
-      const maxIdx = dataPoints.indexOf(maxVal);
-      const newChartData = {
-        labels,
-        datasets: [{ data: dataPoints, colors: dataPoints.map((_, i) => () => i === maxIdx ? "#1F4FFF" : "#B8C7FF") }],
-      };
-      setChartData(newChartData);
-
-      // ✅ Cache save
-      await storeData(HISTORY_KEY, JSON.stringify({
-        chartData: newChartData,
-        totalGenerated: Number(totalThisMonth.toFixed(1)),
-        totalSaved: monthlyCost,
-        potentialUnits: Number(potential.toFixed(1)),
-        percentGenerated: percent,
-      }));
-      return;
-    }
-
-    if (tab === "Year") {
-      const y = currentDate.getFullYear();
-      const apiData = await getHistory({
-        stationId, timeType: 3,
-        startTime: `${y}-01`, endTime: `${y}-12`,
-      }) || { stationDataItems: [] };
-
-      const monthMap = {};
-      (apiData?.stationDataItems || []).forEach(item => {
-        const m = Number(item.month);
-        if (m >= 1 && m <= 12) monthMap[m] = Number(item.generationValue) || 0;
-      });
-
-      const labels = [], dataPoints = [];
-      let totalUnits = 0;
-      for (let m = 1; m <= 12; m++) {
-        labels.push(new Date(y, m - 1, 1).toLocaleString("en", { month: "short" }));
-        const val = monthMap[m] ?? 0;
-        dataPoints.push(val);
-        totalUnits += val;
-      }
-
-      setTotalGenerated(Number(totalUnits.toFixed(1)));
-
-      let yearCost = 0;
-      for (let m = 1; m <= 12; m++) {
-        const key = `${y}-${String(m).padStart(2, "0")}`;
-        yearCost += monthlyRecords[key]?.cost ?? (dataPoints[m - 1] * rate);
-      }
-      setTotalSaved(Number(yearCost.toFixed(0)));
-      await loadCommittedUnits(totalUnits);
-
-      const maxValue = dataPoints.length ? Math.max(...dataPoints) : 0;
-      const maxIndex = dataPoints.indexOf(maxValue);
-      const newChartData = {
-        labels,
-        datasets: [{ data: dataPoints, colors: dataPoints.map((_, i) => () => i === maxIndex ? "#1F4FFF" : "#B8C7FF") }],
-      };
-      setChartData(newChartData);
-
-      // ✅ Cache save
-      const potential = calculateCommittedUnits(totalInstalledCapacity, tab, currentDate);
-      const percent = potential > 0 ? Number((totalUnits / potential * 100).toFixed(1)) : 0;
-      await storeData(HISTORY_KEY, JSON.stringify({
-        chartData: newChartData,
-        totalGenerated: Number(totalUnits.toFixed(1)),
-        totalSaved: Number(yearCost.toFixed(0)),
-        potentialUnits: potential,
-        percentGenerated: percent,
-      }));
-      return;
-    }
-
-    if (tab === "Day") {
-      const { start, end } = getDateRange(tab);
-      setWeekStart(start); setWeekEnd(end);
-
-      const hourlyData = await getHistory({ stationId, timeType: 1, startTime: start, endTime: end }) || { stationDataItems: [] };
-      const hourMap = {};
-      const INTERVAL_MINUTES = 5;
-      (hourlyData?.stationDataItems || []).forEach(item => {
-        if (item.dateTime && item.generationPower != null) {
-          const hour = new Date(item.dateTime * 1000).getHours();
-          if (!hourMap[hour]) hourMap[hour] = 0;
-          hourMap[hour] += (Number(item.generationPower) * INTERVAL_MINUTES) / (60 * 1000);
+    // ─── Show cache first for non-Day tabs ───────────────────────────────
+    if (tab !== "Day") {
+      const cached = await getStorageData(HISTORY_KEY);
+      if (cached) {
+        const parsedCache = JSON.parse(cached);
+        const cachedChart = parsedCache.chartData;
+        if (cachedChart?.datasets?.[0]?.data) {
+          const data = cachedChart.datasets[0].data;
+          const maxVal = Math.max(...data);
+          const maxIdx = data.indexOf(maxVal);
+          cachedChart.datasets[0].colors = data.map((_, i) => () => i === maxIdx ? "#1F4FFF" : "#B8C7FF");
         }
-      });
+        setChartData(cachedChart);
+        setTotalGenerated(parsedCache.totalGenerated);
+        setTotalSaved(parsedCache.totalSaved);
+        setPotentialUnits(parsedCache.potentialUnits || 0);
+        setPercentGenerated(parsedCache.percentGenerated || 0);
+      }
+    }
 
-      const labels = [], dataPoints = [];
-      for (let i = 0; i < 24; i++) {
-        const hour12 = i % 12 === 0 ? 12 : i % 12;
-        const ampm = i < 12 ? "AM" : "PM";
-        labels.push(i % 2 === 0 ? `${hour12.toString().padStart(2, "0")} ${ampm}` : "");
-        dataPoints.push(hourMap[i] || 0);
+    const net = await NetInfo.fetch();
+    if (!net.isConnected) return;
+
+    setLoading(true);
+
+    try {
+
+      // ════════════════════════════════════════════════
+      // DAY TAB — Live data, no cache
+      // api1.js getHistory() returns { stationDataItems: [...] }
+      // timeType:1 = Day → backend always fetches fresh from Solarman
+      // ════════════════════════════════════════════════
+      if (tab === "Day") {
+        const { start, end } = getDateRange(tab);
+        setWeekStart(start);
+        setWeekEnd(end);
+
+        const response = await getHistory({
+          stationId,
+          timeType: 1,
+          startTime: start,
+          endTime: end,
+        });
+
+        // getHistory() always wraps result as { stationDataItems: [...] }
+        const items = response?.stationDataItems || [];
+
+        console.log("📊 DAY items count:", items.length);
+        if (items.length > 0) console.log("📊 DAY sample:", JSON.stringify(items[0]));
+
+        // Build 24-hour chart from 5-min Watt readings
+        const INTERVAL_MINUTES = 5;
+        const hourMap = {};
+        let totalKwh = 0;
+
+        items.forEach(item => {
+          if (item.dateTime != null && item.generationPower != null) {
+            const hour = new Date(item.dateTime * 1000).getHours();
+            if (!hourMap[hour]) hourMap[hour] = 0;
+            // Solarman returns generationPower in Watts
+            // kWh = (Watts × 5min) / (60 min/hr × 1000 W/kW)
+            const kwh = (Number(item.generationPower) * INTERVAL_MINUTES) / (60 * 1000);
+            hourMap[hour] += kwh;
+            totalKwh += kwh;
+          }
+        });
+
+        const labels = [], dataPoints = [];
+        for (let i = 0; i < 24; i++) {
+          const hour12 = i % 12 === 0 ? 12 : i % 12;
+          const ampm = i < 12 ? "AM" : "PM";
+          labels.push(i % 2 === 0 ? `${hour12.toString().padStart(2, "0")} ${ampm}` : "");
+          dataPoints.push(hourMap[i] || 0);
+        }
+
+        const val = parseFloat(totalKwh.toFixed(1));
+        const saved = Number((totalKwh * rate).toFixed(0));
+
+        setTotalGenerated(val);
+        setTotalSaved(saved);
+
+        const potential = calculateCommittedUnits(totalInstalledCapacity, tab, currentDate);
+        setPotentialUnits(Number(potential.toFixed(1)));
+        const percent = potential > 0 ? Number((totalKwh / potential * 100).toFixed(1)) : 0;
+        setPercentGenerated(percent);
+        setStatusColor("#4CAF50");
+
+        setChartData({ labels, datasets: [{ data: dataPoints }] });
+        return;
       }
 
-      const totalData = await getHistory({ stationId, timeType: 2, startTime: start, endTime: end }) || { stationDataItems: [] };
-      let totalUnits = 0;
-      (totalData?.stationDataItems || []).forEach(item => { totalUnits += Number(item.generationValue) || 0; });
+      // ════════════════════════════════════════════════
+      // WEEK TAB
+      // ════════════════════════════════════════════════
+      if (tab === "Week") {
+        const { start, end } = getDateRange(tab);
+        setWeekStart(start);
+        setWeekEnd(end);
 
-      const saved = Number((totalUnits * rate).toFixed(0));
-      setTotalGenerated(Number(totalUnits.toFixed(1)));
-      setTotalSaved(saved);
-      const newChartData = { labels, datasets: [{ data: dataPoints }] };
-      setChartData(newChartData);
+        const response = await getHistory({ stationId, timeType: 2, startTime: start, endTime: end });
+        const items = response?.stationDataItems || [];
 
-      // ✅ Cache save
-      await storeData(HISTORY_KEY, JSON.stringify({
-        chartData: newChartData,
-        totalGenerated: Number(totalUnits.toFixed(1)),
-        totalSaved: saved,
-        potentialUnits: 0,
-        percentGenerated: 0,
-      }));
-      return;
+        const labels = [], dataPoints = [];
+        items.forEach((item, index) => {
+          labels.push(item.day || String(index + 1));
+          dataPoints.push(Number(item.generationValue) || 0);
+        });
+
+        const total = dataPoints.reduce((a, b) => a + b, 0);
+        const saved = Number((total * rate).toFixed(0));
+        setTotalGenerated(Number(total.toFixed(1)));
+        setTotalSaved(saved);
+
+        const potential = calculateCommittedUnits(totalInstalledCapacity, tab, currentDate);
+        const percent = potential > 0 ? Number(((total / potential) * 100).toFixed(1)) : 0;
+        setPotentialUnits(potential);
+        setPercentGenerated(percent);
+        setStatusColor("#4CAF50");
+
+        const maxValue = dataPoints.length ? Math.max(...dataPoints) : 0;
+        const maxIndex = dataPoints.indexOf(maxValue);
+        const newChartData = {
+          labels,
+          datasets: [{ data: dataPoints, colors: dataPoints.map((_, i) => () => i === maxIndex ? "#1F4FFF" : "#B8C7FF") }],
+        };
+        setChartData(newChartData);
+
+        await storeData(HISTORY_KEY, JSON.stringify({
+          chartData: newChartData,
+          totalGenerated: Number(total.toFixed(1)),
+          totalSaved: saved,
+          potentialUnits: potential,
+          percentGenerated: percent,
+        }));
+        return;
+      }
+
+      // ════════════════════════════════════════════════
+      // MONTH TAB
+      // ════════════════════════════════════════════════
+      if (tab === "Month") {
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, "0");
+        const isCurrentMonth = year === new Date().getFullYear() && Number(month) === new Date().getMonth() + 1;
+        let lastDay = new Date(year, Number(month), 0).getDate();
+        if (isCurrentMonth) lastDay = new Date().getDate();
+
+        const response = await getHistory({
+          stationId, timeType: 2,
+          startTime: `${year}-${month}-01`,
+          endTime: `${year}-${month}-${lastDay.toString().padStart(2, "0")}`,
+        });
+        const items = response?.stationDataItems || [];
+
+        const dayMap = {};
+        items.forEach(item => {
+          const d = Number(item.day);
+          if (d >= 1 && d <= lastDay) dayMap[d] = Number(item.generationValue) || 0;
+        });
+
+        const labels = [], dataPoints = [];
+        for (let d = 1; d <= lastDay; d++) {
+          labels.push(d.toString());
+          dataPoints.push(dayMap[d] ?? 0);
+        }
+
+        const totalThisMonth = dataPoints.reduce((sum, v) => sum + v, 0);
+        setTotalGenerated(Number(totalThisMonth.toFixed(1)));
+
+        const monthKey = `${year}-${month}`;
+        const monthlyCost = monthlyRecords[monthKey]?.cost ?? Number((totalThisMonth * rate).toFixed(0));
+        setTotalSaved(monthlyCost);
+
+        const potential = calculateCommittedUnits(totalInstalledCapacity, tab, currentDate);
+        setPotentialUnits(Number(potential.toFixed(1)));
+        const percent = potential > 0 ? Number((totalThisMonth / potential * 100).toFixed(1)) : 0;
+        setPercentGenerated(percent);
+        setStatusColor("#4CAF50");
+
+        const maxVal = dataPoints.length ? Math.max(...dataPoints) : 0;
+        const maxIdx = dataPoints.indexOf(maxVal);
+        const newChartData = {
+          labels,
+          datasets: [{ data: dataPoints, colors: dataPoints.map((_, i) => () => i === maxIdx ? "#1F4FFF" : "#B8C7FF") }],
+        };
+        setChartData(newChartData);
+
+        await storeData(HISTORY_KEY, JSON.stringify({
+          chartData: newChartData,
+          totalGenerated: Number(totalThisMonth.toFixed(1)),
+          totalSaved: monthlyCost,
+          potentialUnits: Number(potential.toFixed(1)),
+          percentGenerated: percent,
+        }));
+        return;
+      }
+
+      // ════════════════════════════════════════════════
+      // YEAR TAB
+      // ════════════════════════════════════════════════
+      if (tab === "Year") {
+        const y = currentDate.getFullYear();
+        const response = await getHistory({
+          stationId, timeType: 3,
+          startTime: `${y}-01`, endTime: `${y}-12`,
+        });
+        const items = response?.stationDataItems || [];
+
+        const monthMap = {};
+        items.forEach(item => {
+          const m = Number(item.month);
+          if (m >= 1 && m <= 12) monthMap[m] = Number(item.generationValue) || 0;
+        });
+
+        const labels = [], dataPoints = [];
+        let totalUnits = 0;
+        for (let m = 1; m <= 12; m++) {
+          labels.push(new Date(y, m - 1, 1).toLocaleString("en", { month: "short" }));
+          const val = monthMap[m] ?? 0;
+          dataPoints.push(val);
+          totalUnits += val;
+        }
+
+        setTotalGenerated(Number(totalUnits.toFixed(1)));
+
+        let yearCost = 0;
+        for (let m = 1; m <= 12; m++) {
+          const key = `${y}-${String(m).padStart(2, "0")}`;
+          yearCost += monthlyRecords[key]?.cost ?? (dataPoints[m - 1] * rate);
+        }
+        setTotalSaved(Number(yearCost.toFixed(0)));
+
+        const potential = calculateCommittedUnits(totalInstalledCapacity, tab, currentDate);
+        const percent = potential > 0 ? Number((totalUnits / potential * 100).toFixed(1)) : 0;
+        setPotentialUnits(Number(potential.toFixed(1)));
+        setPercentGenerated(percent);
+        setStatusColor("#4CAF50");
+
+        const maxValue = dataPoints.length ? Math.max(...dataPoints) : 0;
+        const maxIndex = dataPoints.indexOf(maxValue);
+        const newChartData = {
+          labels,
+          datasets: [{ data: dataPoints, colors: dataPoints.map((_, i) => () => i === maxIndex ? "#1F4FFF" : "#B8C7FF") }],
+        };
+        setChartData(newChartData);
+
+        await storeData(HISTORY_KEY, JSON.stringify({
+          chartData: newChartData,
+          totalGenerated: Number(totalUnits.toFixed(1)),
+          totalSaved: Number(yearCost.toFixed(0)),
+          potentialUnits: potential,
+          percentGenerated: percent,
+        }));
+        return;
+      }
+
+    } catch (err) {
+      console.log("fetchGenerationData Error:", err);
+    } finally {
+      setLoading(false);
     }
-
-    if (tab === "Week") {
-      const { start, end } = getDateRange(tab);
-      setWeekStart(start); setWeekEnd(end);
-
-      const data = await getHistory({ stationId, timeType: 2, startTime: start, endTime: end }) || { stationDataItems: [] };
-      const items = data?.stationDataItems || [];
-      const labels = [], dataPoints = [];
-      items.forEach((item, index) => {
-        labels.push(item.day || index + 1);
-        dataPoints.push(Number(item.generationValue) || 0);
-      });
-
-      const total = dataPoints.reduce((a, b) => a + b, 0);
-      const saved = Number((total * rate).toFixed(0));
-      setTotalGenerated(Number(total.toFixed(1)));
-      setTotalSaved(saved);
-
-      const potential = calculateCommittedUnits(totalInstalledCapacity, tab, currentDate);
-      const percent = potential > 0 ? Number(((total / potential) * 100).toFixed(1)) : 0;
-      setPotentialUnits(potential);
-      setPercentGenerated(percent);
-      setStatusColor("#4CAF50");
-
-      const maxValue = dataPoints.length ? Math.max(...dataPoints) : 0;
-      const maxIndex = dataPoints.indexOf(maxValue);
-      const newChartData = {
-        labels,
-        datasets: [{ data: dataPoints, colors: dataPoints.map((_, i) => () => i === maxIndex ? "#1F4FFF" : "#B8C7FF") }],
-      };
-      setChartData(newChartData);
-
-      // ✅ Cache save
-      await storeData(HISTORY_KEY, JSON.stringify({
-        chartData: newChartData,
-        totalGenerated: Number(total.toFixed(1)),
-        totalSaved: saved,
-        potentialUnits: potential,
-        percentGenerated: percent,
-      }));
-    }
-
-  } catch (err) {
-    console.log("fetchGenerationData Error:", err);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   useEffect(() => {
     if (stationId) fetchGenerationData(selectedTab);

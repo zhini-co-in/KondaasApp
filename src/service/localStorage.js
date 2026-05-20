@@ -61,7 +61,9 @@ export const storeData = async (key, value) => {
 
 export const getStorageData = async (key) => {
   try {
-    return await AsyncStorage.getItem(key);
+    const val = await AsyncStorage.getItem(key);
+    console.log(`📖 getStorageData [${key}]:`, val ? "HAS DATA" : "EMPTY");
+    return val;
   } catch (e) {
     return null;
   }
@@ -69,6 +71,9 @@ export const getStorageData = async (key) => {
 
 export const clearStorage = async () => {
   try {
+    // 🔍 WHO CALLED THIS? Stack trace பார்க்கிறோம்
+    console.log("🚨 clearStorage CALLED!", new Error().stack);
+    
     await AsyncStorage.clear();
     const keys = await AsyncStorage.getAllKeys();
     console.log("Storage cleared. Current keys:", keys);

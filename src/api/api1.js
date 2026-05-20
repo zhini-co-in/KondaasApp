@@ -9,6 +9,9 @@ const BASE_URL = "https://board.trisentrix.com";
 
 // ─────────────────────────────────────────────────────────────
 // Axios instance
+// NOTE: இந்த instance-ஐ solarman routes-க்கு use பண்ணாதே.
+//       SyncQueue (order/*, user/add, notification/*) மட்டும் use பண்ணு.
+//       Solarman routes எல்லாம் கீழே உள்ள solarmanFetch helper use பண்றது.
 // ─────────────────────────────────────────────────────────────
 const API1 = axios.create({
   baseURL: BASE_URL,
@@ -41,14 +44,40 @@ API1.interceptors.request.use(async (config) => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// INTERNAL HELPER — எல்லா solarman fetch call-க்கும் ஒரே headers
+// x-auth-token + x-device-id இரண்டும் எல்லா call-லயும் போகும்
+// ─────────────────────────────────────────────────────────────
+const solarmanFetch = async (endpoint, body, authToken, deviceId) => {
+  const res = await fetch(`${BASE_URL}${endpoint}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-auth-token": authToken || "",
+      "x-device-id":  deviceId  || "",
+    },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+};
+
+// ─────────────────────────────────────────────────────────────
 // 1. GET USER
+// body-ல் phoneNo மட்டும் — backend அதை மட்டும் expect பண்றது
+// deviceId + authToken header-ல் போகும்
 // ─────────────────────────────────────────────────────────────
 export const getUser = async (phoneNo) => {
   try {
-    const { deviceId } = await getSessionInfo();
-    const response = await API1.post("/solarman/get", { phoneNo, deviceId });
-    console.log("✅ getUser response:", response.data);
-    if (response.data?.success && response.data?.data) return response.data.data;
+    const { deviceId, authToken } = await getSessionInfo();
+
+    const data = await solarmanFetch(
+      "/solarman/get",
+      { phoneNo },
+      authToken,
+      deviceId
+    );
+
+    console.log("✅ getUser response:", data);
+    if (data?.success && data?.data) return data.data;
     return null;
   } catch (error) {
     console.log("❌ getUser error:", error.message);
@@ -58,13 +87,24 @@ export const getUser = async (phoneNo) => {
 
 // ─────────────────────────────────────────────────────────────
 // 2. SAVE USER
+// payload-ல் இருக்கற deviceId field-ஐ நீக்கு — header-ல் போகுது
+// password field-ஐ தொடாதே — saveMailCredentials மட்டும் handle பண்ணும்
 // ─────────────────────────────────────────────────────────────
 export const saveUser = async (payload) => {
   try {
-    const { deviceId } = await getSessionInfo();
-    const response = await API1.post("/solarman/user", { ...payload, deviceId });
-    console.log("✅ saveUser response:", response.data);
-    return { success: true, data: response.data };
+    const { deviceId, authToken } = await getSessionInfo();
+
+    const { deviceId: _removed, ...cleanPayload } = payload;
+
+    const data = await solarmanFetch(
+      "/solarman/user",
+      cleanPayload,
+      authToken,
+      deviceId
+    );
+
+    console.log("✅ saveUser response:", data);
+    return { success: true, data };
   } catch (error) {
     console.log("❌ saveUser error:", error.message);
     return { success: false, message: error.message };
@@ -73,6 +113,9 @@ export const saveUser = async (payload) => {
 
 // ─────────────────────────────────────────────────────────────
 // 3. SAVE MAIL CREDENTIALS
+// password-ஐ SHA256 hash பண்ணி save பண்றோம்
+// இந்த function மட்டும் password handle பண்ண வேண்டும்
+// OtpScreen finalPayload-ல் password போடக்கூடாது (fix ஆச்சு)
 // ─────────────────────────────────────────────────────────────
 export const saveMailCredentials = async (email, password) => {
   try {
@@ -80,7 +123,7 @@ export const saveMailCredentials = async (email, password) => {
       return { success: false, message: "Please enter email and password" };
     }
 
-    const { deviceId, phoneNo, parsed } = await getSessionInfo();
+    const { phoneNo, parsed } = await getSessionInfo();
 
     if (!phoneNo) {
       return { success: false, message: "Session expired. Please login again." };
@@ -90,7 +133,6 @@ export const saveMailCredentials = async (email, password) => {
 
     const payload = {
       ...parsed,
-      deviceId,
       UserInfo: {
         ...parsed.UserInfo,
         phoneNo,
@@ -115,10 +157,11 @@ export const saveMailCredentials = async (email, password) => {
 
 // ─────────────────────────────────────────────────────────────
 // 4. SAVE STATIONS
+// saveUser மூலம் போகும் — header fix auto benefit கிடைக்கும்
 // ─────────────────────────────────────────────────────────────
 export const saveStations = async (stationsList) => {
   try {
-    const { deviceId, phoneNo, parsed } = await getSessionInfo();
+    const { phoneNo, parsed } = await getSessionInfo();
 
     if (!phoneNo) { console.log("❌ saveStations: phoneNo not found"); return; }
     if (!stationsList?.length) { console.log("⚠️ saveStations: empty list"); return; }
@@ -135,7 +178,6 @@ export const saveStations = async (stationsList) => {
 
     const payload = {
       ...parsed,
-      deviceId,
       UserInfo:   { ...parsed.UserInfo, phoneNo },
       devicelist: stationArray,
     };
@@ -152,6 +194,7 @@ export const saveStations = async (stationsList) => {
 
 // ─────────────────────────────────────────────────────────────
 // 5. GET INSTALLATION AMOUNT
+// Local AsyncStorage read மட்டும் — network call இல்லை
 // ─────────────────────────────────────────────────────────────
 export const getInstallationAmount = async (stationId) => {
   try {
@@ -171,6 +214,7 @@ export const getInstallationAmount = async (stationId) => {
 
 // ─────────────────────────────────────────────────────────────
 // 6. UPDATE DEVICE INFO (fcmToken refresh / lastUsedAt update)
+// saveUser மூலம் போகும் — header fix auto benefit கிடைக்கும்
 // ─────────────────────────────────────────────────────────────
 export const updateDeviceInfo = async ({ fcmToken } = {}) => {
   try {
@@ -199,7 +243,6 @@ export const updateDeviceInfo = async ({ fcmToken } = {}) => {
 
     const payload = {
       ...parsed,
-      deviceId,
       PlatformInfo: { devices: updatedDevices },
     };
 
@@ -213,56 +256,34 @@ export const updateDeviceInfo = async ({ fcmToken } = {}) => {
 
 // ─────────────────────────────────────────────────────────────
 // 7. GET HISTORY
+// FIX: தேவையில்லாத token refresh block நீக்கினோம்
+//
+// ஏன் நீக்கினோம்:
+//   - backend getSolarmanHistory தன்னாலயே getInternalSolarmanToken() call
+//     பண்ணி fresh token எடுக்கும் — client அனுப்பற token-ஐ படிக்கவே மாட்டேங்குது
+//   - அந்த extra /solarman/token call தேவையில்லாத network round-trip
+//   - body-ல் token field வேண்டாம் — backend use பண்றதில்லை
+//
+// body-ல் phoneNo + stationId + timeType + startTime + endTime மட்டும்
+// authToken + deviceId header-ல் போகும்
 // ─────────────────────────────────────────────────────────────
 export const getHistory = async ({ stationId, timeType, startTime, endTime }) => {
   try {
-    const {
-      deviceId, authToken, phoneNo,
-      email, password, accessToken: storedToken, parsed,
-    } = await getSessionInfo();
+    const { deviceId, authToken, phoneNo } = await getSessionInfo();
 
-    let token = storedToken;
-
-    // Solarman access token refresh
-    try {
-      const tokenRes = await fetch(`${BASE_URL}/solarman/token`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-auth-token": authToken,
-        },
-        body: JSON.stringify({ phoneNo, deviceId, email, password }),
-      });
-      const tokenData = await tokenRes.json();
-      console.log("🔄 Token refresh:", JSON.stringify(tokenData));
-
-      if (tokenData?.access_token) {
-        token = tokenData.access_token;
-        await AsyncStorage.setItem(USER_DATA, JSON.stringify({ ...parsed, accessToken: token }));
-        console.log("✅ Token refreshed");
-      }
-    } catch (tokenErr) {
-      console.log("⚠️ Token refresh failed:", tokenErr.message);
-    }
-
-    const res = await fetch(`${BASE_URL}/solarman/history`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-auth-token": authToken,
-      },
-      body: JSON.stringify({
-        token,        // solarman accessToken
+    const data = await solarmanFetch(
+      "/solarman/history",
+      {
         phoneNo,
-        deviceId,     // ← which device is requesting
         stationId,
         timeType,
         startTime,
         endTime,
-      }),
-    });
+      },
+      authToken,
+      deviceId
+    );
 
-    const data = await res.json();
     console.log("✅ getHistory:", JSON.stringify(data).slice(0, 200));
 
     if (data?.success) return { stationDataItems: data.data || [] };
@@ -275,27 +296,22 @@ export const getHistory = async ({ stationId, timeType, startTime, endTime }) =>
 
 // ─────────────────────────────────────────────────────────────
 // 8. FETCH STATION LIST
+// body-ல் phoneNo மட்டும் — token + deviceId வேண்டாம்
+// backend தன்னாலயே Solarman token generate பண்ணும்
 // ─────────────────────────────────────────────────────────────
 export const fetchStationList = async () => {
   try {
-    const { deviceId, authToken, phoneNo, accessToken } = await getSessionInfo();
+    const { deviceId, authToken, phoneNo } = await getSessionInfo();
 
     console.log("📡 fetchStationList | deviceId:", deviceId);
 
-    const res = await fetch(`${BASE_URL}/solarman/stations`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-auth-token": authToken,
-      },
-      body: JSON.stringify({
-        token:    accessToken,  // solarman accessToken
-        phoneNo,
-        deviceId,              // ← which device is requesting
-      }),
-    });
+    const data = await solarmanFetch(
+      "/solarman/stations",
+      { phoneNo },
+      authToken,
+      deviceId
+    );
 
-    const data = await res.json();
     console.log("🏭 fetchStationList:", JSON.stringify(data));
 
     if (data?.stations)      return data.stations;
@@ -317,33 +333,58 @@ export const fetchHistoricalData = async ({ stationId, timeType, startTime, endT
 
 // ─────────────────────────────────────────────────────────────
 // 10. FETCH REAL TIME DATA
+// NOTE: இது நேரடியா Solarman API-ஐ call பண்றது (backend proxy இல்லை).
+//       accessToken client-ல் expose ஆகுது — future-ல் backend-ல்
+//       /solarman/realtime proxy endpoint போட்டு மாத்துவது நல்லது.
+//       தற்போது மாற்றம் இல்லை.
+// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// 10. FETCH REAL TIME DATA — solarmanFetch helper use பண்றோம்
+// Token + DeviceId automatically header-ல் போகும்
 // ─────────────────────────────────────────────────────────────
 export const fetchRealTimeData = async ({ stationId }) => {
   try {
-    const { deviceId, accessToken } = await getSessionInfo();
+    const { deviceId, authToken, phoneNo } = await getSessionInfo();
 
-    if (!accessToken) {
-      console.log("❌ fetchRealTimeData: accessToken not found");
-      return null;
-    }
+    console.log("📡 fetchRealTimeData | stationId:", stationId, "| deviceId:", deviceId, "| authToken:", authToken ? "EXISTS" : "MISSING");
 
-    console.log("📡 fetchRealTimeData | deviceId:", deviceId, "| stationId:", stationId);
-
-    const response = await axios.post(
-      "https://globalapi.solarmanpv.com/station/v1.0/realTime?language=en",
-      { stationId, deviceId },
-      {
-        headers: {
-          Authorization:  `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-      }
+    const data = await solarmanFetch(
+      "/solarman/realtime",
+      { phoneNo, stationId },
+      authToken,
+      deviceId
     );
 
-    console.log("✅ fetchRealTimeData response:", response.data);
-    return response.data;
+    console.log("✅ fetchRealTimeData:", JSON.stringify(data));
+    return data;
+
   } catch (error) {
     console.log("❌ fetchRealTimeData error:", error.message);
+    return null;
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
+// 11. FETCH SAVINGS
+// ─────────────────────────────────────────────────────────────
+export const fetchSavings = async (phoneNo, stationId) => {
+  try {
+    const { deviceId, authToken } = await getSessionInfo();
+
+    console.log("💰 fetchSavings | phoneNo:", phoneNo, "| stationId:", stationId);
+
+    const data = await solarmanFetch(
+      "/savings/calculate-savings",
+      { phoneNo, stationId },
+      authToken,
+      deviceId
+    );
+
+    console.log("✅ fetchSavings:", JSON.stringify(data));
+    return data;
+
+  } catch (e) {
+    console.log("❌ fetchSavings error:", e.message);
     return null;
   }
 };
