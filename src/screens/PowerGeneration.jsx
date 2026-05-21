@@ -124,7 +124,7 @@ const PowerGenerationScreen = ({ navigation, route }) => {
         setUserData(parsed.UserInfo || parsed);
         const phoneNo = parsed?.UserInfo?.phoneNo || parsed?.phoneNo;
         if (phoneNo) {
-          const SAVINGS_KEY = getSavingsKey(phoneNo);
+          const SAVINGS_KEY = getSavingsKey(phoneNo) + `_${stationId}`;
           const cached = await getStorageData(SAVINGS_KEY);
           if (cached) {
             const parsedCache = JSON.parse(cached);
@@ -143,9 +143,10 @@ const PowerGenerationScreen = ({ navigation, route }) => {
                 .reduce((sum, rec) => sum + (rec.cost || 0), 0);
               const formatted = total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
               await storeData(SAVINGS_KEY, JSON.stringify({
-                totalCost: formatted,
-                monthlyRecords: savingsData.data.monthlyRecords
-              }));
+  totalCost: formatted,
+  monthlyRecords: savingsData.data.monthlyRecords,
+  cumulativeUnits: savingsData.data.cumulativeUnits || 0, // ✅ add
+}));
             }
           }
         }

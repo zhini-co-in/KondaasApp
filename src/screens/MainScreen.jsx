@@ -41,6 +41,9 @@ const MainScreen = ({ navigation }) => {
   const [installationAmount, setInstallationAmount] = useState(0);
   const [progressPercent, setProgressPercent] = useState(0);
   const [progressColor, setProgressColor] = useState("#f39c12");
+  // ✅ FIX: ref use பண்றோம் — useCallback dependency-ல் போடவேண்டாம்
+  //    state-ஆ வச்சா useFocusEffect useCallback dependency issue வருது
+  const currentPhoneNoRef = useRef(null);
   const progressAnim = useRef(new Animated.Value(0)).current;
 
   const widthInterpolate = progressAnim.interpolate({
@@ -59,17 +62,14 @@ const MainScreen = ({ navigation }) => {
   }, [progressPercent]);
 
   // ─── Load data when station selected ─────────────────────────────────────
-useEffect(() => {
-  if (!selectedStationId) return;
-  if (!userInfo?.UserInfo?.phoneNo) return; // ← இதை add
+  useEffect(() => {
+    if (!selectedStationId) return;
+    if (!userInfo?.UserInfo?.phoneNo) return;
 
-  loadRealTimeData(selectedStationId);
-
-  getInstallationAmount(selectedStationId).then(setInstallationAmount);
-
-  fetchTotalSavings(userInfo.UserInfo.phoneNo, selectedStationId);
-
-}, [selectedStationId, userInfo?.UserInfo?.phoneNo]);
+    loadRealTimeData(selectedStationId);
+    getInstallationAmount(selectedStationId).then(setInstallationAmount);
+    fetchTotalSavings(userInfo.UserInfo.phoneNo, selectedStationId);
+  }, [selectedStationId, userInfo?.UserInfo?.phoneNo]);
 
   // ─── Auto-refresh every 5 minutes ────────────────────────────────────────
   useEffect(() => {
@@ -80,19 +80,47 @@ useEffect(() => {
     return () => clearInterval(interval);
   }, [selectedStationId]);
 
-  // ─── Load user on focus ───────────────────────────────────────────────────
+  // ─── Load user on focus — NEW USER DETECT & STATE RESET ──────────────────
+  // ✅ FIX: useCallback-க்கு [] கொடுக்கிறோம் — ref மூலம் phoneNo track பண்றோம்
+  //    state dependency கொடுத்தா "Invalid Hook Call" error வரும்
   useFocusEffect(
     useCallback(() => {
       const loadUser = async () => {
         const data = await getStorageData(USER_DATA);
         if (data) {
           const parsed = JSON.parse(data);
+          const newPhoneNo = parsed?.UserInfo?.phoneNo;
+
+          console.log("👤 UserInfo phoneNo:", newPhoneNo);
+          console.log("👤 currentPhoneNoRef:", currentPhoneNoRef.current);
+
+          // ✅ ref compare — re-render trigger இல்லாம user switch detect
+          if (newPhoneNo && newPhoneNo !== currentPhoneNoRef.current) {
+            console.log("🔄 New user detected — resetting all state");
+
+            // எல்லா state-உம் reset
+            setStations([]);
+            setSelectedStationId(null);
+            setSelectedStation(0);
+            setTodayGeneration(0);
+            setLifetimeGeneration(0);
+            setTotalCost("₹ Loading...");
+            setInstallationAmount(0);
+            setProgressPercent(0);
+            setProgressColor("#f39c12");
+
+            // Progress animation reset
+            progressAnim.setValue(0);
+
+            // ✅ ref update — re-render trigger இல்லை
+            currentPhoneNoRef.current = newPhoneNo;
+          }
+
           setUserInfo(parsed);
-          console.log("👤 UserInfo phoneNo:", parsed?.UserInfo?.phoneNo);
         }
       };
       loadUser();
-    }, [])
+    }, []) // ✅ empty dependency — ref use பண்றதால் safe
   );
 
   // ─── Notification permission ──────────────────────────────────────────────
@@ -195,7 +223,7 @@ useEffect(() => {
       const phoneNo = userInfo?.UserInfo?.phoneNo;
       const STATIONS_KEY = getStationsKey(phoneNo);
 
-      // ─── Cache-ல இருந்தா உடனே show பண்ணு ───────────────────
+      // ─── Cache-ல் இருந்தா உடனே show பண்ணு ──────────────────
       const cached = await getStorageData(STATIONS_KEY);
       if (cached) {
         const processed = JSON.parse(cached);
@@ -206,16 +234,13 @@ useEffect(() => {
           setSelectedStationId(first.id);
           setProgressPercent(first.progressPercent || 0);
           setProgressColor(first.progressColor === "green" ? "#2ecc71" : "#f39c12");
-          // ✅ FIX 4: cache hit-ல data load பண்றோம் — useEffect [selectedStationId]
-          //    trigger ஆகும்போது loadRealTimeData + fetchTotalSavings call ஆகும்
-          //    இங்க தனியா call பண்ண வேண்டாம்
         }
       }
 
       const net = await NetInfo.fetch();
       if (!net.isConnected) return;
 
-      // ─── Network fresh data ───────────────────────────────────
+      // ─── Network fresh data ────────────────────────────────────
       const response = await fetchStationList();
       let stationArray = Array.isArray(response) ? response : (response?.stationList || []);
       const processed = processStations(stationArray);
@@ -227,7 +252,6 @@ useEffect(() => {
         setSelectedStationId(first.id);
         setProgressPercent(first.progressPercent || 0);
         setProgressColor(first.progressColor === "green" ? "#2ecc71" : "#f39c12");
-        // ✅ useEffect [selectedStationId] trigger ஆகும் — தனியா call வேண்டாம்
       }
 
       await storeData(STATIONS_KEY, JSON.stringify(processed));
@@ -239,116 +263,127 @@ useEffect(() => {
     }
   };
 
-  // ─── REALTIME DATA — today + lifetime ஒரே call-ல் ────────────────────────
-  // ✅ FIX 3: பழைய code-ல் loadTodayGeneration + getRealTimeGeneration
-const loadRealTimeData = async (stationId) => {
-  try {
-    const TODAY_KEY    = getTodayGenKey(stationId);
-    const LIFETIME_KEY = getLifetimeKey(stationId);
+  // ─── REALTIME DATA — today + lifetime ────────────────────────────────────
+  const loadRealTimeData = async (stationId) => {
+    try {
+      const TODAY_KEY    = getTodayGenKey(stationId);
+      const LIFETIME_KEY = getLifetimeKey(stationId);
 
-    // Cache show பண்ணு
-    const cachedToday    = await getStorageData(TODAY_KEY);
-    const cachedLifetime = await getStorageData(LIFETIME_KEY);
-    if (cachedToday)    setTodayGeneration(JSON.parse(cachedToday));
-    if (cachedLifetime) setLifetimeGeneration(JSON.parse(cachedLifetime));
+      const cachedToday    = await getStorageData(TODAY_KEY);
+      const cachedLifetime = await getStorageData(LIFETIME_KEY);
+      if (cachedToday)    setTodayGeneration(JSON.parse(cachedToday));
+      if (cachedLifetime) setLifetimeGeneration(JSON.parse(cachedLifetime));
 
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) return;
+      const net = await NetInfo.fetch();
+      if (!net.isConnected) return;
 
-    // ─── Today units — history API timeType:1 ────────────────
-    const now   = new Date();
-    const y     = now.getFullYear();
-    const m     = String(now.getMonth() + 1).padStart(2, "0");
-    const d     = String(now.getDate()).padStart(2, "0");
-    const today = `${y}-${m}-${d}`;
+      const now = new Date();
+      const dateString = now.toISOString().split("T")[0];
 
-    const historyRes = await fetchHistoricalData({
-      stationId,
-      timeType:  1,
-      startTime: today,
-      endTime:   today,
-    });
-
-    const items = historyRes?.stationDataItems || [];
-    console.log("📊 today history items:", items.length);
-    if (items.length > 0) console.log("📊 sample item:", JSON.stringify(items[0]));
-
-    let totalKwh = 0;
-    items.forEach(item => {
-      if (item.dateTime != null && item.generationPower != null) {
-        const kwh = (Number(item.generationPower) * 5) / (60 * 1000);
-        totalKwh += kwh;
-      }
-    });
-
-    const todayVal = parseFloat(totalKwh.toFixed(1));
-    setTodayGeneration(todayVal);
-    await storeData(TODAY_KEY, JSON.stringify(todayVal));
-    console.log("✅ todayGeneration:", todayVal);
-
-    // ✅ Lifetime — fetchTotalSavings-ல் set ஆகும்
-    // இங்க தனியா call வேண்டாம்
-
-  } catch (error) {
-    console.error("❌ loadRealTimeData error:", error);
-  }
-};
-
-  // ─── TOTAL SAVINGS ────────────────────────────────────────────────────────
-  // ✅ FIX 1: x-device-id header add பண்ணினோம் — இல்லன்னா backend 401 return பண்ணும்
-  // ✅ FIX 2: endpoint /savings/calculate-savings → /solarman/calculate-savings
-const fetchTotalSavings = async (phoneNo, stationId = selectedStationId) => {
-  try {
-    const SAVINGS_KEY  = getSavingsKey(phoneNo) + `_${stationId}`;
-    const LIFETIME_KEY = getLifetimeKey(stationId);
-
-    // Cache
-    const cached = await getStorageData(SAVINGS_KEY);
-    if (cached) {
-      const parsedCache = JSON.parse(cached);
-      setTotalCost(`₹ ${parsedCache.totalCost}`);
-      // ✅ cache-ல் lifetime இருந்தா set பண்ணு
-      if (parsedCache.cumulativeUnits) {
-        setLifetimeGeneration(parsedCache.cumulativeUnits);
-      }
-    }
-
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) return;
-
-    const data = await fetchSavings(phoneNo, stationId);
-
-    if (data?.success && data?.data) {
-      const cumulativeCost  = data.data.cumulativeCost ?? 
-        Object.values(data.data.monthlyRecords || {})
-          .reduce((sum, r) => sum + (r.cost || 0), 0);
-
-      // ✅ Lifetime units set பண்ணு
-      const cumulativeUnits = data.data.cumulativeUnits ?? 0;
-      setLifetimeGeneration(cumulativeUnits);
-      await storeData(LIFETIME_KEY, JSON.stringify(cumulativeUnits));
-      console.log("✅ lifetimeGeneration:", cumulativeUnits);
-
-      const formatted = cumulativeCost.toLocaleString("en-IN", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
+      const historyRes = await fetchHistoricalData({
+        stationId,
+        timeType:  1,
+        startTime: dateString,
+        endTime:   dateString,
       });
 
-      setTotalCost(`₹ ${formatted}`);
-      // ✅ cumulativeUnits-ஐயும் cache-ல் save பண்ணு
-      await storeData(SAVINGS_KEY, JSON.stringify({ 
-        totalCost: formatted,
-        cumulativeUnits,
-      }));
-    } else {
-      console.log("⚠️ Savings error:", data?.error);
+      const items = historyRes?.stationDataItems || [];
+      console.log("📊 today items count:", items.length);
+      if (items.length > 0) console.log("📊 sample:", JSON.stringify(items[0]));
+
+      if (items.length > 0) {
+        const lastItem = items[items.length - 1];
+
+        if (lastItem.generationValue !== undefined && lastItem.generationValue !== null) {
+          const todayVal = parseFloat(Number(lastItem.generationValue).toFixed(1));
+          setTodayGeneration(todayVal);
+          await storeData(TODAY_KEY, JSON.stringify(todayVal));
+          console.log("✅ todayGeneration (generationValue):", todayVal);
+        } else {
+          let totalKwh = 0;
+          items.forEach(item => {
+            if (item.generationPower != null) {
+              totalKwh += (Number(item.generationPower) * 5) / (60 * 1000);
+            }
+          });
+          const todayVal = parseFloat(totalKwh.toFixed(1));
+          setTodayGeneration(todayVal);
+          await storeData(TODAY_KEY, JSON.stringify(todayVal));
+          console.log("✅ todayGeneration (power sum):", todayVal);
+        }
+      }
+
+    } catch (error) {
+      console.error("❌ loadRealTimeData error:", error);
+    }
+  };
+
+  // ─── TOTAL SAVINGS ────────────────────────────────────────────────────────
+  const fetchTotalSavings = async (phoneNo, stationId = selectedStationId) => {
+    try {
+      const SAVINGS_KEY  = getSavingsKey(phoneNo) + `_${stationId}`;
+      const LIFETIME_KEY = getLifetimeKey(stationId);
+
+      const cached = await getStorageData(SAVINGS_KEY);
+      if (cached) {
+        const parsedCache = JSON.parse(cached);
+        setTotalCost(`₹ ${parsedCache.totalCost}`);
+        if (parsedCache.cumulativeUnits) {
+          setLifetimeGeneration(parsedCache.cumulativeUnits);
+        }
+      }
+
+      const net = await NetInfo.fetch();
+      if (!net.isConnected) return;
+
+      const data = await fetchSavings(phoneNo, stationId);
+
+      if (data?.success && data?.data) {
+        console.log("═══ SAVINGS RESPONSE ═══");
+        console.log("cumulativeUnits:", data.data.cumulativeUnits);
+        console.log("cumulativeCost:", data.data.cumulativeCost);
+        console.log("monthlyRecords count:", Object.keys(data.data.monthlyRecords || {}).length);
+        console.log("════════════════════════");
+        console.log("📦 data.data keys:", Object.keys(data.data));
+
+        const cumulativeUnits =
+          data.data.cumulativeUnits ??
+          Object.values(data.data.monthlyRecords || {})
+            .reduce((sum, r) => sum + (r.units || 0), 0);
+
+        const cumulativeCost =
+          data.data.cumulativeCost ??
+          data.data.totalCost ??
+          data.data.savings ??
+          Object.values(data.data.monthlyRecords || {})
+            .reduce((sum, r) => sum + (r.cost || 0), 0);
+
+        setLifetimeGeneration(cumulativeUnits);
+        await storeData(LIFETIME_KEY, JSON.stringify(cumulativeUnits));
+        console.log("✅ lifetimeGeneration from savings:", cumulativeUnits);
+
+        const formatted = cumulativeCost.toLocaleString("en-IN", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+
+        setTotalCost(`₹ ${formatted}`);
+
+        await storeData(SAVINGS_KEY, JSON.stringify({
+          totalCost: formatted,
+          cumulativeUnits,
+          monthlyRecords: data.data.monthlyRecords || {},
+        }));
+
+      } else {
+        console.log("⚠️ Savings error:", data?.error);
+        setTotalCost("₹ 0.00");
+      }
+    } catch (e) {
+      console.log("Savings fetch error:", e.message);
       setTotalCost("₹ 0.00");
     }
-  } catch (e) {
-    console.log("Savings fetch error:", e.message);
-    setTotalCost("₹ 0.00");
-  }
-};
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -461,7 +496,6 @@ const fetchTotalSavings = async (phoneNo, stationId = selectedStationId) => {
                       setProgressPercent(item.progressPercent || 0);
                       setProgressColor(item.progressColor === "green" ? "#2ecc71" : "#f39c12");
                       setVisible(false);
-                      // ✅ useEffect [selectedStationId] trigger ஆகும் — தனியா call வேண்டாம்
                     }}
                   >
                     <Image source={LightBg} style={styles.familyImg} />

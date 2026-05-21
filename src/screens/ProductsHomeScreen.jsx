@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useNavigation } from "@react-navigation/native";
-import firestore from "@react-native-firebase/firestore"; // ✅ products-க்கு மட்டும்
+import firestore from "@react-native-firebase/firestore";
 import { saveMailCredentials } from "../api/api1";
 import Loader from "../components/Loader";
 import ProfileImg from "../../assets/images/Round.png";
@@ -38,11 +38,17 @@ const ProductsHomeScreen = () => {
     Linking.openURL("tel:9244414441");
   };
 
-  // ─── Logout ───────────────────────────────────────────────────────────────
+  // ─── Logout — ✅ FIX: AsyncStorage.clear() பண்றோம் ──────────────────────
+  // பழைய user cache (SAVINGS_KEY, STATIONS_KEY, TODAY_KEY, LIFETIME_KEY)
+  // எல்லாம் clear ஆகும் — new user login பண்ணும்போது fresh data வரும்
   const handleLogout = async () => {
     try {
-      await AsyncStorage.removeItem(USER_DATA);
-      console.log("✅ USER_DATA cleared successfully.");
+      setShowLogoutPopup(false);
+
+      // ✅ FIX: removeItem மட்டும் இல்லாம எல்லா cache-உம் clear பண்ணு
+      await AsyncStorage.clear();
+      console.log("✅ AsyncStorage fully cleared on logout.");
+
       navigation.reset({
         index: 0,
         routes: [{ name: SCREEN_NAMES.LOGIN }],
@@ -105,38 +111,44 @@ const ProductsHomeScreen = () => {
     setShowPassword(false);
   };
 
- const handleSaveCredentials = async () => {
-  // ✅ Frontend-லயே முதல்ல check பண்ணு
-  if (!email || !password) {
-    Alert.alert("Error", "Please enter email and password");
-    return;
-  }
+  // ─── Save credentials — ✅ FIX: 300ms delay after save ──────────────────
+  // saveMailCredentials → AsyncStorage write complete ஆன பிறகு navigate பண்ணு
+  // இல்லன்னா MainScreen-ல் USER_DATA read பண்ணும்போது stale/empty வரும்
+  const handleSaveCredentials = async () => {
+    if (!email || !password) {
+      Alert.alert("Error", "Please enter email and password");
+      return;
+    }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email.trim())) {
-    Alert.alert("Error", "Please enter a valid email address");
-    return;
-  }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      Alert.alert("Error", "Please enter a valid email address");
+      return;
+    }
 
-  const result = await saveMailCredentials(email.trim(), password);
+    const result = await saveMailCredentials(email.trim(), password);
 
-  if (result.success) {
-    Alert.alert("Success", result.message, [
-      {
-        text: "OK",
-        onPress: () => {
-          closeCredentialPopup();
-          navigation.reset({
-            index: 0,
-            routes: [{ name: SCREEN_NAMES.MAIN }],
-          });
+    if (result.success) {
+      Alert.alert("Success", result.message, [
+        {
+          text: "OK",
+          onPress: async () => {
+            closeCredentialPopup();
+
+            // ✅ FIX: AsyncStorage write flush ஆக 300ms wait பண்ணு
+            await new Promise(resolve => setTimeout(resolve, 300));
+
+            navigation.reset({
+              index: 0,
+              routes: [{ name: SCREEN_NAMES.MAIN }],
+            });
+          },
         },
-      },
-    ]);
-  } else {
-    Alert.alert("Error", result.message);
-  }
-};
+      ]);
+    } else {
+      Alert.alert("Error", result.message);
+    }
+  };
 
   // ─── RENDER ───────────────────────────────────────────────────────────────
   return (
