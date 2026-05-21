@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
-  
   ScrollView,
   StatusBar,
   TouchableOpacity,
@@ -10,13 +9,14 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import firestore from "@react-native-firebase/firestore";
 import Loader from "../components/Loader";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Linking, Alert } from "react-native";
+import { Linking, Alert, Platform } from "react-native";
 import { USER_DATA } from "../service/localStorage";
 import LinearGradient from "react-native-linear-gradient";
-import { SCREEN_NAMES } from '../constants/screenNames';
+import { SCREEN_NAMES } from "../constants/screenNames";
+
+const BASE_URL = "https://board.trisentrix.com";
 
 const ReferAndEarnScreen = ({ navigation }) => {
   const [referrals, setReferrals] = useState([]);
@@ -27,6 +27,8 @@ const ReferAndEarnScreen = ({ navigation }) => {
     const fetchReferrals = async () => {
       try {
         setLoading(true);
+
+        // ─── Get phone number from AsyncStorage ───
         const userDataJson = await AsyncStorage.getItem(USER_DATA);
         const userData = userDataJson ? JSON.parse(userDataJson) : null;
         const phoneNo =
@@ -34,34 +36,36 @@ const ReferAndEarnScreen = ({ navigation }) => {
           userData?.phoneNumber ||
           userData?.mobile ||
           "";
+
         if (!phoneNo) {
           console.warn("⚠️ No phone number found in USER_DATA.");
           setReferrals([]);
           setLoading(false);
           return;
         }
-        console.log("📱 Fetching referrals for phone:", phoneNo);
-        const snapshot = await firestore()
-          .collection("referrals")
-          .where("refererPhNo", "==", phoneNo)
-          .get();
-        const data = snapshot.docs.map(doc => doc.data());
-        setReferrals(data);
-        const successCount = data.filter(item => item.PurchaseTracking).length;
-        setTotalAmount(successCount * 5000);
-        if (snapshot.empty) {
-          console.log("No referrals found for this user.");
-          setReferrals([]);
-          return;
-        }
-        const referralData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
 
-        setReferrals(referralData);
+        console.log("📱 Fetching referrals for phone:", phoneNo);
+
+        // ─── GET from your endpoint ───
+        const res = await fetch(
+          `${BASE_URL}/referral/get?refererPhNo=${encodeURIComponent(phoneNo)}`
+        );
+        const data = await res.json();
+
+        if (data.success) {
+          const referralData = data.data || [];
+          setReferrals(referralData);
+          // ₹5000 for each referral with PurchaseTracking set
+          const successCount = referralData.filter(
+            (item) => item.PurchaseTracking
+          ).length;
+          setTotalAmount(successCount * 5000);
+        } else {
+          console.warn("⚠️ API returned error:", data.error);
+          setReferrals([]);
+        }
       } catch (error) {
-        console.error(" Error fetching referrals:", error);
+        console.error("❌ Error fetching referrals:", error);
       } finally {
         setLoading(false);
       }
@@ -75,27 +79,18 @@ const ReferAndEarnScreen = ({ navigation }) => {
       Alert.alert("Error", "Phone number not available");
       return;
     }
-    const phone = friendPhNo.startsWith("91")
-      ? friendPhNo
-      : `91${friendPhNo}`;
-
+    const phone = friendPhNo.startsWith("91") ? friendPhNo : `91${friendPhNo}`;
     const message = "Please install the Kondaas App";
-
-    const whatsappURL = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(
-      message
-    )}`;
-
+    const whatsappURL = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(message)}`;
     const smsURL =
       Platform.OS === "ios"
         ? `sms:${phone}&body=${encodeURIComponent(message)}`
         : `sms:${phone}?body=${encodeURIComponent(message)}`;
+
     Linking.canOpenURL(whatsappURL)
       .then((supported) => {
-        if (supported) {
-          return Linking.openURL(whatsappURL);
-        } else {
-          return Linking.openURL(smsURL);
-        }
+        if (supported) return Linking.openURL(whatsappURL);
+        return Linking.openURL(smsURL);
       })
       .catch(() => {
         Alert.alert("Error", "Unable to open WhatsApp or SMS");
@@ -106,6 +101,7 @@ const ReferAndEarnScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
       {loading && <Loader />}
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -121,7 +117,8 @@ const ReferAndEarnScreen = ({ navigation }) => {
       <View style={styles.topBoxContainer}>
         <View style={styles.topBox}>
           <Ionicons name="wallet-outline" size={28} color="#555" />
-          <Text style={styles.topValue}>₹{totalAmount.toLocaleString("en-IN")}
+          <Text style={styles.topValue}>
+            ₹{totalAmount.toLocaleString("en-IN")}
           </Text>
           <Text style={styles.topLabel}>Earnings</Text>
         </View>
@@ -133,6 +130,7 @@ const ReferAndEarnScreen = ({ navigation }) => {
           <Text style={styles.topLabel}>Total Referrals</Text>
         </View>
       </View>
+
       {/* Refer Now Button */}
       <TouchableOpacity
         onPress={() => navigation.navigate(SCREEN_NAMES.REFER_FRIEND)}
@@ -143,13 +141,13 @@ const ReferAndEarnScreen = ({ navigation }) => {
           end={{ x: 0.5, y: 1 }}
           style={styles.referBtn}
         >
-        <Text style={styles.referBtnText}>Refer Now!</Text>
+          <Text style={styles.referBtnText}>Refer Now!</Text>
         </LinearGradient>
       </TouchableOpacity>
+
       <Text style={styles.sectionTitle}>How it works</Text>
 
       <View style={styles.howItWorksContainer}>
-        {/* Step 1 */}
         <View style={styles.stepRow}>
           <View style={styles.iconCircle}>
             <Ionicons name="link-outline" size={22} color="#B50203" />
@@ -158,38 +156,30 @@ const ReferAndEarnScreen = ({ navigation }) => {
             Invite your friends through the referral link
           </Text>
         </View>
-
-        {/* Step Divider Dotted Line */}
         <View style={styles.dottedLine} />
-
-        {/* Step 2 */}
         <View style={styles.stepRow}>
           <View style={styles.iconCircle}>
             <Ionicons name="solar-outline" size={22} color="#B50203" />
           </View>
           <Text style={styles.stepText}>
-            Your friend installs the Kondaas’s solar
+            Your friend installs the Kondaas's solar
           </Text>
         </View>
-
-        {/* Step Divider Dotted Line */}
         <View style={styles.dottedLine} />
-
-        {/* Step 3 */}
         <View style={styles.stepRow}>
           <View style={styles.iconCircle}>
             <Ionicons name="wallet-outline" size={22} color="#B50203" />
           </View>
-          <Text style={styles.stepText}>
-            You will get ₹5,000 in your wallet
-          </Text>
+          <Text style={styles.stepText}>You will get ₹5,000 in your wallet</Text>
         </View>
       </View>
 
       {/* My Referrals */}
       <Text style={styles.sectionTitle}>My Referrals</Text>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
-
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 30 }}
+      >
         <View style={styles.referralList}>
           {referrals.map((item, index) => (
             <View key={index} style={styles.referralCard}>
@@ -204,7 +194,6 @@ const ReferAndEarnScreen = ({ navigation }) => {
               {item.PurchaseTracking ? (
                 <Ionicons name="checkmark-circle" size={22} color="#4CAF50" />
               ) : (
-
                 <TouchableOpacity
                   onPress={() => openWhatsAppRemind(item.friendPhNo)}
                 >
@@ -217,8 +206,6 @@ const ReferAndEarnScreen = ({ navigation }) => {
                     <Text style={styles.remindBtnText}>Remind</Text>
                   </LinearGradient>
                 </TouchableOpacity>
-
-
               )}
             </View>
           ))}
@@ -242,7 +229,6 @@ const styles = StyleSheet.create({
   },
   backButton: { marginRight: 10 },
   headerTitle: { fontSize: 18, fontWeight: "700", color: "#000" },
-
   topBoxContainer: {
     flexDirection: "row",
     justifyContent: "space-around",
@@ -260,17 +246,15 @@ const styles = StyleSheet.create({
   },
   topValue: { fontSize: 20, fontWeight: "bold", marginTop: 5 },
   topLabel: { fontSize: 13, color: "#777", marginTop: 2 },
-
   referBtn: {
-  height: 45,
-  borderRadius: 8,
-  marginHorizontal: 20,
-  marginVertical: 20,
-  justifyContent: "center",
-  alignItems: "center",
-},
+    height: 45,
+    borderRadius: 8,
+    marginHorizontal: 20,
+    marginVertical: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   referBtnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-
   sectionTitle: {
     fontSize: 16,
     fontWeight: "700",
@@ -279,56 +263,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 10,
   },
-
-  stepsContainer: { marginHorizontal: 20 },
-  step: { flexDirection: "row", alignItems: "center", marginBottom: 15 },
-  stepIcon: { marginRight: 10 },
-  stepText: { fontSize: 14, color: "#444", flex: 1 },
-
-  referralList: { marginTop: 10, marginHorizontal: 15 },
- referralCard: {
-  flexDirection: "row",
-  justifyContent: "space-between",
-  alignItems: "center",
-  backgroundColor: "#f9f9f9",
-  borderRadius: 10,
-  paddingVertical: 12,
-  paddingHorizontal: 14,
-  marginBottom: 10,
-},
-  referralLeft: {
-  flexDirection: "row",
-  alignItems: "center",
-  flex: 1,
-  marginRight: 10,
-},
-  referralName: {
-  fontWeight: "700",
-  fontSize: 14,
-  maxWidth: 110},
-  referralStatus: { fontSize: 12, color: "#666" },
-  remindBtn: {
-  width: 90,
-  height: 34,
-  borderRadius: 20,
-  justifyContent: "center",
-  alignItems: "center",
-},
-  remindBtnText: { color: "#fff",
-  fontSize: 12,
-  fontWeight: "600",
-  lineHeight: 16 },
   howItWorksContainer: {
     marginHorizontal: 20,
     marginTop: 10,
     paddingVertical: 5,
   },
-
-  stepRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
+  stepRow: { flexDirection: "row", alignItems: "center" },
   iconCircle: {
     width: 40,
     height: 40,
@@ -338,14 +278,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 15,
   },
-
-  stepText: {
-    flex: 1,
-    fontSize: 14,
-    color: "#333",
-    lineHeight: 20,
-  },
-
+  stepText: { flex: 1, fontSize: 14, color: "#333", lineHeight: 20 },
   dottedLine: {
     borderLeftWidth: 1,
     borderColor: "#ccc",
@@ -353,5 +286,31 @@ const styles = StyleSheet.create({
     height: 25,
     marginLeft: 19,
   },
-
+  referralList: { marginTop: 10, marginHorizontal: 15 },
+  referralCard: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#f9f9f9",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 10,
+  },
+  referralLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    marginRight: 10,
+  },
+  referralName: { fontWeight: "700", fontSize: 14, maxWidth: 110 },
+  referralStatus: { fontSize: 12, color: "#666" },
+  remindBtn: {
+    width: 90,
+    height: 34,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  remindBtnText: { color: "#fff", fontSize: 12, fontWeight: "600", lineHeight: 16 },
 });

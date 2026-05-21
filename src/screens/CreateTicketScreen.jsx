@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
-
   ScrollView,
   TouchableOpacity,
   StyleSheet,
@@ -10,121 +9,66 @@ import {
   StatusBar,
   Alert,
   Platform,
+  Share,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { Picker } from "@react-native-picker/picker";
-import firestore from "@react-native-firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { USER_DATA } from "../service/localStorage";
 import Loader from "../components/Loader";
-import { fetchStationDevices, fetchStationList } from "../api/api1";
+import { fetchStationList } from "../api/api1";
 import NetInfo from '@react-native-community/netinfo';
 import LinearGradient from "react-native-linear-gradient";
+
 const CreateTicketScreen = ({ route, navigation }) => {
   const { stationId } = route.params;
-  console.log("CreateTicketScreen Station ID:", stationId);
-  const [selectedDevice, setSelectedDevice] = useState("");
+  const [deviceInput, setDeviceInput] = useState("");       // ✅ TextInput state
   const [selectedIssue, setSelectedIssue] = useState("");
   const [description, setDescription] = useState("");
-  const [deviceList, setDeviceList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [userPhone, setUserPhone] = useState("");
   const [stationList, setStationList] = useState([]);
 
-  useEffect(() => {
-    const getUserData = async () => {
-      try {
-        const data = await AsyncStorage.getItem(USER_DATA);
-        if (data) {
-          const parsed = JSON.parse(data);
-
-          const extractedPhone =
-            parsed?.UserInfo?.phoneNo ||
-            parsed?.phoneNo ||
-            parsed?.phoneNumber ||
-            parsed?.mobile ||
-            "Unknown";
-
-          console.log("📱 Extracted phone number:", extractedPhone);
-
-          setUserPhone(extractedPhone);
-        } else {
-          console.warn("⚠️ No USER_DATA found in AsyncStorage");
-          setUserPhone("Unknown");
-        }
-      } catch (error) {
-        console.error(" Error reading user data:", error);
-        setUserPhone("Unknown");
-      }
-    };
-
-    getUserData();
-  }, []);
-
-  useEffect(() => {
-    const loadDevices = async () => {
-      setLoading(true);
-
-      const res = await fetchStationDevices(stationId);
-
-      if (res && res.deviceListItems) {
-        const inverterDevices = res.deviceListItems.filter(
-          (item) =>
-            item.deviceType?.toLowerCase() === "inverter" ||
-            item.deviceName?.toLowerCase().includes("inverter")
-        );
-
-        setDeviceList(inverterDevices);
-      }
-
-      setLoading(false);
-    };
-
-    loadDevices();
-  }, [stationId]);
-
-  useEffect(() => {
-    loadStations();
-  }, []);
-
+useEffect(() => {
   const loadStations = async () => {
-    setLoading(true);
-    const list = await fetchStationList();
-    setStationList(list);
-    setLoading(false);
+    try {
+      setLoading(true);
+      const list = await fetchStationList();
+      setStationList(Array.isArray(list) ? list : []); // ✅ safe set
+    } catch (e) {
+      console.log("❌ loadStations error:", e);
+      setStationList([]); // ✅ crash ஆகாம
+    } finally {
+      setLoading(false); // ✅ loading எப்பவும் false ஆகும்
+    }
   };
-  const matchedStation = stationList.find(
-    (s) => s.id === stationId
-  );
+  loadStations();
+}, []);
 
-  console.log(" Incoming stationId:", stationId);
-  console.log(" StationList:", stationList);
-  console.log("Matched Station:", matchedStation);
-  console.log(" Station Name:", matchedStation?.name);
+  const matchedStation = stationList.find((s) => s.id === stationId);
   const stationName = matchedStation?.name || "";
 
   const generateTicketNo = (phone) => {
     const timestamp = Date.now().toString().slice(-6);
     return `TKT-${phone.slice(-4)}-${timestamp}`;
   };
+
   const handleSubmit = async () => {
     const net = await NetInfo.fetch();
     if (!net.isConnected) {
-      alert("No network connection available");
-      return;
-    }
-    if (!selectedDevice) {
-      Alert.alert("Missing Info", "Please select a device.");
+      Alert.alert("No Network", "No network connection available.");
       return;
     }
 
+    if (!deviceInput.trim()) {
+      Alert.alert("Missing Info", "Please enter your device name.");
+      return;
+    }
     if (!selectedIssue) {
       Alert.alert("Missing Info", "Please select an issue type.");
       return;
     }
-
     if (!description.trim()) {
       Alert.alert("Missing Info", "Please enter a description.");
       return;
@@ -132,98 +76,107 @@ const CreateTicketScreen = ({ route, navigation }) => {
 
     try {
       setSubmitting(true);
+
       const storedData = await AsyncStorage.getItem(USER_DATA);
       const parsedData = storedData ? JSON.parse(storedData) : null;
       const phoneNumber = parsedData?.UserInfo?.phoneNo;
 
       if (!phoneNumber) {
-        Alert.alert("Missing Info", "User phone number not found in storage.");
-        setSubmitting(false);
+        Alert.alert("Missing Info", "User phone number not found.");
         return;
       }
 
       const ticketNo = generateTicketNo(phoneNumber);
 
-      await firestore().collection("createTicket").doc(ticketNo).set({
-        PhoneNo: phoneNumber,
+      const payload = {
         TicketNo: ticketNo,
+        PhoneNo: phoneNumber,
         Description: description.trim(),
-        deviceId: selectedDevice,
+        deviceId: deviceInput.trim(),       // ✅ manual input
         createdBy: phoneNumber,
-        createdAt: firestore.FieldValue.serverTimestamp(),
         status: "Open",
         assignedTo: "",
         type: selectedIssue,
+      };
+
+      const response = await fetch("https://board.trisentrix.com/ticket/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
 
-      Alert.alert(" Success", `Ticket ${ticketNo} has been submitted successfully!`);
-      setSelectedDevice("");
-      setSelectedIssue("");
-      setDescription("");
-      navigation.goBack();
+      const result = await response.json();
+
+      if (!result.success) {
+        Alert.alert("Error", result.error || "Failed to create ticket.");
+        return;
+      }
+
+      const shareMessage =
+        `🎫 Support Ticket Created\n\n` +
+        `Ticket No : ${ticketNo}\n` +
+        `Device    : ${deviceInput.trim()}\n` +
+        `Issue     : ${selectedIssue}\n` +
+        `Station   : ${stationName}\n\n` +
+        `We will get back to you shortly.`;
+
+      const resetAndGoBack = () => {
+        setDeviceInput("");
+        setSelectedIssue("");
+        setDescription("");
+        navigation.goBack();
+      };
+
+      Alert.alert(
+        "✅ Ticket Submitted",
+        `Ticket ${ticketNo} created successfully!`,
+        [
+          {
+            text: "Share",
+            onPress: async () => {
+              await Share.share({ message: shareMessage });
+              resetAndGoBack();
+            },
+          },
+          {
+            text: "OK",
+            onPress: resetAndGoBack,
+          },
+        ]
+      );
 
     } catch (error) {
-      console.error("Error creating ticket:", error);
+      console.error("❌ Ticket submit error:", error);
       Alert.alert("Error", "Failed to create support ticket.");
     } finally {
       setSubmitting(false);
     }
   };
 
-
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
 
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back-outline" size={24} color="#080707ff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Create Support Ticket</Text>
       </View>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Device */}
+
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+        {/* ✅ Device TextInput */}
         <Text style={styles.label}>
           Device <Text style={{ color: "red" }}>*</Text>
         </Text>
-        <View style={styles.dropdownContainer}>
-          <Picker
-  selectedValue={selectedDevice}
-  onValueChange={(itemValue) => setSelectedDevice(itemValue)}
-  style={[
-    styles.picker,
-    Platform.OS === "ios" && styles.pickerIOS
-  ]}
-  itemStyle={Platform.OS === "ios" ? styles.itemStyle : {}}
-  dropdownIconColor="#000"
-  enabled={!loading}
->
-            <Picker.Item label="Select a Device" value="" color="#111010ff" />
-            {loading ? (
-              <Picker.Item />
-            ) : deviceList.length > 0 ? (
-              deviceList.map((device) => (
-                <Picker.Item
-                  key={device.deviceId}
-                  label={`${device.deviceType} - ${device.deviceId}- ${stationName}`}
-                  value={`${device.deviceId}-${stationName}`}
-
-                />
-              ))
-            ) : (
-              <Picker.Item label="No devices available" value="" />
-            )}
-          </Picker>
-
-        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter your device / inverter name"
+          placeholderTextColor="#999"
+          value={deviceInput}
+          onChangeText={setDeviceInput}
+        />
 
         {/* Issue Type */}
         <Text style={styles.label}>
@@ -258,12 +211,8 @@ const CreateTicketScreen = ({ route, navigation }) => {
           onChangeText={setDescription}
         />
 
-        {/* Submit Button */}
-        <TouchableOpacity
-
-          onPress={handleSubmit}
-          disabled={submitting}
-        >
+        {/* Submit */}
+        <TouchableOpacity onPress={handleSubmit} disabled={submitting}>
           <LinearGradient
             colors={["#F00001", "#B00100"]}
             start={{ x: 0.5, y: 0 }}
@@ -275,86 +224,58 @@ const CreateTicketScreen = ({ route, navigation }) => {
             </Text>
           </LinearGradient>
         </TouchableOpacity>
+
       </ScrollView>
 
       {(loading || submitting) && <Loader />}
     </SafeAreaView>
   );
 };
+
 export default CreateTicketScreen;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderColor: "#eee",
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 15, paddingVertical: 12,
+    borderBottomWidth: 1, borderColor: "#eee",
   },
   backButton: { marginRight: 10 },
   headerTitle: { fontSize: 18, fontWeight: "700", color: "#000" },
-
-  scrollContent: {
-    padding: 16,
-  },
-
+  scrollContent: { padding: 16 },
   label: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#000",
-    marginTop: 16,
-    marginBottom: 6,
+    fontSize: 15, fontWeight: "600", color: "#000",
+    marginTop: 16, marginBottom: 6,
   },
 
-  dropdownContainer: {
-  borderWidth: 1,
-  borderColor: "#ddd",
-  borderRadius: 8,
-  backgroundColor: "#fff",
-  paddingHorizontal: Platform.OS === "ios" ? 0 : 5,
-},
-  picker: {
-  width: "100%",
-  color: "#000",
-},
-
-pickerIOS: {
-  height: 150,   // iOS picker height
-},
-
-itemStyle: {
-  fontSize: 16,
-  color: "#000",
-},
-
-
-  textArea: {
+  // ✅ Device TextInput style
+  input: {
     borderWidth: 1,
     borderColor: "#ddd",
     borderRadius: 8,
     padding: 12,
-    textAlignVertical: "top",
     fontSize: 14,
     color: "#000",
     backgroundColor: "#fff",
-    marginBottom: 20,
-    height: 160,
   },
 
-
+  dropdownContainer: {
+    borderWidth: 1, borderColor: "#ddd", borderRadius: 8,
+    backgroundColor: "#fff",
+    paddingHorizontal: Platform.OS === "ios" ? 0 : 5,
+  },
+  picker: { width: "100%", color: "#000" },
+  itemStyle: { fontSize: 16, color: "#000" },
+  textArea: {
+    borderWidth: 1, borderColor: "#ddd", borderRadius: 8,
+    padding: 12, textAlignVertical: "top", fontSize: 14,
+    color: "#000", backgroundColor: "#fff",
+    marginBottom: 20, height: 160,
+  },
   submitButton: {
-
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 10,
+    borderRadius: 8, paddingVertical: 14,
+    alignItems: "center", marginTop: 10,
   },
-  submitButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
+  submitButtonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
 });

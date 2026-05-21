@@ -2,28 +2,27 @@ import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
-
   ScrollView,
   Alert,
   StatusBar,
   TouchableOpacity,
   StyleSheet,
   TextInput,
-  FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import firestore from "@react-native-firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Picker } from "@react-native-picker/picker";
 import { USER_DATA } from "../service/localStorage";
-import Loader from '../components/Loader';
-import Contacts from 'react-native-contacts';
-import { PermissionsAndroid, Platform } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import Loader from "../components/Loader";
+import Contacts from "react-native-contacts";
+import { PermissionsAndroid, Platform } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import NetInfo from "@react-native-community/netinfo";
 import LinearGradient from "react-native-linear-gradient";
-import { SCREEN_NAMES } from '../constants/screenNames';
+import { SCREEN_NAMES } from "../constants/screenNames";
+
+const BASE_URL = "https://board.trisentrix.com";
 
 const ReferFriendScreen = ({ navigation }) => {
   const [name, setName] = useState("");
@@ -34,7 +33,8 @@ const ReferFriendScreen = ({ navigation }) => {
   const [contacts, setContacts] = useState([]);
   const [filteredContacts, setFilteredContacts] = useState([]);
   const [showList, setShowList] = useState(false);
-  
+
+  // ─── Product list is still fetched from Firestore (unchanged) ───
   useEffect(() => {
     const fetchProducts = async () => {
       try {
@@ -45,16 +45,15 @@ const ReferFriendScreen = ({ navigation }) => {
             title: doc.data().title,
           }));
           setProducts(productData);
-        } else {
-          console.log(" No products found in Firestore");
         }
       } catch (error) {
-        console.error(" Error fetching products:", error);
+        console.error("Error fetching products:", error);
       }
     };
     fetchProducts();
   }, []);
 
+  // ─── Contacts permission + load ───
   useEffect(() => {
     const getContacts = async () => {
       try {
@@ -67,7 +66,6 @@ const ReferFriendScreen = ({ navigation }) => {
             return;
           }
         }
-
         const allContacts = await Contacts.getAll();
         const contactList = allContacts
           .filter((c) => c.phoneNumbers.length > 0)
@@ -80,12 +78,11 @@ const ReferFriendScreen = ({ navigation }) => {
         console.error("Error fetching contacts:", error);
       }
     };
-
     getContacts();
   }, []);
+
   const handleNameSearch = (text) => {
     setName(text);
-
     if (text.length > 0) {
       const filtered = contacts.filter(
         (c) =>
@@ -102,7 +99,6 @@ const ReferFriendScreen = ({ navigation }) => {
   const handleSearch = (text) => {
     const cleaned = text.replace(/[^0-9]/g, "").slice(0, 10);
     setMobile(cleaned);
-
     if (cleaned.length > 0) {
       const filtered = contacts.filter(
         (c) =>
@@ -115,9 +111,9 @@ const ReferFriendScreen = ({ navigation }) => {
       setShowList(false);
     }
   };
+
   const selectContact = (contact) => {
     const cleanedNumber = contact.number.replace(/\D/g, "").slice(-10);
-
     setMobile(cleanedNumber);
     setName(contact.name);
     setShowList(false);
@@ -134,7 +130,6 @@ const ReferFriendScreen = ({ navigation }) => {
       return;
     }
     const mobileRegex = /^[6-9]\d{9}$/;
-
     if (!mobileRegex.test(mobile)) {
       Alert.alert("Invalid Mobile Number", "Enter a valid 10-digit mobile number.");
       return;
@@ -142,9 +137,10 @@ const ReferFriendScreen = ({ navigation }) => {
 
     try {
       setLoading(true);
+
+      // ─── Get referer phone from AsyncStorage ───
       const userDataJson = await AsyncStorage.getItem(USER_DATA);
       const userData = userDataJson ? JSON.parse(userDataJson) : null;
-
       const refererPhNo =
         userData?.UserInfo?.phoneNo ||
         userData?.phoneNumber ||
@@ -154,44 +150,66 @@ const ReferFriendScreen = ({ navigation }) => {
         Alert.alert("Error", "Referer phone number missing in user data.");
         return;
       }
-      const existingRef = await firestore()
-        .collection("referrals")
-        .where("friendPhNo", "==", mobile)
-        .get();
 
-      if (!existingRef.empty) {
-        Alert.alert(
-          "Already Exists",
-          "This mobile number has already been referred."
+      // ─── Check duplicate via your API ───
+      const checkRes = await fetch(
+        `${BASE_URL}/referral/get?refererPhNo=${encodeURIComponent(refererPhNo)}`
+      );
+      const checkData = await checkRes.json();
+      if (checkData.success && checkData.data?.length) {
+        const alreadyReferred = checkData.data.some(
+          (r) => r.friendPhNo === mobile
         );
-        setLoading(false);
-        return;
+        if (alreadyReferred) {
+          Alert.alert(
+            "Already Exists",
+            "This mobile number has already been referred."
+          );
+          setLoading(false);
+          return;
+        }
       }
-      const salesId = firestore().collection("referrals").doc().id;
-      const referralData = {
+
+      // ─── Build referral payload ───
+      const salesId = `REF-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 6)
+        .toUpperCase()}`;
+
+      const referralPayload = {
+        id: salesId,
         salesId,
         refererPhNo,
         friendPhNo: mobile,
         friendName: name,
+        productID: product,
         status: "",
         bonusAmount: null,
         amountCredited: null,
         description: null,
         PurchaseAt: "",
         PurchaseTracking: "",
-        productID: product,
-        createdAt: firestore.FieldValue.serverTimestamp(),
       };
 
-      await firestore().collection("referrals").doc(salesId).set(referralData);
+      // ─── POST to your endpoint ───
+      const res = await fetch(`${BASE_URL}/referral/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(referralPayload),
+      });
+      const data = await res.json();
 
-      Alert.alert("Success", "Referral submitted successfully!");
-      setName("");
-      setMobile("");
-      setProduct("");
-      navigation.navigate(SCREEN_NAMES.REFER_AND_EARN);
-
+      if (data.success) {
+        Alert.alert("Success", "Referral submitted successfully!");
+        setName("");
+        setMobile("");
+        setProduct("");
+        navigation.navigate(SCREEN_NAMES.REFER_AND_EARN);
+      } else {
+        Alert.alert("Error", data.error || "Failed to submit referral.");
+      }
     } catch (error) {
+      console.error("❌ handleRefer error:", error);
       Alert.alert("Error", "Something went wrong while submitting referral.");
     } finally {
       setLoading(false);
@@ -203,7 +221,6 @@ const ReferFriendScreen = ({ navigation }) => {
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
       {loading && <Loader />}
 
-      {/* 🔹 Header */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -213,6 +230,7 @@ const ReferFriendScreen = ({ navigation }) => {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Refer Friends</Text>
       </View>
+
       <KeyboardAwareScrollView contentContainerStyle={styles.formContainer}>
         <Text style={styles.label}>Mobile</Text>
         <TextInput
@@ -223,6 +241,7 @@ const ReferFriendScreen = ({ navigation }) => {
           value={mobile}
           onChangeText={handleSearch}
         />
+
         <Text style={styles.label}>Name</Text>
         <TextInput
           style={styles.input}
@@ -238,7 +257,6 @@ const ReferFriendScreen = ({ navigation }) => {
               style={{
                 borderWidth: 1,
                 borderColor: "#eee",
-
                 borderRadius: 8,
                 backgroundColor: "#fff",
               }}
@@ -271,10 +289,8 @@ const ReferFriendScreen = ({ navigation }) => {
           value={product}
           onChangeText={setProduct}
         />
-        <TouchableOpacity
-          onPress={handleRefer}
-          disabled={loading}
-        >
+
+        <TouchableOpacity onPress={handleRefer} disabled={loading}>
           <LinearGradient
             colors={["#F00001", "#B00100"]}
             start={{ x: 0.5, y: 0 }}
@@ -290,7 +306,9 @@ const ReferFriendScreen = ({ navigation }) => {
     </SafeAreaView>
   );
 };
+
 export default ReferFriendScreen;
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   header: {
@@ -303,10 +321,7 @@ const styles = StyleSheet.create({
   },
   backButton: { marginRight: 10 },
   headerTitle: { fontSize: 18, fontWeight: "700", color: "#000" },
-
-  formContainer: {
-    padding: 16,
-  },
+  formContainer: { padding: 16 },
   label: {
     fontSize: 14,
     color: "#555",
@@ -324,37 +339,12 @@ const styles = StyleSheet.create({
     color: "#333",
     backgroundColor: "#fff",
   },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    backgroundColor: "#fff",
-    overflow: "hidden",
-  },
-  picker: {
-    height: 55,
-    borderWidth: 1,
-    borderColor: "#555",
-    borderRadius: 8,
-    justifyContent: "center",
-    paddingHorizontal: 10,
-  },
-  itemStyle: {
-    fontSize: 16,
-    height: 55,
-    lineHeight: 22,
-  },
   referBtn: {
     height: 48,
-  borderRadius: 8,
-  justifyContent: "center",
-  alignItems: "center",
-  marginTop: 30,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 30,
   },
-  referBtnText: {
-    color: "#fff",
-  fontSize: 16,
-  fontWeight: "600",
-  lineHeight: 20
-  },
+  referBtnText: { color: "#fff", fontSize: 16, fontWeight: "600", lineHeight: 20 },
 });

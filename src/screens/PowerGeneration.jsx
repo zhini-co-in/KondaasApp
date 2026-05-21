@@ -386,7 +386,7 @@ const PowerGenerationScreen = ({ navigation, route }) => {
         setTotalGenerated(Number(totalThisMonth.toFixed(1)));
 
         const monthKey = `${year}-${month}`;
-        const monthlyCost = monthlyRecords[monthKey]?.cost ?? Number((totalThisMonth * rate).toFixed(0));
+        const monthlyCost = monthlyRecords[monthKey]?.cost || Number((totalThisMonth * rate).toFixed(0));
         setTotalSaved(monthlyCost);
 
         const potential = calculateCommittedUnits(totalInstalledCapacity, tab, currentDate);
@@ -444,7 +444,7 @@ const PowerGenerationScreen = ({ navigation, route }) => {
         let yearCost = 0;
         for (let m = 1; m <= 12; m++) {
           const key = `${y}-${String(m).padStart(2, "0")}`;
-          yearCost += monthlyRecords[key]?.cost ?? (dataPoints[m - 1] * rate);
+          yearCost += monthlyRecords[key]?.cost || (dataPoints[m - 1] * rate);
         }
         setTotalSaved(Number(yearCost.toFixed(0)));
 

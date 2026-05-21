@@ -389,4 +389,27 @@ export const fetchSavings = async (phoneNo, stationId) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────
+// 12. FETCH STATION DEVICES
+// ─────────────────────────────────────────────────────────────
+export const fetchStationDevices = async (stationId) => {
+  try {
+    const { deviceId, authToken, phoneNo } = await getSessionInfo();
+
+    const data = await solarmanFetch(
+      "/solarman/devices",
+      { phoneNo, stationId },
+      authToken,
+      deviceId
+    );
+
+    console.log("✅ fetchStationDevices:", JSON.stringify(data));
+    return data;
+
+  } catch (e) {
+    console.log("❌ fetchStationDevices error:", e.message);
+    return null;
+  }
+};
+
 export default API1;
