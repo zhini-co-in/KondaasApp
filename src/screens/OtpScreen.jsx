@@ -122,26 +122,58 @@ const OtpScreen = ({ navigation, route }) => {
     }
   };
 
-  const getFcmToken = async () => {
-    try {
-      if (Platform.OS === "android" && Platform.Version >= 33) {
-        await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-        );
+const getFcmToken = async () => {
+  try {
+    // ✅ iOS: APNs register + token ready ஆக wait பண்ணு
+    if (Platform.OS === "ios") {
+      await messaging().registerDeviceForRemoteMessages();
+      
+      // APNs token ready ஆக சிறிது நேரம் wait
+      let apnsToken = null;
+      let retries = 0;
+      while (!apnsToken && retries < 5) {
+        apnsToken = await messaging().getAPNSToken();
+        if (!apnsToken) {
+          await new Promise(res => setTimeout(res, 1000)); // 1 second wait
+          retries++;
+        }
       }
-      const status = await messaging().requestPermission();
-      const allowed =
-        status === messaging.AuthorizationStatus.AUTHORIZED ||
-        status === messaging.AuthorizationStatus.PROVISIONAL;
-      if (allowed) {
-        await messaging().registerDeviceForRemoteMessages();
-        return await messaging().getToken();
+      
+      if (!apnsToken) {
+        console.log("⚠️ APNs token not available after retries");
+        return null;
       }
-    } catch (e) {
-      console.log("FCM error:", e.message);
+      console.log("✅ APNs token ready:", apnsToken);
     }
+
+    // Android permission
+    if (Platform.OS === "android" && Platform.Version >= 33) {
+      await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+      );
+    }
+
+    // Permission request
+    const status = await messaging().requestPermission();
+    const allowed =
+      status === messaging.AuthorizationStatus.AUTHORIZED ||
+      status === messaging.AuthorizationStatus.PROVISIONAL;
+
+    if (!allowed) {
+      console.log("⚠️ Notification permission denied");
+      return null;
+    }
+
+    // ✅ இப்போ FCM token எடு
+    const fcmToken = await messaging().getToken();
+    console.log("✅ FCM Token:", fcmToken ? "RECEIVED" : "MISSING");
+    return fcmToken;
+
+  } catch (e) {
+    console.log("❌ FCM error:", e.message);
     return null;
-  };
+  }
+};
 
 const handleAutoLogin = async (credential, phone) => {
   try {
@@ -373,28 +405,45 @@ if (role === "surveyer") {
   }
 };
 
-  const handleConfirm = async () => {
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) {
-      Alert.alert("No Internet", "No network connection available");
-      return;
-    }
-    const otpCode = otp.join("");
-    if (otpCode.length < 6) {
-      setErrorMessage("Please enter the full 6-digit OTP");
-      return;
-    }
-    try {
-      setLoading(true);
-      setErrorMessage("");
-      const credential = auth.PhoneAuthProvider.credential(verificationId, otpCode);
-      await handleAutoLogin(credential, phoneNumber);
-    } catch (err) {
+const handleConfirm = async () => {
+  const net = await NetInfo.fetch();
+  if (!net.isConnected) {
+    Alert.alert("No Internet", "No network connection available");
+    return;
+  }
+  const otpCode = otp.join("");
+  if (otpCode.length < 6) {
+    setErrorMessage("Please enter the full 6-digit OTP");
+    return;
+  }
+  try {
+    setLoading(true);
+    setErrorMessage("");
+
+    // ✅ FIX: confirmation.confirm() use பண்றோம்
+    // signInWithPhoneNumber flow-க்கு இதுதான் சரி
+    const userCredential = await confirmation.confirm(otpCode);
+
+    // credential object உருவாக்கி handleAutoLogin-க்கு pass பண்றோம்
+    const credential = auth.PhoneAuthProvider.credential(
+      confirmation.verificationId,  // ✅ confirmation-இல் இருந்து எடுக்கிறோம்
+      otpCode
+    );
+
+    await handleAutoLogin(credential, phoneNumber);
+
+  } catch (err) {
+    if (err.code === "auth/invalid-verification-code") {
+      setErrorMessage("Invalid OTP. Please try again.");
+    } else if (err.code === "auth/session-expired") {
+      setErrorMessage("OTP expired. Please resend.");
+    } else {
       setErrorMessage(err.message || "OTP verification failed");
-    } finally {
-      setLoading(false);
     }
-  };
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleResendOtp = async () => {
     const net = await NetInfo.fetch();
@@ -407,7 +456,7 @@ if (role === "surveyer") {
       setCanResend(false);
       setTimer(30);
       setOtp(["", "", "", "", "", ""]);
-      const result = await auth().signInWithPhoneNumber(phoneNumber);
+      const result = await auth().signInWithPhoneNumber(phoneNumber, true);
       setConfirmation(result);
       Alert.alert("OTP Sent", "A new OTP has been sent.");
     } catch (e) {

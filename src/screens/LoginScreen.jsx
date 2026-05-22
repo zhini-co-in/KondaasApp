@@ -18,6 +18,8 @@ import Loader from "../components/Loader";
 import { storeData, getStorageData, USER_DATA } from "../service/localStorage";
 import LinearGradient from "react-native-linear-gradient";
 import { SCREEN_NAMES } from "../constants/screenNames";
+import messaging from "@react-native-firebase/messaging";
+import { Platform } from "react-native";
 
 const LoginScreen = ({ navigation }) => {
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -85,34 +87,32 @@ const handleSendOTP = async () => {
   try {
     setLoading(true);
     const fullNumber = "+91" + phoneNumber.trim();
- auth()
-  .verifyPhoneNumber(fullNumber)
-  .on("state_changed", async snapshot => {
 
-    switch (snapshot.state) {
-
-      case auth.PhoneAuthState.CODE_SENT:
-        setLoading(false);
-        navigation.navigate(SCREEN_NAMES.OTP, {
-          verificationId: snapshot.verificationId,
-          phoneNumber: fullNumber,
-        });
-        break;
-
-      case auth.PhoneAuthState.AUTO_VERIFIED:
-        // Ignore auto verification
-        console.log("Auto verification ignored");
-        break;
-
-      case auth.PhoneAuthState.ERROR:
-        setLoading(false);
-        Alert.alert("OTP Error", snapshot.error?.message);
-        break;
+    // ✅ FIX: iOS APNs token refresh — Chrome open ஆவதை தடுக்கும்
+    if (Platform.OS === "ios") {
+      try {
+        await messaging().registerDeviceForRemoteMessages();
+        await messaging().getAPNSToken();
+        console.log("✅ APNs token refreshed");
+      } catch (e) {
+        console.log("⚠️ APNs refresh warning:", e.message);
+        // Error வந்தாலும் continue பண்ணும் — crash ஆகாது
+      }
     }
-  });
+
+    // ✅ FIX: verifyPhoneNumber → signInWithPhoneNumber (forceResend: true)
+    const confirmation = await auth().signInWithPhoneNumber(fullNumber, true);
+
+    setLoading(false);
+    navigation.navigate(SCREEN_NAMES.OTP, {
+      confirmation,                              // ✅ OtpScreen already use பண்றது
+      verificationId: confirmation.verificationId,
+      phoneNumber: fullNumber,
+    });
 
   } catch (err) {
     setLoading(false);
+    console.log("❌ OTP send error:", err.message);
     Alert.alert("Error", err.message);
   }
 };
