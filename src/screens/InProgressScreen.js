@@ -209,7 +209,7 @@ const InProgressScreen = () => {
 
   const { currentLocation, setCurrentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
 
-  // ✅ Net watcher
+  // ── Net watcher ───────────────────────────────────────────────────────────
   useEffect(() => {
     const unsub = NetInfo.addEventListener((state) => {
       setIsOnline(!!state.isConnected && !!state.isInternetReachable);
@@ -237,18 +237,19 @@ const InProgressScreen = () => {
       stopHighFrequencyTracking();
     };
   }, []);
+
   // route.params.lead மாறும்போது state sync பண்ணு
-useEffect(() => {
-  const updatedLead = route.params?.lead;
-  if (!updatedLead) return;
-  setInProgressLeads((prev) =>
-    prev.map((l) =>
-      l.id === (updatedLead.id || updatedLead._id)
-        ? { ...l, manualSiteEnabled: updatedLead.manualSiteEnabled ?? l.manualSiteEnabled }
-        : l
-    )
-  );
-}, [route.params?.lead]);
+  useEffect(() => {
+    const updatedLead = route.params?.lead;
+    if (!updatedLead) return;
+    setInProgressLeads((prev) =>
+      prev.map((l) =>
+        l.id === (updatedLead.id || updatedLead._id)
+          ? { ...l, manualSiteEnabled: updatedLead.manualSiteEnabled ?? l.manualSiteEnabled }
+          : l
+      )
+    );
+  }, [route.params?.lead]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -261,7 +262,17 @@ useEffect(() => {
       stopHighFrequencyTracking();
     }, [route.params?.completedLeadId])
   );
-  
+
+  // ── Helper: get surveyor number ───────────────────────────────────────────
+  const getSurveyorNumber = async () => {
+    try {
+      const userData = await AsyncStorage.getItem(USER_DATA);
+      const parsed = userData ? JSON.parse(userData) : null;
+      return parsed?.UserInfo?.phoneNo || '';
+    } catch (e) {
+      return '';
+    }
+  };
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -269,12 +280,7 @@ useEffect(() => {
     setInProgressLeads((prev) =>
       prev.map((l) => (l.id === item.id ? { ...l, manualSiteEnabled: true } : l))
     );
-    let surveyorNumber = '';
-    try {
-      const userData = await AsyncStorage.getItem(USER_DATA);
-      const parsed = userData ? JSON.parse(userData) : null;
-      surveyorNumber = parsed?.UserInfo?.phoneNo || '';
-    } catch (e) {}
+    const surveyorNumber = await getSurveyorNumber();
     try {
       await API.post('/notification/trigger', { surveyorNumber, customerMobile: item.phone, scenarioType: 3 });
     } catch (e) {}
@@ -302,60 +308,88 @@ useEffect(() => {
     setCompletedModalVisible(true);
   };
 
+  // ✅ FIX: confirmMarkCompleted — sync-status call added for completed
   const confirmMarkCompleted = async () => {
-  const item = completedTargetLead;
-  const leadId = item.id || item._id;
+    const item = completedTargetLead;
+    const leadId = item.id || item._id;
+    const endAt  = Date.now();
 
-  setCompletedModalVisible(false);
+    setCompletedModalVisible(false);
 
-  // Step 1 — Local update
-  await updateAcceptedLeadStatus(leadId, 'completed');
-  
-  setInProgressLeads((prev) => {
-    const updated = prev.map((l) =>
-      l.id === leadId ? { ...l, status: 'completed' } : l
-    );
-    stopHighFrequencyTracking();
+    // Step 1 — Local update
+    await updateAcceptedLeadStatus(leadId, 'completed');
 
-    const completedIds = updated
-      .filter((l) => l.status === 'completed')
-      .map((l) => l.id);
+    setInProgressLeads((prev) => {
+      const updated = prev.map((l) =>
+        l.id === leadId ? { ...l, status: 'completed' } : l
+      );
+      stopHighFrequencyTracking();
 
-    // ✅ Automatic-ஆ SurveyerScreen-க்கு போ
-setTimeout(() => {
-  navigation.navigate(SCREEN_NAMES.SURVEYER_SCREEN, { completedIds });
-}, 300);
+      const completedIds = updated
+        .filter((l) => l.status === 'completed')
+        .map((l) => l.id);
 
-    return updated;
-  });
+      setTimeout(() => {
+        navigation.navigate(SCREEN_NAMES.SURVEYER_SCREEN, { completedIds });
+      }, 300);
 
-  // Step 2 — API / Queue (unchanged)
-  if (isOnline) {
-    try {
-      await API.put('/order/updatestatus', { mobile: item.phone, status: 'completed' });
-    } catch (err) {
+      return updated;
+    });
+
+    // Step 2 — API / Queue
+    if (isOnline) {
+      const surveyorNumber = await getSurveyorNumber();
+
+      try {
+        await API.put('/order/updatestatus', { mobile: item.phone, status: 'completed' });
+      } catch (err) {
+        await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', {
+          mobile: item.phone, status: 'completed',
+        });
+      }
+
+      // ✅ FIX: Flowtrix sync — completed
+      try {
+        await API.post('/order/sync-status', {
+          customerMobile: item.phone,
+          surveyorNumber,
+          status: 'completed',
+          endAt,
+        });
+      } catch (err) {
+        await enqueue(`flowtrix_completed_${leadId}`, 'FLOWTRIX_SYNC', {
+          customerMobile: item.phone,
+          surveyorNumber,
+          status: 'completed',
+          endAt,
+        });
+      }
+
+      try {
+        await API.post('/notification/trigger', {
+          customerMobile: item.phone, scenarioType: 4,
+        });
+      } catch (err) {
+        await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
+          customerMobile: item.phone, scenarioType: 4,
+        });
+      }
+    } else {
+      const surveyorNumber = await getSurveyorNumber();
       await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', {
         mobile: item.phone, status: 'completed',
       });
-    }
-    try {
-      await API.post('/notification/trigger', {
-        customerMobile: item.phone, scenarioType: 4,
+      await enqueue(`flowtrix_completed_${leadId}`, 'FLOWTRIX_SYNC', {
+        customerMobile: item.phone,
+        surveyorNumber,
+        status: 'completed',
+        endAt,
       });
-    } catch (err) {
       await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
         customerMobile: item.phone, scenarioType: 4,
       });
     }
-  } else {
-    await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', {
-      mobile: item.phone, status: 'completed',
-    });
-    await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
-      customerMobile: item.phone, scenarioType: 4,
-    });
-  }
-};
+  };
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -379,7 +413,7 @@ setTimeout(() => {
         <View style={{ width: 24 }} />
       </View>
 
-      {/* ✅ Offline banner */}
+      {/* Offline banner */}
       {!isOnline && (
         <View style={styles.offlineBanner}>
           <Ionicons name="cloud-offline-outline" size={14} color="#fff" style={{ marginRight: 6 }} />
@@ -455,7 +489,7 @@ setTimeout(() => {
               as completed. This means the job is done{'\n'}and the lead will be closed. ✅
             </Text>
 
-            {/* ✅ Offline warning inside modal */}
+            {/* Offline warning inside modal */}
             {!isOnline && (
               <View style={{
                 backgroundColor: '#fff7ed', borderRadius: 8,

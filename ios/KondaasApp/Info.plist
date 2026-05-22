@@ -74,6 +74,8 @@
 	<string>We need your location always.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>We need your location to track your activity.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app requires microphone access.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UIAppFonts</key>
@@ -105,6 +107,10 @@
 		<string>location</string>
 		<string>processing</string>
 	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.trisentrix.kondaas.location</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
@@ -117,11 +123,5 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>This app requires microphone access.</string>
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array>
-		<string>com.trisentrix.kondaas.location</string>
-	</array>
 </dict>
 </plist>

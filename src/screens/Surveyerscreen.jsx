@@ -53,7 +53,6 @@ const LeadCard = ({
 
       {/* Top row */}
       <View style={styles.rowBetween}>
-        {/* ✅ Referred by — pill badge */}
         <View style={styles.referredBadge}>
           <Text style={styles.referredText}>
             Referred by — <Text style={{ fontWeight: 'bold' }}>{item.referredBy || 'N/A'}</Text>
@@ -64,7 +63,7 @@ const LeadCard = ({
 
       <View style={styles.userRow}>
 
-        {/* ✅ Avatar — initials circle */}
+        {/* Avatar */}
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
             {item.name ? item.name.charAt(0).toUpperCase() : '?'}
@@ -105,7 +104,6 @@ const LeadCard = ({
         {cardType === 'accepted' && (
           <View style={{ alignItems: 'center', gap: 6 }}>
             {item.status === 'completed' ? (
-              // ✅ Completed pill
               <View style={styles.completedPill}>
                 <Ionicons name="checkmark-circle" size={14} color="#3B6D11" />
                 <Text style={styles.completedPillText}>Completed</Text>
@@ -224,24 +222,23 @@ const SurveyerScreen = () => {
 
   // ── Focus — completed leads from InProgress ───────────────────────────────
   useFocusEffect(
-  React.useCallback(() => {
-    const completedIds = route.params?.completedIds;
-    if (!completedIds || completedIds.length === 0) return;
-    navigation.setParams({ completedIds: null });
+    React.useCallback(() => {
+      const completedIds = route.params?.completedIds;
+      if (!completedIds || completedIds.length === 0) return;
+      navigation.setParams({ completedIds: null });
 
-    // ✅ acceptedLeads-ஐ directly read பண்ணாம, functional update use பண்ணு
-    setAcceptedLeads((prev) => {
-      const toMove = prev.filter((l) => completedIds.includes(l.id));
-      if (toMove.length > 0) {
-        setCompletedLeads((c) => [
-          ...c.filter((cl) => !toMove.some((m) => m.id === cl.id)), // duplicate avoid
-          ...toMove.map((l) => ({ ...l, status: 'completed' })),
-        ]);
-      }
-      return prev.filter((l) => !completedIds.includes(l.id));
-    });
-  }, [route.params?.completedIds])
-);
+      setAcceptedLeads((prev) => {
+        const toMove = prev.filter((l) => completedIds.includes(l.id));
+        if (toMove.length > 0) {
+          setCompletedLeads((c) => [
+            ...c.filter((cl) => !toMove.some((m) => m.id === cl.id)),
+            ...toMove.map((l) => ({ ...l, status: 'completed' })),
+          ]);
+        }
+        return prev.filter((l) => !completedIds.includes(l.id));
+      });
+    }, [route.params?.completedIds])
+  );
 
   // ── Restore state ─────────────────────────────────────────────────────────
   const restoreState = async () => {
@@ -305,6 +302,17 @@ const SurveyerScreen = () => {
     catch (e) { console.log('[SurveyerScreen] API failed (offline):', e?.message); }
   };
 
+  // ── Helper: get surveyor number ───────────────────────────────────────────
+  const getSurveyorNumber = async () => {
+    try {
+      const userData = await AsyncStorage.getItem(USER_DATA);
+      const parsed = userData ? JSON.parse(userData) : null;
+      return parsed?.UserInfo?.phoneNo || '';
+    } catch (e) {
+      return '';
+    }
+  };
+
   // ── Accept ────────────────────────────────────────────────────────────────
   const handleAccept = async (item) => {
     await saveAcceptedLead(item);
@@ -314,14 +322,8 @@ const SurveyerScreen = () => {
       return [...prev, { ...item, status: 'accepted' }];
     });
 
-    let surveyorNumber = '';
-    try {
-      const userData = await AsyncStorage.getItem(USER_DATA);
-      const parsed = userData ? JSON.parse(userData) : null;
-      surveyorNumber = parsed?.UserInfo?.phoneNo || '';
-    } catch (e) {
-      console.log('[handleAccept] Failed to get surveyor number:', e?.message);
-    }
+    const surveyorNumber = await getSurveyorNumber();
+    const acceptedAt = Date.now();
 
     const payload = { mobile: item.phone, surveyorNumber };
     await enqueue(`accept_${item.id}`, 'ACCEPT_LEAD', payload);
@@ -329,6 +331,14 @@ const SurveyerScreen = () => {
     if (isOnline) {
       tryApi(() => API.post('/order/accept', payload));
       tryApi(() => API.put('/order/updatestatus', { mobile: item.phone, status: 'accepted' }));
+
+      // ✅ FIX: Flowtrix sync — accepted
+      tryApi(() => API.post('/order/sync-status', {
+        customerMobile: item.phone,
+        surveyorNumber,
+        status: 'accepted',
+        receivedAt: acceptedAt,
+      }));
     }
   };
 
@@ -339,11 +349,13 @@ const SurveyerScreen = () => {
     setRejectModalVisible(true);
   };
 
+  // ✅ FIX: confirmReject — correct field names matching backend rejectOrder()
   const confirmReject = async () => {
     if (!rejectComment.trim()) {
       Alert.alert('Error', 'Please enter a reason for rejection.');
       return;
     }
+
     const lead = leads.find((l) => l.id === rejectLeadId);
     if (!lead) return;
 
@@ -352,8 +364,16 @@ const SurveyerScreen = () => {
       return;
     }
 
+    const surveyorNumber = await getSurveyorNumber();
+
     try {
-      await API.post('/order/reject', { mobile: lead.phone, reason: rejectComment.trim() });
+      await API.post('/order/reject', {
+        customerMobile: lead.phone,        // ✅ mobile → customerMobile
+        surveyorNumber,                    // ✅ added
+        comment: rejectComment.trim(),     // ✅ reason → comment
+        receivedAt: Date.now(),            // ✅ epoch timestamp added
+      });
+
       setLeads((prev) => prev.filter((l) => l.id !== rejectLeadId));
       setRejectModalVisible(false);
       setRejectLeadId(null);
@@ -389,14 +409,15 @@ const SurveyerScreen = () => {
         etaText = mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`;
       }
     }
+
     let mapsUrl = '';
-  if (currentLocation && hasLatLong) {
-    mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.latitude},${currentLocation.longitude}&destination=${lead.latitude},${lead.longitude}`;
-  } else if (hasLatLong) {
-    mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lead.latitude},${lead.longitude}`;
-  } else if (lead.address || lead.city) {
-    mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lead.address || lead.city)}`;
-  }
+    if (currentLocation && hasLatLong) {
+      mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.latitude},${currentLocation.longitude}&destination=${lead.latitude},${lead.longitude}`;
+    } else if (hasLatLong) {
+      mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lead.latitude},${lead.longitude}`;
+    } else if (lead.address || lead.city) {
+      mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lead.address || lead.city)}`;
+    }
 
     await updateAcceptedLeadStatus(id, 'inprogress');
     setAcceptedLeads((prev) =>
@@ -408,17 +429,21 @@ const SurveyerScreen = () => {
     });
 
     if (isOnline) {
-      let surveyorNumber = '';
-      try {
-        const userData = await AsyncStorage.getItem(USER_DATA);
-        const parsed   = userData ? JSON.parse(userData) : null;
-        surveyorNumber = parsed?.UserInfo?.phoneNo || '';
-      } catch (e) {
-        console.log('[handleStart] Failed to get surveyor number:', e?.message);
-      }
+      const surveyorNumber = await getSurveyorNumber();
+      const startAt = Date.now();
+      const dueAt   = startAt + (totalMins * 60 * 1000);
 
       tryApi(() => API.put('/order/updatestatus', { mobile: lead.phone, status: 'inprogress' }));
       tryApi(() => API.post('/order/inprogress', { mobile: lead.phone, surveyorNumber }));
+
+      // ✅ FIX: Flowtrix sync — inprogress
+      tryApi(() => API.post('/order/sync-status', {
+        customerMobile: lead.phone,
+        surveyorNumber,
+        status: 'inprogress',
+        startAt,
+        dueAt,
+      }));
 
       try {
         await API.post('/notification/trigger', {
@@ -756,73 +781,44 @@ const styles = StyleSheet.create({
     textAlign: 'center', marginTop: 40,
     color: '#999', fontSize: 14, paddingHorizontal: 30,
   },
-
-  // ── Card ──
   card: {
     backgroundColor: '#fff', marginHorizontal: 15, marginBottom: 12,
     borderRadius: 12, padding: 14, elevation: 3,
   },
-  rowBetween: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-  },
-
-  // ✅ Referred by pill badge
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   referredBadge: {
-    backgroundColor: '#FCEBEB',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
+    backgroundColor: '#FCEBEB', paddingHorizontal: 8,
+    paddingVertical: 3, borderRadius: 20, alignSelf: 'flex-start',
   },
-  referredText: {
-    fontSize: 11, color: '#A32D2D',
-  },
-
+  referredText: { fontSize: 11, color: '#A32D2D' },
   date: { fontSize: 11, color: '#888' },
   userRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
-
-  // ✅ Avatar — initials circle
   avatar: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: '#E6F1FB', marginRight: 10,
     justifyContent: 'center', alignItems: 'center',
   },
-  avatarText: {
-    fontSize: 16, fontWeight: '600', color: '#185FA5',
-  },
-
+  avatarText: { fontSize: 16, fontWeight: '600', color: '#185FA5' },
   name: { fontSize: 16, fontWeight: 'bold' },
   subText: { fontSize: 12, color: '#555' },
   iconContainer: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   iconBtn: { padding: 4 },
   commentRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'flex-start', marginTop: 8,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 8,
   },
   comment: { flex: 1, fontSize: 12, color: '#555' },
   seeMore: { fontSize: 12 },
-
-  // ✅ Completed pill
   completedPill: {
-    backgroundColor: '#EAF3DE',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    backgroundColor: '#EAF3DE', paddingHorizontal: 10,
+    paddingVertical: 6, borderRadius: 20,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
   },
-  completedPillText: {
-    color: '#3B6D11', fontSize: 12, fontWeight: '600',
-  },
-
+  completedPillText: { color: '#3B6D11', fontSize: 12, fontWeight: '600' },
   startBtn: {
     backgroundColor: '#22c55e', flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
   },
   startBtnText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
-
-  // ── Modal ──
   modalOverlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'center', alignItems: 'center',
