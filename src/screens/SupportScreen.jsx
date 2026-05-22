@@ -14,7 +14,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import firestore from "@react-native-firebase/firestore";
 import Loader from "../components/Loader";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { USER_DATA } from "../service/localStorage";
@@ -50,59 +49,79 @@ const SupportScreen = ({ route, navigation }) => {
         return `${weeks} week${weeks > 1 ? "s" : ""} ago`;
     };
 
-    const fetchTickets = async () => {
-        try {
-            setLoading(true);
-            const storedData = await AsyncStorage.getItem(USER_DATA);
-            const parsedData = storedData ? JSON.parse(storedData) : null;
-            const phoneNo = parsedData?.UserInfo?.phoneNo;
+const fetchTickets = async () => {
+    try {
+        setLoading(true);
 
-            if (!phoneNo) {
-                Alert.alert("Missing Info", "User phone number not found in storage.");
-                setLoading(false);
-                return;
-            }
+        const storedData = await AsyncStorage.getItem(USER_DATA);
 
-            const snapshot = await firestore()
-                .collection("createTicket")
-                .where("PhoneNo", "==", phoneNo)
+        const parsedData = storedData
+            ? JSON.parse(storedData)
+            : null;
 
-                .get();
+        const phoneNo = parsedData?.UserInfo?.phoneNo;
 
-            if (snapshot.empty) {
-                setTickets([]);
-                return;
-            }
-
-            const fetchedTickets = snapshot.docs.map((doc) => {
-                const data = doc.data();
-                return {
-                    id: data.TicketNo || doc.id,
-                    title: data.Description || "No description",
-                    category: data.type,
-                    status: data.status,
-                    statusColor:
-                        data.status === "Resolved"
-                            ? "#22C55E"
-                            : data.status === "In progress"
-                                ? "#F59E0B"
-                                : "#E11D48",
-                    daysAgo: data.createdAt ? getDaysAgo(data.createdAt.toDate()) : "N/A",
-                    createdAt: data.createdAt ? data.createdAt.toDate() : null, // ⬅ added for sorting
-                };
-            });
-
-            fetchedTickets.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-
-            setTickets(fetchedTickets);
-        } catch (error) {
-            console.error("Error fetching tickets:", error);
-            Alert.alert("Error", "Failed to load tickets.");
-        } finally {
-            setLoading(false);
+        if (!phoneNo) {
+            Alert.alert("Error", "Phone number not found");
+            return;
         }
-    };
+
+        const response = await fetch(
+            `https://board.trisentrix.com/ticket/user?PhoneNo=${phoneNo}`,
+            {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            }
+        );
+
+        console.log("📡 status:", response.status);
+
+        const result = await response.json();
+
+        console.log("🎫 Ticket Response:", result);
+
+        if (!result.success) {
+            Alert.alert("Error", result.error || "Failed to fetch tickets");
+            return;
+        }
+
+        const fetchedTickets = (result.data || []).map((item) => ({
+            id: item.TicketNo || item._id,
+            title: item.Description || "No description",
+            category: item.type || "General",
+            status: item.status || "Open",
+
+            statusColor:
+                item.status === "Resolved"
+                    ? "#22C55E"
+                    : item.status === "In progress"
+                    ? "#F59E0B"
+                    : "#E11D48",
+
+            daysAgo: item.createdAt
+                ? getDaysAgo(new Date(item.createdAt))
+                : "N/A",
+
+            createdAt: item.createdAt
+                ? new Date(item.createdAt)
+                : null,
+        }));
+
+        setTickets(fetchedTickets);
+
+    } catch (error) {
+        console.log("❌ fetchTickets error:", error);
+
+        Alert.alert(
+            "Error",
+            error.message || "Failed to load tickets"
+        );
+    } finally {
+        setLoading(false);
+    }
+};
 
     useFocusEffect(
         useCallback(() => {
