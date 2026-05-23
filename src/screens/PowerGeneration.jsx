@@ -237,6 +237,8 @@ const PowerGenerationScreen = ({ navigation, route }) => {
     }
 
     const net = await NetInfo.fetch();
+const isOffline = net.isConnected === false || net.isInternetReachable === false;
+if (isOffline) return;
     if (!net.isConnected) return;
 
     setLoading(true);

@@ -40,7 +40,11 @@ const SplashScreen = () => {
         const email = userData?.UserInfo?.email;
         const password = userData?.UserInfo?.password;
         const unitsrupees = userData?.UserInfo?.unitsrupees;
-        const role = userData?.userroles?.role || userData?.UserInfo?.Role || "";
+        const role =
+  userData?.UserInfo?.role ||      // OtpScreen save பண்றது இங்கே
+  userData?.UserInfo?.Role ||
+  userData?.userroles?.role ||
+  "";
         console.log("User Role:", role);
         console.log("lastLogin:", lastLogin);
         console.log("deviceId:", deviceId);

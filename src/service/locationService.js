@@ -9,7 +9,11 @@ export const getDistance = (lat1, lon1, lat2, lon2) => {
   const R = 6371;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) ** 2;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * (Math.PI / 180)) *
+      Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 1000;
 };
 
@@ -17,7 +21,9 @@ export const getUserPhone = async () => {
   try {
     const data = await AsyncStorage.getItem(USER_DATA);
     return data ? JSON.parse(data)?.UserInfo?.phoneNo || '' : '';
-  } catch (e) { return ''; }
+  } catch (e) {
+    return '';
+  }
 };
 
 const isMockLocation = (lat, lon) => {
@@ -26,27 +32,30 @@ const isMockLocation = (lat, lon) => {
 };
 
 const lastSentTime = { current: 0 };
-let lastSentCoords = { lat: null, lon: null }; // ✅ ADD THIS
 
 export const sendLocation = async (latitude, longitude, timestamp) => {
   if (isMockLocation(latitude, longitude)) return;
   const now = Date.now();
-  // 3 minutes = 180,000 ms
-if (now - lastSentTime.current < 180000) return;
+  if (now - lastSentTime.current < 180000) return; // 3 minutes throttle
   lastSentTime.current = now;
   const finalEpoch = timestamp || Date.now();
-  await AsyncStorage.setItem('last_known_location', JSON.stringify({ latitude, longitude }));
+  await AsyncStorage.setItem(
+    'last_known_location',
+    JSON.stringify({ latitude, longitude })
+  );
   try {
     const phoneNo = await getUserPhone();
     console.log(`📞 phoneNo being sent: "${phoneNo}"`);
-    console.log(`📍 [${Platform.OS}] SENDING → ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+    console.log(
+      `📍 [${Platform.OS}] SENDING → ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
+    );
     const res = await API.post('/location/add', {
-  phoneNo,
-  latitude: parseFloat(latitude),
-  longitude: parseFloat(longitude),
-  epoch: finalEpoch,
-});
-console.log('✅ Location saved:', res.status);
+      phoneNo,
+      latitude: parseFloat(latitude),
+      longitude: parseFloat(longitude),
+      epoch: finalEpoch,
+    });
+    console.log('✅ Location saved:', res.status);
   } catch (err) {
     console.log('❌ Send error:', err?.response?.data || err.message);
   }
@@ -101,13 +110,13 @@ export const requestBatteryOptimizationExemption = () => {
   );
 };
 
-// ✅ Module level-la வை (hook outside)
-let globalListenerRef = null; // single global ref
-
+// ✅ FIX: globalListenerRef REMOVED — now hook-level useRef
+// இது தான் battery kill-ஓட main cause இருந்தது
 export const useLocationTracking = (isMounted) => {
   const [currentLocation, setCurrentLocation] = useState(null);
   const watchIdRef = useRef(null);
-  const isTrackingRef = useRef(false); // ✅ tracking guard
+  const isTrackingRef = useRef(false);
+  const listenerRef = useRef(null); // ✅ Each hook instance-க்கு தனி ref
 
   const startTracking = () => {
     if (isTrackingRef.current) {
@@ -118,26 +127,29 @@ export const useLocationTracking = (isMounted) => {
     console.log('🟢 Starting location tracking');
 
     if (Platform.OS === 'android') {
-      // ✅ Global listener clean பண்ணு first
-      if (globalListenerRef) {
-        globalListenerRef.remove();
-        globalListenerRef = null;
+      // ✅ Own listener மட்டும் clean பண்ணு — மத்த screens-ஓட affect இல்லை
+      if (listenerRef.current) {
+        listenerRef.current.remove();
+        listenerRef.current = null;
       }
 
-      globalListenerRef = DeviceEventEmitter.addListener(
+      listenerRef.current = DeviceEventEmitter.addListener(
         'nativeLocationUpdate',
         async (data) => {
           console.log('🔔 Native service triggered:', data);
           if (data?.latitude && data?.longitude) {
             if (isMounted.current) {
-              setCurrentLocation({ latitude: data.latitude, longitude: data.longitude });
+              setCurrentLocation({
+                latitude: data.latitude,
+                longitude: data.longitude,
+              });
             }
             await sendLocation(data.latitude, data.longitude, data.timestamp);
           }
         }
       );
     } else if (Platform.OS === 'ios') {
-      if (watchIdRef.current !== null) return; // ✅ iOS guard
+      if (watchIdRef.current !== null) return;
       watchIdRef.current = global.navigator?.geolocation?.watchPosition(
         async (position) => {
           const { latitude, longitude } = position.coords;
@@ -145,22 +157,29 @@ export const useLocationTracking = (isMounted) => {
           await sendLocation(latitude, longitude, position.timestamp);
         },
         (error) => console.log('iOS watch error:', error),
-        { enableHighAccuracy: true, distanceFilter: 10, interval: 120000, maximumAge: 30000 }
+        {
+          enableHighAccuracy: true,
+          distanceFilter: 10,
+          interval: 120000,
+          maximumAge: 30000,
+        }
       );
     }
   };
 
   const stopTracking = () => {
     console.log('🔴 Stopping location tracking');
-    isTrackingRef.current = false; // ✅ Reset guard
+    isTrackingRef.current = false;
+
+    // ✅ Own listener மட்டும் remove — மத்த screen affect ஆகாது
+    if (listenerRef.current) {
+      listenerRef.current.remove();
+      listenerRef.current = null;
+    }
 
     if (Platform.OS === 'ios' && watchIdRef.current !== null) {
       global.navigator?.geolocation?.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
-    }
-    if (globalListenerRef) {
-      globalListenerRef.remove();
-      globalListenerRef = null;
     }
   };
 
@@ -182,23 +201,30 @@ export const isGPSEnabled = async () => {
 export const checkAndPromptGPS = async () => {
   return true;
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// High Frequency Tracking (InProgress screen-க்கு மட்டும்)
+// ─────────────────────────────────────────────────────────────────────────────
 let intervalTracker = null;
 let lastSentHFCoords = { lat: null, lon: null };
-let lastCheckCoords = { lat: null, lon: null };
 
 export const startHighFrequencyTracking = (getLocationFn) => {
-  if (intervalTracker) clearInterval(intervalTracker);
+  // ✅ Already running-ஆ இருந்தா clear பண்ணிட்டு restart
+  if (intervalTracker) {
+    clearInterval(intervalTracker);
+    intervalTracker = null;
+  }
 
-  // 1 minute = 60,000 ms
   intervalTracker = setInterval(async () => {
     const loc = getLocationFn();
     if (!loc?.latitude || !loc?.longitude) return;
 
-    // நகரவே இல்லன்னா skip
     if (lastSentHFCoords.lat !== null) {
       const moved = getDistance(
-        lastSentHFCoords.lat, lastSentHFCoords.lon,
-        loc.latitude, loc.longitude
+        lastSentHFCoords.lat,
+        lastSentHFCoords.lon,
+        loc.latitude,
+        loc.longitude
       );
       if (moved < 5) {
         console.log('🧍 Stationary, skipping HF send');
@@ -220,7 +246,7 @@ export const startHighFrequencyTracking = (getLocationFn) => {
     } catch (err) {
       console.log('❌ HF send error:', err?.message);
     }
-  }, 60000); // ✅ 1 minute
+  }, 60000); // 1 minute
 };
 
 export const stopHighFrequencyTracking = () => {
@@ -228,7 +254,6 @@ export const stopHighFrequencyTracking = () => {
     clearInterval(intervalTracker);
     intervalTracker = null;
     lastSentHFCoords = { lat: null, lon: null };
-    lastCheckCoords = { lat: null, lon: null };
     console.log('🛑 High-freq tracking stopped');
   }
 };

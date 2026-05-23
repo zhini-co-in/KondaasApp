@@ -29,7 +29,6 @@ const LoginScreen = ({ navigation }) => {
 
   useEffect(() => {
     if (__DEV__) {
-  auth().settings.appVerificationDisabledForTesting = true;
 }
   }, []);
   useEffect(() => {
@@ -74,6 +73,8 @@ const handleSendOTP = async () => {
   if (loading) return;
 
   const net = await NetInfo.fetch();
+const isOffline = net.isConnected === false || net.isInternetReachable === false;
+if (isOffline) return;
   if (!net.isConnected) {
     Alert.alert("No Internet", "No network connection available");
     return;

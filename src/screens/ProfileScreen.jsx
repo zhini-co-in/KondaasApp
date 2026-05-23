@@ -134,6 +134,8 @@ const ProfileScreen = ({ route, navigation }) => {
 
       // Offline-ல return
       const net = await NetInfo.fetch();
+const isOffline = net.isConnected === false || net.isInternetReachable === false;
+if (isOffline) return;
       if (!net.isConnected) { setLoading(false); return; }
 
       const response = await fetchStationList();

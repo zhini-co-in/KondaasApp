@@ -121,6 +121,8 @@ const ReferFriendScreen = ({ navigation }) => {
 
   const handleRefer = async () => {
     const net = await NetInfo.fetch();
+const isOffline = net.isConnected === false || net.isInternetReachable === false;
+if (isOffline) return;
     if (!net.isConnected) {
       alert("No network connection available");
       return;

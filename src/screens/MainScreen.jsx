@@ -238,6 +238,8 @@ const MainScreen = ({ navigation }) => {
       }
 
       const net = await NetInfo.fetch();
+const isOffline = net.isConnected === false || net.isInternetReachable === false;
+if (isOffline) return;
       if (!net.isConnected) return;
 
       // ─── Network fresh data ────────────────────────────────────
@@ -275,6 +277,8 @@ const MainScreen = ({ navigation }) => {
       if (cachedLifetime) setLifetimeGeneration(JSON.parse(cachedLifetime));
 
       const net = await NetInfo.fetch();
+const isOffline = net.isConnected === false || net.isInternetReachable === false;
+if (isOffline) return;
       if (!net.isConnected) return;
 
       const now = new Date();
@@ -334,6 +338,8 @@ const MainScreen = ({ navigation }) => {
       }
 
       const net = await NetInfo.fetch();
+const isOffline = net.isConnected === false || net.isInternetReachable === false;
+if (isOffline) return;
       if (!net.isConnected) return;
 
       const data = await fetchSavings(phoneNo, stationId);

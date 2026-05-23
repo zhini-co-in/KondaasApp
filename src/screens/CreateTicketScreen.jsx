@@ -80,6 +80,8 @@ const CreateTicketScreen = ({ route, navigation }) => {
 
   const handleSubmit = async () => {
     const net = await NetInfo.fetch();
+const isOffline = net.isConnected === false || net.isInternetReachable === false;
+if (isOffline) return;
     if (!net.isConnected) {
       Alert.alert("No Network", "No network connection available.");
       return;

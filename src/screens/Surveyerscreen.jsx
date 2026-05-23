@@ -1,6 +1,10 @@
-// screens/SurveyerScreen.js — Full offline + auto-sync version
+// screens/SurveyerScreen.js — Crash Fixed Version
+// FIXES:
+// 1. setState inside setState (useFocusEffect) → acceptedLeadsRef use பண்ணி தனியா set
+// 2. Stale closure in startHighFrequencyTracking → locationRef use பண்ணு
+// 3. setAcceptedLeads wrapper → ref sync பண்ணு
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Switch, Image, StatusBar,
   Alert, TouchableOpacity, ScrollView, ActivityIndicator,
@@ -164,6 +168,12 @@ const SurveyerScreen = () => {
 
   const { currentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
 
+  // ✅ FIX 2: locationRef — stale closure தடுக்க
+  const locationRef = useRef(null);
+  useEffect(() => {
+    locationRef.current = currentLocation;
+  }, [currentLocation]);
+
   const [isOn, setIsOn]                     = useState(false);
   const [leads, setLeads]                   = useState([]);
   const [acceptedLeads, setAcceptedLeads]   = useState([]);
@@ -176,6 +186,18 @@ const SurveyerScreen = () => {
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectComment, setRejectComment]           = useState('');
   const [rejectLeadId, setRejectLeadId]             = useState(null);
+
+  // ✅ FIX 1: acceptedLeadsRef — setState inside setState crash தடுக்க
+  const acceptedLeadsRef = useRef([]);
+
+  // ✅ acceptedLeads set பண்ணும்போது ref-ஐயும் sync பண்ணு
+  const setAcceptedLeadsSafe = useCallback((updater) => {
+    setAcceptedLeads((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      acceptedLeadsRef.current = next;
+      return next;
+    });
+  }, []);
 
   // ── Net watcher ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -202,6 +224,7 @@ const SurveyerScreen = () => {
     return () => {
       isMounted.current = false;
       stopTracking();
+      stopHighFrequencyTracking();
     };
   }, []);
 
@@ -220,23 +243,29 @@ const SurveyerScreen = () => {
     autoSetup();
   }, []);
 
-  // ── Focus — completed leads from InProgress ───────────────────────────────
+  // ✅ FIX 1: useFocusEffect — setState inside setState CRASH FIX
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       const completedIds = route.params?.completedIds;
       if (!completedIds || completedIds.length === 0) return;
       navigation.setParams({ completedIds: null });
 
-      setAcceptedLeads((prev) => {
-        const toMove = prev.filter((l) => completedIds.includes(l.id));
-        if (toMove.length > 0) {
-          setCompletedLeads((c) => [
-            ...c.filter((cl) => !toMove.some((m) => m.id === cl.id)),
-            ...toMove.map((l) => ({ ...l, status: 'completed' })),
-          ]);
-        }
-        return prev.filter((l) => !completedIds.includes(l.id));
-      });
+      // Step 1: acceptedLeadsRef-ல் இருந்து toMove எடுக்கிறோம்
+      // (setState callback-க்கு வெளியே — safe)
+      const toMove = acceptedLeadsRef.current.filter((l) =>
+        completedIds.includes(l.id)
+      );
+
+      // Step 2: acceptedLeads update — தனியா call பண்றோம்
+      setAcceptedLeadsSafe((prev) => prev.filter((l) => !completedIds.includes(l.id)));
+
+      // Step 3: completedLeads update — தனியா call பண்றோம் (setState inside setState இல்லை)
+      if (toMove.length > 0) {
+        setCompletedLeads((c) => [
+          ...c.filter((cl) => !toMove.some((m) => m.id === cl.id)),
+          ...toMove.map((l) => ({ ...l, status: 'completed' })),
+        ]);
+      }
     }, [route.params?.completedIds])
   );
 
@@ -256,8 +285,14 @@ const SurveyerScreen = () => {
   const loadLocalLeads = async () => {
     const local = await getAcceptedLeads();
     if (!isMounted.current) return;
-    setAcceptedLeads(local.filter((l) => l.status === 'accepted' || l.status === 'inprogress'));
-    setCompletedLeads(local.filter((l) => l.status === 'completed'));
+
+    const accepted = local.filter((l) => l.status === 'accepted' || l.status === 'inprogress');
+    const completed = local.filter((l) => l.status === 'completed');
+
+    // ✅ ref sync
+    acceptedLeadsRef.current = accepted;
+    setAcceptedLeads(accepted);
+    setCompletedLeads(completed);
   };
 
   // ── Fetch + merge ─────────────────────────────────────────────────────────
@@ -286,8 +321,13 @@ const SurveyerScreen = () => {
       const serverNonNew = mapped.filter((l) => l.status !== 'unaccepted');
       const merged = await mergeWithServerLeads(serverNonNew);
 
-      setAcceptedLeads(merged.filter((l) => l.status === 'accepted' || l.status === 'inprogress'));
-      setCompletedLeads(merged.filter((l) => l.status === 'completed'));
+      const accepted = merged.filter((l) => l.status === 'accepted' || l.status === 'inprogress');
+      const completed = merged.filter((l) => l.status === 'completed');
+
+      // ✅ ref sync
+      acceptedLeadsRef.current = accepted;
+      setAcceptedLeads(accepted);
+      setCompletedLeads(completed);
 
     } catch (err) {
       console.log('[SurveyerScreen] Offline, using local data');
@@ -317,7 +357,9 @@ const SurveyerScreen = () => {
   const handleAccept = async (item) => {
     await saveAcceptedLead(item);
     setLeads((prev) => prev.filter((l) => l.id !== item.id));
-    setAcceptedLeads((prev) => {
+
+    // ✅ setAcceptedLeadsSafe use பண்றோம்
+    setAcceptedLeadsSafe((prev) => {
       if (prev.some((l) => l.id === item.id)) return prev;
       return [...prev, { ...item, status: 'accepted' }];
     });
@@ -331,8 +373,6 @@ const SurveyerScreen = () => {
     if (isOnline) {
       tryApi(() => API.post('/order/accept', payload));
       tryApi(() => API.put('/order/updatestatus', { mobile: item.phone, status: 'accepted' }));
-
-      // ✅ FIX: Flowtrix sync — accepted
       tryApi(() => API.post('/order/sync-status', {
         customerMobile: item.phone,
         surveyorNumber,
@@ -349,7 +389,6 @@ const SurveyerScreen = () => {
     setRejectModalVisible(true);
   };
 
-  // ✅ FIX: confirmReject — correct field names matching backend rejectOrder()
   const confirmReject = async () => {
     if (!rejectComment.trim()) {
       Alert.alert('Error', 'Please enter a reason for rejection.');
@@ -368,10 +407,10 @@ const SurveyerScreen = () => {
 
     try {
       await API.post('/order/reject', {
-        customerMobile: lead.phone,        // ✅ mobile → customerMobile
-        surveyorNumber,                    // ✅ added
-        comment: rejectComment.trim(),     // ✅ reason → comment
-        receivedAt: Date.now(),            // ✅ epoch timestamp added
+        customerMobile: lead.phone,
+        surveyorNumber,
+        comment: rejectComment.trim(),
+        receivedAt: Date.now(),
       });
 
       setLeads((prev) => prev.filter((l) => l.id !== rejectLeadId));
@@ -386,15 +425,16 @@ const SurveyerScreen = () => {
 
   // ── Start / Resume ────────────────────────────────────────────────────────
   const handleStart = async (id) => {
-    const lead = acceptedLeads.find((l) => l.id === id);
+    const lead = acceptedLeadsRef.current.find((l) => l.id === id);
     if (!lead) return;
 
     let etaText = 'N/A';
     let totalMins = 0;
     const hasLatLong = lead.latitude && lead.longitude;
-    if (currentLocation && hasLatLong) {
+
+    if (locationRef.current && hasLatLong) {
       const distMeters = Math.round(getDistance(
-        currentLocation.latitude, currentLocation.longitude,
+        locationRef.current.latitude, locationRef.current.longitude,
         parseFloat(lead.latitude), parseFloat(lead.longitude)
       ));
       const speed = distMeters <= 300 ? 1.4 : 8.3;
@@ -411,8 +451,8 @@ const SurveyerScreen = () => {
     }
 
     let mapsUrl = '';
-    if (currentLocation && hasLatLong) {
-      mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.latitude},${currentLocation.longitude}&destination=${lead.latitude},${lead.longitude}`;
+    if (locationRef.current && hasLatLong) {
+      mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${locationRef.current.latitude},${locationRef.current.longitude}&destination=${lead.latitude},${lead.longitude}`;
     } else if (hasLatLong) {
       mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lead.latitude},${lead.longitude}`;
     } else if (lead.address || lead.city) {
@@ -420,7 +460,9 @@ const SurveyerScreen = () => {
     }
 
     await updateAcceptedLeadStatus(id, 'inprogress');
-    setAcceptedLeads((prev) =>
+
+    // ✅ setAcceptedLeadsSafe use பண்றோம்
+    setAcceptedLeadsSafe((prev) =>
       prev.map((l) => l.id === id ? { ...l, status: 'inprogress' } : l)
     );
 
@@ -435,8 +477,6 @@ const SurveyerScreen = () => {
 
       tryApi(() => API.put('/order/updatestatus', { mobile: lead.phone, status: 'inprogress' }));
       tryApi(() => API.post('/order/inprogress', { mobile: lead.phone, surveyorNumber }));
-
-      // ✅ FIX: Flowtrix sync — inprogress
       tryApi(() => API.post('/order/sync-status', {
         customerMobile: lead.phone,
         surveyorNumber,
@@ -458,8 +498,13 @@ const SurveyerScreen = () => {
       });
     }
 
-    startHighFrequencyTracking(() => currentLocation);
-    navigation.navigate('InProgress', { lead: { ...lead, status: 'inprogress' } });
+    // ✅ FIX 2: locationRef use பண்றோம் — stale closure இல்லை
+    startHighFrequencyTracking(() => locationRef.current);
+
+    navigation.navigate('InProgress', {
+      lead: { ...lead, status: 'inprogress' },
+      initialLocation: locationRef.current,
+    });
   };
 
   // ── Toggle ────────────────────────────────────────────────────────────────
@@ -491,6 +536,7 @@ const SurveyerScreen = () => {
       setIsOn(false);
       await AsyncStorage.setItem('surveyer_is_on', 'false');
       stopTracking();
+      stopHighFrequencyTracking();
       if (Platform.OS === 'android') NativeModules.StartStopService?.stopService();
     }
   };
@@ -503,6 +549,8 @@ const SurveyerScreen = () => {
         text: 'Yes',
         onPress: async () => {
           try {
+            stopTracking();
+            stopHighFrequencyTracking();
             await AsyncStorage.removeItem(USER_DATA);
             navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
           } catch (e) {
@@ -559,7 +607,7 @@ const SurveyerScreen = () => {
                       <LeadCard
                         key={item.id}
                         item={item}
-                        currentLocation={currentLocation}
+                        currentLocation={locationRef.current}
                         cardType="unaccepted"
                         onAccept={handleAccept}
                         onReject={handleReject}
@@ -610,7 +658,7 @@ const SurveyerScreen = () => {
             )}
             {!leadsLoading && leads.map((item) => (
               <LeadCard
-                key={item.id} item={item} currentLocation={currentLocation}
+                key={item.id} item={item} currentLocation={locationRef.current}
                 cardType="unaccepted" onAccept={handleAccept} onReject={handleReject}
               />
             ))}
@@ -659,7 +707,7 @@ const SurveyerScreen = () => {
                   <>
                     {acceptedLeads.map((item) => (
                       <LeadCard
-                        key={item.id} item={item} currentLocation={currentLocation}
+                        key={item.id} item={item} currentLocation={locationRef.current}
                         cardType="accepted" onStart={handleStart}
                       />
                     ))}
@@ -674,7 +722,7 @@ const SurveyerScreen = () => {
                         {completedLeads.map((item) => (
                           <LeadCard
                             key={item.id} item={item}
-                            currentLocation={currentLocation} cardType="completed"
+                            currentLocation={locationRef.current} cardType="completed"
                           />
                         ))}
                       </>
@@ -690,7 +738,7 @@ const SurveyerScreen = () => {
                     ? completedLeads.map((item) => (
                         <LeadCard
                           key={item.id} item={item}
-                          currentLocation={currentLocation} cardType="completed"
+                          currentLocation={locationRef.current} cardType="completed"
                         />
                       ))
                     : <Text style={styles.emptyText}>No completed leads yet.</Text>

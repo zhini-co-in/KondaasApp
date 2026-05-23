@@ -89,6 +89,8 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
 
       // ✅ Cache miss — API call
       const net = await NetInfo.fetch();
+const isOffline = net.isConnected === false || net.isInternetReachable === false;
+if (isOffline) return;
       if (!net.isConnected) return;
 
       const res = await fetch("https://board.trisentrix.com/savings/calculate-savings", {
@@ -147,6 +149,8 @@ const KondaasAssuredScreen = ({ navigation, route }) => {
 
       // ✅ Offline-ல return
       const net = await NetInfo.fetch();
+const isOffline = net.isConnected === false || net.isInternetReachable === false;
+if (isOffline) return;
       if (!net.isConnected) {
         setLoading(false);
         return;

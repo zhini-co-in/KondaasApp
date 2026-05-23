@@ -333,9 +333,9 @@ if (!email) {
 
   if (getUserResult.ok && getUserResult.data?.success && getUserResult.data?.data) {
     const freshData = getUserResult.data.data;
-const freshEmail    = freshData?.email    || null;
-  const freshPassword = freshData?.password || null;
-  const freshRole     = freshData?.role     || role;
+const freshEmail    = freshData?.UserInfo?.email    || freshData?.email    || null;
+const freshPassword = freshData?.UserInfo?.password || freshData?.password || null;
+const freshRole     = freshData?.UserInfo?.role     || freshData?.role     || role;
 
     console.log("✅ Fresh email from DB:", freshEmail ? "FOUND" : "MISSING");
 
@@ -383,6 +383,10 @@ const freshEmail    = freshData?.email    || null;
 // ─── Step 8: AsyncStorage ───
 await AsyncStorage.setItem(USER_DATA, JSON.stringify({
   ...finalPayload,
+  UserInfo: {
+    ...finalPayload.UserInfo,
+    role,  // ← "surveyer" or "user" — clearly set
+  },
   accessToken,
   authToken: workingToken,
 }));
@@ -407,6 +411,8 @@ if (role === "surveyer") {
 
 const handleConfirm = async () => {
   const net = await NetInfo.fetch();
+const isOffline = net.isConnected === false || net.isInternetReachable === false;
+if (isOffline) return;
   if (!net.isConnected) {
     Alert.alert("No Internet", "No network connection available");
     return;
@@ -447,6 +453,8 @@ const handleConfirm = async () => {
 
   const handleResendOtp = async () => {
     const net = await NetInfo.fetch();
+const isOffline = net.isConnected === false || net.isInternetReachable === false;
+if (isOffline) return;
     if (!net.isConnected) {
       Alert.alert("No Internet", "No network connection available");
       return;
