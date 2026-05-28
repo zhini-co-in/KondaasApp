@@ -1,8 +1,3 @@
-// screens/SurveyerScreen.js — Crash Fixed Version
-// FIXES:
-// 1. setState inside setState (useFocusEffect) → acceptedLeadsRef use பண்ணி தனியா set
-// 2. Stale closure in startHighFrequencyTracking → locationRef use பண்ணு
-// 3. setAcceptedLeads wrapper → ref sync பண்ணு
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
@@ -22,7 +17,7 @@ import {
   getAcceptedLeads,
   updateAcceptedLeadStatus,
   mergeWithServerLeads,
-} from '../service/localLeadsStorage';
+} from '../service/LocalleadsStorage';
 import { enqueue, processSyncQueue } from '../service/syncQueue';
 import { NativeModules } from 'react-native';
 import {
@@ -526,12 +521,18 @@ const SurveyerScreen = () => {
         }
         NativeModules.StartStopService?.startService();
       } else if (Platform.OS === 'ios') {
-        await requestIOSLocationPermission();
-      }
-      setIsOn(true);
-      await AsyncStorage.setItem('surveyer_is_on', 'true');
-      startTracking();
-      fetchAndMergeLeads();
+  const granted = await requestIOSLocationPermission();
+  if (!granted) {
+    Alert.alert('Permission Required', 'Location permission is required.', [
+      { text: 'Open Settings', onPress: () => Linking.openSettings() },
+    ]);
+    return; // ← permission இல்லன்னா toggle ON ஆகாம return
+  }
+}
+setIsOn(true);
+await AsyncStorage.setItem('surveyer_is_on', 'true');
+startTracking();
+fetchAndMergeLeads();
     } else {
       setIsOn(false);
       await AsyncStorage.setItem('surveyer_is_on', 'false');

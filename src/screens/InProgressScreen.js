@@ -11,7 +11,7 @@ import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/nativ
 import { useLocationTracking, getDistance, stopHighFrequencyTracking } from '../service/locationService';
 import API from '../api/api1';
 import { USER_DATA } from '../service/localStorage';
-import { updateAcceptedLeadStatus } from '../service/localLeadsStorage';
+import { updateAcceptedLeadStatus } from '../service/LocalleadsStorage';
 import { enqueue } from '../service/syncQueue';
 
 const { width } = Dimensions.get('window');

@@ -1,26 +1,3 @@
-// OtpScreen_FIXED.js — Frontend only fix
-// Backend-ஐ touch பண்ணல
-// 
-// KEY INSIGHT:
-// /solarman/get என்பது token verify பண்றது
-// /solarman/user (save) என்பது token verify பண்றது
-// இரண்டுமே token இல்லாம work பண்ணாது
-//
-// FRONTEND-ONLY FIX STRATEGY:
-// ஒரு புதுசா user login பண்ணும்போது:
-//   1. Local token generate பண்றோம்
-//   2. /solarman/get call பண்றோம் (fail ஆகும் —괜찮아)
-//   3. fail ஆனா existingData = {} (empty) — தொடர்கிறோம்
-//   4. Final save-ல் token-உடன் save பண்றோம்
-//      → Backend save endpoint token இல்லாம accept பண்றதா?
-//        இல்லன்னா save-உம் fail ஆகும் — ஆனால் local data இருக்கும்
-//   5. AsyncStorage-ல் எல்லாம் save பண்றோம்
-//   6. Navigate பண்றோம் — app work ஆகும்
-//
-// RETURNING USER:
-//   DB-ல் token இருக்கும் (last session-ல் save ஆச்சு)
-//   getUser pass ஆகும் ✅ email/password கிடைக்கும் ✅
-
 import React, { useState, useRef, useEffect } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, Image,
@@ -40,9 +17,6 @@ import { SCREEN_NAMES } from "../constants/screenNames";
 
 const BASE_URL = "https://board.trisentrix.com";
 
-// ─────────────────────────────────────────────────────────────
-// safeApiCall — crash பண்ணாம, எப்பவும் object return பண்ணும்
-// HTML / non-JSON response வந்தாலும் handle பண்ணும்
 // ─────────────────────────────────────────────────────────────
 const safeApiCall = async (url, body, authToken = null, deviceId = null) => {
   try {
@@ -65,7 +39,6 @@ const safeApiCall = async (url, body, authToken = null, deviceId = null) => {
       console.log(`📨 Response:`, JSON.stringify(json).slice(0, 200));
       return { ok: res.status < 400, status: res.status, data: json };
     } catch {
-      // HTML / plain text response — log பண்ணி empty return
       console.log(`⚠️ Non-JSON from ${endpoint}:`, rawText.slice(0, 100));
       return { ok: false, status: res.status, data: null };
     }
@@ -75,10 +48,6 @@ const safeApiCall = async (url, body, authToken = null, deviceId = null) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────
-// Local token generate — returning user-க்கு இது use ஆகாது
-// (DB-ல் உள்ள token match பண்ணாது)
-// புதுசா user-க்கு மட்டும் — first login, DB empty
 // ─────────────────────────────────────────────────────────────
 const generateAuthToken = () => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -96,7 +65,7 @@ const OtpScreen = ({ navigation, route }) => {
   const [confirmation, setConfirmation] = useState(route.params.confirmation);
 
   const inputs = useRef([]);
-  const { verificationId, phoneNumber } = route.params;
+  const { phoneNumber } = route.params;
 
   useEffect(() => {
     if (timer <= 0) { setCanResend(true); return; }
@@ -104,14 +73,33 @@ const OtpScreen = ({ navigation, route }) => {
     return () => clearInterval(id);
   }, [timer]);
 
-  const handleChange = (text, index) => {
-    if (text.length > 1) text = text.slice(-1);
-    const newOtp = [...otp];
-    newOtp[index] = text;
-    setOtp(newOtp);
-    setErrorMessage("");
-    if (text && index < otp.length - 1) inputs.current[index + 1]?.focus();
-  };
+const handleChange = (text, index) => {
+  // ✅ Paste detect — 1-ஐ விட அதிகமான characters வந்தால்
+  if (text.length > 1) {
+    const digits = text.replace(/\D/g, "").slice(0, 6); // numbers மட்டும் எடு
+    if (digits.length > 1) {
+      // Paste — எல்லா boxes-லயும் fill பண்ணு
+      const newOtp = ["", "", "", "", "", ""];
+      digits.split("").forEach((d, i) => {
+        if (i < 6) newOtp[i] = d;
+      });
+      setOtp(newOtp);
+      setErrorMessage("");
+      // Last filled box-க்கு focus போகட்டும்
+      const lastIndex = Math.min(digits.length - 1, 5);
+      inputs.current[lastIndex]?.focus();
+      return;
+    }
+    // Single char — normal flow
+    text = text.slice(-1);
+  }
+
+  const newOtp = [...otp];
+  newOtp[index] = text;
+  setOtp(newOtp);
+  setErrorMessage("");
+  if (text && index < otp.length - 1) inputs.current[index + 1]?.focus();
+};
 
   const handleBackspace = (key, index) => {
     if (key === "Backspace" && otp[index] === "" && index > 0) {
@@ -122,340 +110,318 @@ const OtpScreen = ({ navigation, route }) => {
     }
   };
 
-const getFcmToken = async () => {
-  try {
-    // ✅ iOS: APNs register + token ready ஆக wait பண்ணு
-    if (Platform.OS === "ios") {
-      await messaging().registerDeviceForRemoteMessages();
-      
-      // APNs token ready ஆக சிறிது நேரம் wait
-      let apnsToken = null;
-      let retries = 0;
-      while (!apnsToken && retries < 5) {
-        apnsToken = await messaging().getAPNSToken();
-        if (!apnsToken) {
-          await new Promise(res => setTimeout(res, 1000)); // 1 second wait
-          retries++;
+  const getFcmToken = async () => {
+    try {
+      if (Platform.OS === "ios") {
+        await messaging().registerDeviceForRemoteMessages();
+
+        let apnsToken = null;
+        let retries = 0;
+        while (!apnsToken && retries < 5) {
+          apnsToken = await messaging().getAPNSToken();
+          if (!apnsToken) {
+            await new Promise(res => setTimeout(res, 1000));
+            retries++;
+          }
         }
+
+        if (!apnsToken) {
+          console.log("⚠️ APNs token not available after retries");
+          return null;
+        }
+        console.log("✅ APNs token ready:", apnsToken);
       }
-      
-      if (!apnsToken) {
-        console.log("⚠️ APNs token not available after retries");
+
+      if (Platform.OS === "android" && Platform.Version >= 33) {
+        await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+        );
+      }
+
+      const status = await messaging().requestPermission();
+      const allowed =
+        status === messaging.AuthorizationStatus.AUTHORIZED ||
+        status === messaging.AuthorizationStatus.PROVISIONAL;
+
+      if (!allowed) {
+        console.log("⚠️ Notification permission denied");
         return null;
       }
-      console.log("✅ APNs token ready:", apnsToken);
-    }
 
-    // Android permission
-    if (Platform.OS === "android" && Platform.Version >= 33) {
-      await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-      );
-    }
+      const fcmToken = await messaging().getToken();
+      console.log("✅ FCM Token:", fcmToken ? "RECEIVED" : "MISSING");
+      return fcmToken;
 
-    // Permission request
-    const status = await messaging().requestPermission();
-    const allowed =
-      status === messaging.AuthorizationStatus.AUTHORIZED ||
-      status === messaging.AuthorizationStatus.PROVISIONAL;
-
-    if (!allowed) {
-      console.log("⚠️ Notification permission denied");
+    } catch (e) {
+      console.log("❌ FCM error:", e.message);
       return null;
     }
+  };
 
-    // ✅ இப்போ FCM token எடு
-    const fcmToken = await messaging().getToken();
-    console.log("✅ FCM Token:", fcmToken ? "RECEIVED" : "MISSING");
-    return fcmToken;
+  // ✅ FIX: userCredential param — confirm() already signed in,
+  //         signInWithCredential() call நீக்கப்பட்டது
+  const handleAutoLogin = async (userCredential, phone) => {
+    try {
+      setLoading(true);
+      // ❌ REMOVED: await auth().signInWithCredential(credential);
+      // confirm() call already Firebase-ல் sign in பண்ணிவிடும்
 
-  } catch (e) {
-    console.log("❌ FCM error:", e.message);
-    return null;
-  }
-};
+      const cleanPhone = phone?.replace("+91", "").trim();
 
-const handleAutoLogin = async (credential, phone) => {
-  try {
-    setLoading(true);
-    await auth().signInWithCredential(credential);
-    const cleanPhone = phone?.replace("+91", "").trim();
+      const fcmToken  = await getFcmToken();
+      const deviceId  = await DeviceInfo.getUniqueId();
+      const osName    = DeviceInfo.getSystemName();
+      const osVersion = DeviceInfo.getSystemVersion();
+      const now       = new Date().toISOString();
 
-    const fcmToken  = await getFcmToken();
-    const deviceId  = await DeviceInfo.getUniqueId();
-    const osName    = DeviceInfo.getSystemName();
-    const osVersion = DeviceInfo.getSystemVersion();
-    const now       = new Date().toISOString();
-
-    // ─── Step 1: AsyncStorage-ல் already token இருக்கா check ───
-// Step 1: AsyncStorage token read — FIXED
-// ─── Step 1: Stored token read ───────────────────────────────
-// Step 1-ஐ இப்படி மாத்துங்கள் — full debug version:
-let storedToken = null;
-try {
-  const raw = await getStorageData(USER_DATA);
-  console.log("📦 Raw:", raw ? "HAS DATA ✅" : "EMPTY ❌");
-  if (raw) {
-    const parsed = JSON.parse(raw);
-    const device = (parsed?.PlatformInfo?.devices || [])
-      .find(d => d.deviceId === deviceId);
-    storedToken = device?.authToken || parsed?.authToken || null;
-    console.log("🔑 Token:", storedToken ? "FOUND ✅" : "MISSING ❌");
-  }
-} catch (e) {
-  console.log("⚠️ Read error:", e.message);
-}
-
-    // ─── Step 2: Token decide பண்றோம் ───
-    // storedToken இருந்தா → returning user, அதை use பண்ணு
-    // இல்லன்னா → new user, fresh generate பண்ணு
-    const workingToken = storedToken || generateAuthToken();
-    const isReturning  = !!storedToken;
-
-    console.log(isReturning ? "🔄 Returning user" : "🆕 New user");
-
-    // ─── Step 3: GET user (storedToken-உடன் மட்டும் try) ───
-    let existingData = {};
-
-    if (isReturning) {
-      const getResult = await safeApiCall(
-        `${BASE_URL}/solarman/get`,
-        { phoneNo: cleanPhone },
-        workingToken,
-        deviceId
-      );
-
-      if (getResult.ok && getResult.data?.success && getResult.data?.data) {
-        existingData = getResult.data.data;
-        console.log("✅ getUser success");
-      } else {
-        // Token expired → fresh token generate பண்ணோம்
-        console.log("⚠️ Stored token rejected — treating as new session");
-        // workingToken = generateAuthToken(); // ← optional reset
+      // ─── Step 1: AsyncStorage-ல் stored token read ───
+      let storedToken = null;
+      try {
+        const raw = await getStorageData(USER_DATA);
+        console.log("📦 Raw:", raw ? "HAS DATA ✅" : "EMPTY ❌");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          const device = (parsed?.PlatformInfo?.devices || [])
+            .find(d => d.deviceId === deviceId);
+          storedToken = device?.authToken || parsed?.authToken || null;
+          console.log("🔑 Token:", storedToken ? "FOUND ✅" : "MISSING ❌");
+        }
+      } catch (e) {
+        console.log("⚠️ Read error:", e.message);
       }
-    }
-    // New user → existingData = {} already
 
-    const userInfo = existingData?.UserInfo || {};
-    const role     = userInfo?.role     || "user";
-    const email    = userInfo?.email    || null;
-    const password = userInfo?.password || null;
+      // ─── Step 2: Token decide ───
+      const workingToken = storedToken || generateAuthToken();
+      const isReturning  = !!storedToken;
 
-    // ─── Step 4: accessToken ───
-    let accessToken = null;
-    if (email && password) {
-      const tokenResult = await safeApiCall(
-        `${BASE_URL}/solarman/token`,
-        { email, password, phoneNo: cleanPhone },
-        workingToken,
-        deviceId
-      );
-      accessToken = tokenResult.data?.access_token || null;
-    }
+      console.log(isReturning ? "🔄 Returning user" : "🆕 New user");
 
-    // ─── Step 5: Stations ───
-    let devicelist = existingData.devicelist || [];
-    if (accessToken) {
-      const stationsResult = await safeApiCall(
-        `${BASE_URL}/solarman/stations`,
-        { phoneNo: cleanPhone },
-        workingToken,
-        deviceId
-      );
-      const rawList = stationsResult.data?.stations || stationsResult.data?.stationList || [];
-      if (rawList.length > 0) {
-        devicelist = rawList.map((station) => ({
-          id:   station.id,
-          name: station.name || "",
-          installationAmount:
-            (existingData.devicelist || []).find(d => d.id === station.id)
-              ?.installationAmount ?? "",
-        }));
+      // ─── Step 3: GET user (storedToken இருந்தால் மட்டும்) ───
+      let existingData = {};
+
+      if (isReturning) {
+        const getResult = await safeApiCall(
+          `${BASE_URL}/solarman/get`,
+          { phoneNo: cleanPhone },
+          workingToken,
+          deviceId
+        );
+
+        if (getResult.ok && getResult.data?.success && getResult.data?.data) {
+          existingData = getResult.data.data;
+          console.log("✅ getUser success");
+        } else {
+          console.log("⚠️ Stored token rejected — treating as new session");
+        }
       }
-    }
 
-    // ─── Step 6: Final payload build ───
-    const currentDevice = {
-      deviceId,
-      os:         osName,
-      version:    osVersion,
-      authToken:  workingToken,
-      fcmToken:   fcmToken || null,
-      lastUsedAt: now,
-      isLastLoggedIn: true,
-    };
+      const userInfo = existingData?.UserInfo || {};
+      const role     = userInfo?.role     || "user";
+      const email    = userInfo?.email    || null;
+      const password = userInfo?.password || null;
 
-    const existingDevices = existingData?.PlatformInfo?.devices || [];
-    const mergedDevices = [
-      ...existingDevices
-        .filter(d => d.deviceId !== deviceId)
-        .map(d => ({ ...d, isLastLoggedIn: false })),
-      currentDevice,
-    ];
-
-    const finalPayload = {
-      ...existingData,
-      AppInfo: { ...(existingData.AppInfo || {}), lastLogin: now },
-      PlatformInfo: { devices: mergedDevices },
-      UserInfo: {
-        ...userInfo,
-        phoneNo: cleanPhone,
-        role,
-        // ✅ email & password இல்லை — saveMailCredentials handle பண்ணும்
-      },
-      devicelist,
-    };
-
-    // ─── Step 7: Save to backend ───
-// ─── Step 7: Save to backend ───
-const saveResult = await safeApiCall(
-  `${BASE_URL}/solarman/user`,
-  finalPayload,
-  workingToken,
-  deviceId
-);
-
-if (!saveResult.ok) {
-  console.log("⚠️ Backend save failed:", JSON.stringify(saveResult.data));
-}
-
-// ─── Step 7b: Save ஆன உடனே getUser call — email/password எடுக்கிறோம் ───
-// New user / reinstall case-ல் existingData-ல் email இல்லை
-// Save ஆன பிறகு token DB-ல் இருக்கும் — இப்போது getUser pass ஆகும்
-if (!email) {
-  console.log("📧 Email missing — fetching from DB after save...");
-  const getUserResult = await safeApiCall(
-    `${BASE_URL}/solarman/get`,
-    { phoneNo: cleanPhone },
-    workingToken,
-    deviceId
-  );
-
-  if (getUserResult.ok && getUserResult.data?.success && getUserResult.data?.data) {
-    const freshData = getUserResult.data.data;
-const freshEmail    = freshData?.UserInfo?.email    || freshData?.email    || null;
-const freshPassword = freshData?.UserInfo?.password || freshData?.password || null;
-const freshRole     = freshData?.UserInfo?.role     || freshData?.role     || role;
-
-    console.log("✅ Fresh email from DB:", freshEmail ? "FOUND" : "MISSING");
-
-    // existingData update பண்ணு — navigate logic use பண்ணும்
-    if (freshEmail) {
-      // accessToken இல்லன்னா இப்போது எடுக்கிறோம்
-      if (!accessToken && freshEmail && freshPassword) {
+      // ─── Step 4: accessToken ───
+      let accessToken = null;
+      if (email && password) {
         const tokenResult = await safeApiCall(
           `${BASE_URL}/solarman/token`,
-          { email: freshEmail, password: freshPassword, phoneNo: cleanPhone },
+          { email, password, phoneNo: cleanPhone },
           workingToken,
           deviceId
         );
         accessToken = tokenResult.data?.access_token || null;
-        console.log(accessToken ? "✅ accessToken obtained" : "⚠️ No accessToken");
       }
 
-      // AsyncStorage-ஐ email-உடன் update பண்ணு
-      const updatedPayload = {
+      // ─── Step 5: Stations ───
+      let devicelist = existingData.devicelist || [];
+      if (accessToken) {
+        const stationsResult = await safeApiCall(
+          `${BASE_URL}/solarman/stations`,
+          { phoneNo: cleanPhone },
+          workingToken,
+          deviceId
+        );
+        const rawList = stationsResult.data?.stations || stationsResult.data?.stationList || [];
+        if (rawList.length > 0) {
+          devicelist = rawList.map((station) => ({
+            id:   station.id,
+            name: station.name || "",
+            installationAmount:
+              (existingData.devicelist || []).find(d => d.id === station.id)
+                ?.installationAmount ?? "",
+          }));
+        }
+      }
+
+      // ─── Step 6: Final payload build ───
+      const currentDevice = {
+        deviceId,
+        os:             osName,
+        version:        osVersion,
+        authToken:      workingToken,
+        fcmToken:       fcmToken || null,
+        lastUsedAt:     now,
+        isLastLoggedIn: true,
+      };
+
+      const existingDevices = existingData?.PlatformInfo?.devices || [];
+      const mergedDevices = [
+        ...existingDevices
+          .filter(d => d.deviceId !== deviceId)
+          .map(d => ({ ...d, isLastLoggedIn: false })),
+        currentDevice,
+      ];
+
+      const finalPayload = {
+        ...existingData,
+        AppInfo:      { ...(existingData.AppInfo || {}), lastLogin: now },
+        PlatformInfo: { devices: mergedDevices },
+        UserInfo: {
+          ...userInfo,
+          phoneNo: cleanPhone,
+          role,
+        },
+        devicelist,
+      };
+
+      // ─── Step 7: Save to backend ───
+      const saveResult = await safeApiCall(
+        `${BASE_URL}/solarman/user`,
+        finalPayload,
+        workingToken,
+        deviceId
+      );
+
+      if (!saveResult.ok) {
+        console.log("⚠️ Backend save failed:", JSON.stringify(saveResult.data));
+      }
+
+      // ─── Step 7b: email இல்லன்னா — save பண்ணி DB-இல் இருந்து fetch ───
+      if (!email) {
+        console.log("📧 Email missing — fetching from DB after save...");
+        const getUserResult = await safeApiCall(
+          `${BASE_URL}/solarman/get`,
+          { phoneNo: cleanPhone },
+          workingToken,
+          deviceId
+        );
+
+        if (getUserResult.ok && getUserResult.data?.success && getUserResult.data?.data) {
+          const freshData     = getUserResult.data.data;
+          const freshEmail    = freshData?.UserInfo?.email    || freshData?.email    || null;
+          const freshPassword = freshData?.UserInfo?.password || freshData?.password || null;
+          const freshRole     = freshData?.UserInfo?.role     || freshData?.role     || role;
+
+          console.log("✅ Fresh email from DB:", freshEmail ? "FOUND" : "MISSING");
+
+          if (freshEmail) {
+            if (!accessToken && freshEmail && freshPassword) {
+              const tokenResult = await safeApiCall(
+                `${BASE_URL}/solarman/token`,
+                { email: freshEmail, password: freshPassword, phoneNo: cleanPhone },
+                workingToken,
+                deviceId
+              );
+              accessToken = tokenResult.data?.access_token || null;
+              console.log(accessToken ? "✅ accessToken obtained" : "⚠️ No accessToken");
+            }
+
+            const updatedPayload = {
+              ...finalPayload,
+              UserInfo: {
+                ...finalPayload.UserInfo,
+                email:    freshEmail,
+                password: freshPassword,
+                role:     freshRole,
+              },
+              accessToken,
+              authToken: workingToken,
+            };
+
+            await AsyncStorage.setItem(USER_DATA, JSON.stringify(updatedPayload));
+            console.log("💾 Updated storage with email");
+
+            if (freshRole === "surveyer") {
+              navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }] });
+            } else {
+              navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.MAIN }] });
+            }
+            return;
+          }
+        }
+      }
+
+      // ─── Step 8: AsyncStorage save ───
+      await AsyncStorage.setItem(USER_DATA, JSON.stringify({
         ...finalPayload,
         UserInfo: {
           ...finalPayload.UserInfo,
-          email:    freshEmail,
-          password: freshPassword,
-          role:     freshRole,
+          role,
         },
         accessToken,
         authToken: workingToken,
-      };
+      }));
+      console.log("💾 Write verify: SUCCESS ✅");
 
-      await AsyncStorage.setItem(USER_DATA, JSON.stringify(updatedPayload));
-      console.log("💾 Updated storage with email");
-
-      // Navigate to MainScreen
-      if (freshRole === "surveyer") {
+      // ─── Step 9: Navigate ───
+      if (role === "surveyer") {
         navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }] });
-      } else {
+      } else if (email?.trim()) {
         navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.MAIN }] });
+      } else {
+        navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }] });
       }
-      return; // ← early return, கீழே navigate வேண்டாம்
+
+    } catch (err) {
+      console.log("❌ Login error:", err.message);
+      Alert.alert("Login Failed", err.message || "Something went wrong");
+    } finally {
+      setLoading(false);
     }
-  }
-}
+  };
 
-// ─── Step 8: AsyncStorage ───
-await AsyncStorage.setItem(USER_DATA, JSON.stringify({
-  ...finalPayload,
-  UserInfo: {
-    ...finalPayload.UserInfo,
-    role,  // ← "surveyer" or "user" — clearly set
-  },
-  accessToken,
-  authToken: workingToken,
-}));
-console.log("💾 Write verify:", "SUCCESS ✅");
-
-// ─── Step 9: Navigate ───
-if (role === "surveyer") {
-  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }] });
-} else if (email?.trim()) {
-  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.MAIN }] });
-} else {
-  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }] });
-}
-
-  } catch (err) {
-    console.log("❌ Login error:", err.message);
-    Alert.alert("Login Failed", err.message || "Something went wrong");
-  } finally {
-    setLoading(false);
-  }
-};
-
-const handleConfirm = async () => {
-  const net = await NetInfo.fetch();
-const isOffline = net.isConnected === false || net.isInternetReachable === false;
-if (isOffline) return;
-  if (!net.isConnected) {
-    Alert.alert("No Internet", "No network connection available");
-    return;
-  }
-  const otpCode = otp.join("");
-  if (otpCode.length < 6) {
-    setErrorMessage("Please enter the full 6-digit OTP");
-    return;
-  }
-  try {
-    setLoading(true);
-    setErrorMessage("");
-
-    // ✅ FIX: confirmation.confirm() use பண்றோம்
-    // signInWithPhoneNumber flow-க்கு இதுதான் சரி
-    const userCredential = await confirmation.confirm(otpCode);
-
-    // credential object உருவாக்கி handleAutoLogin-க்கு pass பண்றோம்
-    const credential = auth.PhoneAuthProvider.credential(
-      confirmation.verificationId,  // ✅ confirmation-இல் இருந்து எடுக்கிறோம்
-      otpCode
-    );
-
-    await handleAutoLogin(credential, phoneNumber);
-
-  } catch (err) {
-    if (err.code === "auth/invalid-verification-code") {
-      setErrorMessage("Invalid OTP. Please try again.");
-    } else if (err.code === "auth/session-expired") {
-      setErrorMessage("OTP expired. Please resend.");
-    } else {
-      setErrorMessage(err.message || "OTP verification failed");
+  // ✅ FIX: confirm() ஒரே ஒரு முறை — credential தனியா உருவாக்கவில்லை
+  const handleConfirm = async () => {
+    const net = await NetInfo.fetch();
+    const isOffline = net.isConnected === false || net.isInternetReachable === false;
+    if (isOffline) {
+      Alert.alert("No Internet", "No network connection available");
+      return;
     }
-  } finally {
-    setLoading(false);
-  }
-};
+
+    const otpCode = otp.join("");
+    if (otpCode.length < 6) {
+      setErrorMessage("Please enter the full 6-digit OTP");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setErrorMessage("");
+
+      // ✅ confirm() மட்டும் — இதுவே Firebase sign in பண்ணும்
+      const userCredential = await confirmation.confirm(otpCode);
+
+      // ✅ userCredential-ஐ pass பண்றோம் — தனியா signInWithCredential இல்லை
+      await handleAutoLogin(userCredential, phoneNumber);
+
+    } catch (err) {
+      if (err.code === "auth/invalid-verification-code") {
+        setErrorMessage("Invalid OTP. Please try again.");
+      } else if (err.code === "auth/session-expired") {
+        setErrorMessage("OTP expired. Please resend.");
+      } else {
+        setErrorMessage(err.message || "OTP verification failed");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleResendOtp = async () => {
     const net = await NetInfo.fetch();
-const isOffline = net.isConnected === false || net.isInternetReachable === false;
-if (isOffline) return;
-    if (!net.isConnected) {
+    const isOffline = net.isConnected === false || net.isInternetReachable === false;
+    if (isOffline) {
       Alert.alert("No Internet", "No network connection available");
       return;
     }

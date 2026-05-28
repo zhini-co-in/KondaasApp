@@ -26,6 +26,8 @@ import FormScreen from "../screens/FormScreen";
 import { SCREEN_NAMES } from '../constants/screenNames';
 import InProgressScreen from '../screens/InProgressScreen';
 import MapScreen from '../service/MapScreen';
+import AdminScreen from '../screens/AdminScreen';
+import LogisticScreen from '../screens/LogisticScreen';
 const Stack = createNativeStackNavigator();
 
 export default function RootStack() {

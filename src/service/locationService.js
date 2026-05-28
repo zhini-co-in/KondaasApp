@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
-import { PermissionsAndroid, Platform, Alert, Linking, DeviceEventEmitter, NativeModules } from 'react-native';
+import { PermissionsAndroid, Platform, Alert, Linking, DeviceEventEmitter, NativeModules, NativeEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import API from '../api/api1';
 import { USER_DATA } from '../service/localStorage';
@@ -36,7 +36,7 @@ const lastSentTime = { current: 0 };
 export const sendLocation = async (latitude, longitude, timestamp) => {
   if (isMockLocation(latitude, longitude)) return;
   const now = Date.now();
-  if (now - lastSentTime.current < 180000) return; // 3 minutes throttle
+ if (now - lastSentTime.current < 180000) return;
   lastSentTime.current = now;
   const finalEpoch = timestamp || Date.now();
   await AsyncStorage.setItem(
@@ -89,8 +89,13 @@ export const requestLocationPermissions = async () => {
     return true;
   } else if (Platform.OS === 'ios') {
     const whenInUse = await request(PERMISSIONS.IOS.LOCATION_WHEN_IN_USE);
-    if (whenInUse !== RESULTS.GRANTED) return false;
-    await request(PERMISSIONS.IOS.LOCATION_ALWAYS);
+    console.log('📍 iOS whenInUse permission:', whenInUse);
+    if (whenInUse !== RESULTS.GRANTED) {
+      console.log('❌ iOS whenInUse denied');
+      return false;
+    }
+    const always = await request(PERMISSIONS.IOS.LOCATION_ALWAYS);
+    console.log('📍 iOS always permission:', always);
     return true;
   }
   return true;
@@ -110,13 +115,11 @@ export const requestBatteryOptimizationExemption = () => {
   );
 };
 
-// ✅ FIX: globalListenerRef REMOVED — now hook-level useRef
-// இது தான் battery kill-ஓட main cause இருந்தது
 export const useLocationTracking = (isMounted) => {
   const [currentLocation, setCurrentLocation] = useState(null);
   const watchIdRef = useRef(null);
   const isTrackingRef = useRef(false);
-  const listenerRef = useRef(null); // ✅ Each hook instance-க்கு தனி ref
+  const listenerRef = useRef(null);
 
   const startTracking = () => {
     if (isTrackingRef.current) {
@@ -127,7 +130,6 @@ export const useLocationTracking = (isMounted) => {
     console.log('🟢 Starting location tracking');
 
     if (Platform.OS === 'android') {
-      // ✅ Own listener மட்டும் clean பண்ணு — மத்த screens-ஓட affect இல்லை
       if (listenerRef.current) {
         listenerRef.current.remove();
         listenerRef.current = null;
@@ -148,36 +150,71 @@ export const useLocationTracking = (isMounted) => {
           }
         }
       );
-    } else if (Platform.OS === 'ios') {
-      if (watchIdRef.current !== null) return;
-      watchIdRef.current = global.navigator?.geolocation?.watchPosition(
-        async (position) => {
-          const { latitude, longitude } = position.coords;
-          if (isMounted.current) setCurrentLocation({ latitude, longitude });
-          await sendLocation(latitude, longitude, position.timestamp);
-        },
-        (error) => console.log('iOS watch error:', error),
-        {
-          enableHighAccuracy: true,
-          distanceFilter: 10,
-          interval: 120000,
-          maximumAge: 30000,
+
+} else if (Platform.OS === 'ios') {
+  if (watchIdRef.current !== null) return;
+
+  const { LocationService } = NativeModules;
+
+  // ✅ Debug
+  console.log('📱 LocationService exists?', !!LocationService);
+  console.log('📱 LocationService value:', LocationService);
+
+  if (!LocationService) {
+    console.log('❌ LocationService not found!');
+    return;
+  }
+
+  const emitter = new NativeEventEmitter(LocationService);
+
+  if (listenerRef.current) {
+    listenerRef.current.remove();
+    listenerRef.current = null;
+  }
+
+  listenerRef.current = emitter.addListener(
+    'nativeLocationUpdate',
+    async (data) => {
+      console.log('🔔 iOS Native location received:', data);
+      if (data?.latitude && data?.longitude) {
+        if (isMounted.current) {
+          setCurrentLocation({
+            latitude: data.latitude,
+            longitude: data.longitude,
+          });
         }
-      );
+        await sendLocation(data.latitude, data.longitude, data.timestamp);
+      }
     }
+  );
+  console.log('✅ Listener added successfully');
+
+ setTimeout(() => {
+    LocationService.startTracking();
+    console.log('✅ iOS startTracking called');
+    watchIdRef.current = 1;
+  }, 500);
+}
   };
 
   const stopTracking = () => {
     console.log('🔴 Stopping location tracking');
     isTrackingRef.current = false;
 
-    // ✅ Own listener மட்டும் remove — மத்த screen affect ஆகாது
     if (listenerRef.current) {
       listenerRef.current.remove();
       listenerRef.current = null;
     }
 
-    if (Platform.OS === 'ios' && watchIdRef.current !== null) {
+  if (Platform.OS === 'ios' && watchIdRef.current !== null) {
+  const { LocationService } = NativeModules;
+  if (LocationService) {
+    LocationService.stopTracking(); // ✅ stopService இல்ல!
+  }
+  watchIdRef.current = null;
+}
+
+    if (Platform.OS === 'android' && watchIdRef.current !== null) {
       global.navigator?.geolocation?.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
@@ -202,14 +239,11 @@ export const checkAndPromptGPS = async () => {
   return true;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// High Frequency Tracking (InProgress screen-க்கு மட்டும்)
-// ─────────────────────────────────────────────────────────────────────────────
+// High Frequency Tracking
 let intervalTracker = null;
 let lastSentHFCoords = { lat: null, lon: null };
 
 export const startHighFrequencyTracking = (getLocationFn) => {
-  // ✅ Already running-ஆ இருந்தா clear பண்ணிட்டு restart
   if (intervalTracker) {
     clearInterval(intervalTracker);
     intervalTracker = null;
@@ -246,7 +280,7 @@ export const startHighFrequencyTracking = (getLocationFn) => {
     } catch (err) {
       console.log('❌ HF send error:', err?.message);
     }
-  }, 60000); // 1 minute
+  }, 60000);
 };
 
 export const stopHighFrequencyTracking = () => {

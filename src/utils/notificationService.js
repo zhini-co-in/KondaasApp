@@ -3,7 +3,7 @@ import notifee, { AndroidImportance, AndroidStyle, EventType } from '@notifee/re
 import API from '../api/api1';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { USER_DATA } from '../service/localStorage';
-import { saveAcceptedLead, getAcceptedLeads } from '../service/localLeadsStorage';
+import { saveAcceptedLead, getAcceptedLeads } from '../service/LocalleadsStorage';
 
 // ─────────────────────────────────────────────────────────────────
 // Channel — App start-ல் ஒரே ஒரு தடவை create பண்ணு
@@ -23,6 +23,18 @@ export async function createNotificationChannel() {
 export async function showLeadNotification(data) {
   if (!data) return;
 
+  // ✅ weekly_summary வந்தா skip பண்ணு
+  if (data.type === 'weekly_summary') {
+    console.log('[notificationService] Weekly summary — skipping lead UI');
+    return;
+  }
+
+  // ✅ leadId இல்லன்னா valid lead இல்லை
+  if (!data.leadId && !data.customerMobile) {
+    console.log('[notificationService] No leadId/mobile — skipping');
+    return;
+  }
+
   await notifee.displayNotification({
     id: data.leadId || String(Date.now()),
     title: '🔔 New Lead Nearby!',
@@ -39,12 +51,10 @@ export async function showLeadNotification(data) {
       importance:    AndroidImportance.HIGH,
       pressAction:   { id: 'default' },
       showTimestamp: true,
-
       actions: [
         { title: '✅ Accept', pressAction: { id: 'accept' } },
         { title: '❌ Reject', pressAction: { id: 'reject' } },
       ],
-
       style: {
         type: AndroidStyle.BIGTEXT,
         text:
@@ -126,40 +136,43 @@ async function handleNotificationReject(mobile) {
 export function registerNotificationHandlers() {
 
   // Background
-  notifee.onBackgroundEvent(async ({ type, detail }) => {
-    if (type !== EventType.ACTION_PRESS) return;
+// Background
+notifee.onBackgroundEvent(async ({ type, detail }) => {
+  if (type !== EventType.ACTION_PRESS) return;
 
-    const notifData = detail?.notification?.data;
-    const actionId  = detail?.pressAction?.id;
-    if (!notifData) return;
+  const notifData = detail?.notification?.data;
+  const actionId  = detail?.pressAction?.id;
+  if (!notifData) return;
 
-    if (actionId === 'accept') {
-      await handleNotificationAccept(notifData);
-    }
-
-    if (actionId === 'reject') {
-      await handleNotificationReject(notifData?.customerMobile);
-    }
-
+  // ✅ weekly_summary notification-க்கு accept/reject வேண்டாம்
+  if (notifData.type === 'weekly_summary') {
     await notifee.cancelNotification(detail.notification.id);
-  });
+    return;
+  }
 
-  // Foreground
-  notifee.onForegroundEvent(async ({ type, detail }) => {
-    if (type !== EventType.ACTION_PRESS) return;
+  if (actionId === 'accept') await handleNotificationAccept(notifData);
+  if (actionId === 'reject') await handleNotificationReject(notifData?.customerMobile);
 
-    const notifData = detail?.notification?.data;
-    const actionId  = detail?.pressAction?.id;
-    if (!notifData) return;
+  await notifee.cancelNotification(detail.notification.id);
+});
 
-    if (actionId === 'accept') {
-      await handleNotificationAccept(notifData);
-    }
+// Foreground — same guard
+notifee.onForegroundEvent(async ({ type, detail }) => {
+  if (type !== EventType.ACTION_PRESS) return;
 
-    if (actionId === 'reject') {
-      await handleNotificationReject(notifData?.customerMobile);
-    }
+  const notifData = detail?.notification?.data;
+  const actionId  = detail?.pressAction?.id;
+  if (!notifData) return;
 
+  // ✅ same check
+  if (notifData.type === 'weekly_summary') {
     await notifee.cancelNotification(detail.notification.id);
-  });
+    return;
+  }
+
+  if (actionId === 'accept') await handleNotificationAccept(notifData);
+  if (actionId === 'reject') await handleNotificationReject(notifData?.customerMobile);
+
+  await notifee.cancelNotification(detail.notification.id);
+});
 }
