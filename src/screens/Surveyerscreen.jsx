@@ -302,12 +302,20 @@ const SurveyerScreen = () => {
         : [];
 
       const mapped = rawData.map((item) => ({
-        id: item._id, name: item.name, phone: item.mobile,
-        city: item.city, comment: item.comment, referredBy: item.referredBy,
-        date: item.createdAt, latitude: item.latitude, longitude: item.longitude,
-        whatsappNo: item.whatsappNo, email: item.email, address: item.address,
-        status: item.status,
-      }));
+  id: item._id, 
+  name: item.name, 
+  phone: item.mobile,
+  city: item.city, 
+  comment: item.comment, 
+  referredBy: item.referredBy,
+  date: item.time || item.createdAt,  // ✅ `time` field use pannu (full timestamp)
+  latitude: item.latitude, 
+  longitude: item.longitude,
+  whatsappNo: item.whatsappNo, 
+  email: item.email, 
+  address: item.address,
+  status: item.status,
+}));
 
       if (!isMounted.current) return;
 

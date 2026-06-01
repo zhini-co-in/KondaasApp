@@ -73,33 +73,37 @@ const SplashScreen = () => {
 
         // ROLE BASED NAVIGATION
 // ROLE BASED NAVIGATION
-if (role === "surveyer") {
-
-  console.log("Surveyer role detected → Navigating to Surveyer Screen");
-
+// புதுசு
+if (role === "admin") {
+  console.log("Admin role detected → Navigating to Admin Screen");
   navigation.reset({
-  index: 0,
-  routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }],
-});
-
+    index: 0,
+    routes: [{ name: SCREEN_NAMES.ADMIN_SCREEN }],
+  });
+} else if (role === "logistic") {
+  console.log("Logistic role detected → Navigating to Logistic Screen");
+  navigation.reset({
+    index: 0,
+    routes: [{ name: SCREEN_NAMES.LOGISTIC_SCREEN }],
+  });
+} else if (role === "surveyer") {
+  console.log("Surveyer role detected → Navigating to Surveyer Screen");
+  navigation.reset({
+    index: 0,
+    routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }],
+  });
 } else if (email && email.trim() !== "" && password && password.trim() !== "") {
-
   console.log("Normal user → Navigating to Main");
-
   navigation.reset({
     index: 0,
     routes: [{ name: SCREEN_NAMES.MAIN }],
   });
-
 } else {
-
   console.log("No login → Navigating to ProductsHome");
-
   navigation.reset({
     index: 0,
     routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }],
   });
-
 }
       } catch (error) {
         console.log("❗ Error checking user data:", error);

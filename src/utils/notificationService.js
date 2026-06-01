@@ -15,6 +15,12 @@ export async function createNotificationChannel() {
     importance: AndroidImportance.HIGH,
     sound: 'kondaas',
   });
+  await notifee.createChannel({
+    id: 'weekly_summary_channel_v1',
+    name: 'Weekly Summary',
+    importance: AndroidImportance.HIGH,
+    sound: 'default',
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────

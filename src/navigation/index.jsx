@@ -26,6 +26,8 @@ import FormScreen from "../screens/FormScreen";
 import { SCREEN_NAMES } from '../constants/screenNames';
 import InProgressScreen from '../screens/InProgressScreen';
 import MapScreen from '../service/MapScreen';
+import AdminScreen from '../screens/AdminScreen';
+import LogisticScreen from '../screens/LogisticScreen';
 const Stack = createNativeStackNavigator();
 
 export default function RootStack() {
@@ -55,6 +57,8 @@ export default function RootStack() {
       <Stack.Screen name="Form" component={FormScreen} />
       <Stack.Screen name="InProgress" component={InProgressScreen} />
       <Stack.Screen name="MapView" component={MapScreen} />
+      <Stack.Screen name={SCREEN_NAMES.ADMIN_SCREEN} component={AdminScreen} />
+<Stack.Screen name={SCREEN_NAMES.LOGISTIC_SCREEN} component={LogisticScreen} />
     </Stack.Navigator>
   );
 }

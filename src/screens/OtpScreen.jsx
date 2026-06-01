@@ -341,11 +341,16 @@ const handleChange = (text, index) => {
             await AsyncStorage.setItem(USER_DATA, JSON.stringify(updatedPayload));
             console.log("💾 Updated storage with email");
 
-            if (freshRole === "surveyer") {
-              navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }] });
-            } else {
-              navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.MAIN }] });
-            }
+            // புதுசு
+if (freshRole === "admin") {
+  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.ADMIN_SCREEN }] });
+} else if (freshRole === "logistic") {
+  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.LOGISTIC_SCREEN }] });
+} else if (freshRole === "surveyer") {
+  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }] });
+} else {
+  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.MAIN }] });
+}
             return;
           }
         }
@@ -364,13 +369,18 @@ const handleChange = (text, index) => {
       console.log("💾 Write verify: SUCCESS ✅");
 
       // ─── Step 9: Navigate ───
-      if (role === "surveyer") {
-        navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }] });
-      } else if (email?.trim()) {
-        navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.MAIN }] });
-      } else {
-        navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }] });
-      }
+      // புதுசு
+if (role === "admin") {
+  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.ADMIN_SCREEN }] });
+} else if (role === "logistic") {
+  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.LOGISTIC_SCREEN }] });
+} else if (role === "surveyer") {
+  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }] });
+} else if (email?.trim()) {
+  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.MAIN }] });
+} else {
+  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }] });
+}
 
     } catch (err) {
       console.log("❌ Login error:", err.message);
