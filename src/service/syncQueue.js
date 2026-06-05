@@ -1,6 +1,4 @@
 // service/syncQueue.js
-// Net இல்லாத போது எல்லா API calls-ஐயும் இங்க save பண்ணு.
-// Net வந்தப்போ processSyncQueue() call பண்ணு → எல்லாம் server-க்கு போகும்.
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import API from '../api/api1';
@@ -31,9 +29,6 @@ const _saveQueue = async (queue) => {
 };
 
 /**
- * Offline action-ஐ queue-ல் add பண்ணு.
- * id: unique (leadId + action type combination)
- * Same id-ஐ again add பண்ணினால் overwrite ஆகும் (duplicate இல்லை).
  */
 export const enqueue = async (id, action, payload) => {
   const queue = await _loadQueue();
@@ -49,17 +44,12 @@ export const enqueue = async (id, action, payload) => {
 };
 
 /**
- * Queue-ல் உள்ளதை பார்.
  */
 export const getQueue = async () => {
   return await _loadQueue();
 };
 
 /**
- * Net வந்தப்போ இதை call பண்ணு.
- * Queue-ல் உள்ள எல்லா items-ஐயும் try பண்ணும்.
- * Success ஆனதை remove பண்ணும். Fail ஆனது next time retry ஆகும்.
- * Returns: { synced: number, failed: number }
  */
 export const processSyncQueue = async () => {
   const queue = await _loadQueue();
@@ -89,7 +79,7 @@ export const processSyncQueue = async () => {
 };
 
 /**
- * Queue count — badge-க்கு use பண்ணலாம்.
+ * 
  */
 export const getPendingCount = async () => {
   const queue = await _loadQueue();
@@ -97,7 +87,7 @@ export const getPendingCount = async () => {
 };
 
 /**
- * Debug-க்கு மட்டும் — queue-ஐ clear பண்ணு.
+ * 
  */
 export const clearQueue = async () => {
   await AsyncStorage.removeItem(QUEUE_KEY);

@@ -33,4 +33,5 @@ export const SCREEN_NAMES = {
   SURVEYER_SCREEN: "Surveyerscreen",
   ADMIN_SCREEN: 'AdminScreen',
 LOGISTIC_SCREEN: 'LogisticScreen',
+CREATE_LEAD: 'CreateLead',
 };

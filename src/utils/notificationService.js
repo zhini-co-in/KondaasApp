@@ -137,7 +137,7 @@ async function handleNotificationReject(mobile) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Register handlers — App.js-ல் ஒரே ஒரு தடவை call பண்ணு
+// Register handlers
 // ─────────────────────────────────────────────────────────────────
 export function registerNotificationHandlers() {
 

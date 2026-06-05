@@ -28,6 +28,7 @@ import InProgressScreen from '../screens/InProgressScreen';
 import MapScreen from '../service/MapScreen';
 import AdminScreen from '../screens/AdminScreen';
 import LogisticScreen from '../screens/LogisticScreen';
+import CreateLeadScreen from '../screens/CreateLeadScreen';
 const Stack = createNativeStackNavigator();
 
 export default function RootStack() {
@@ -59,6 +60,11 @@ export default function RootStack() {
       <Stack.Screen name="MapView" component={MapScreen} />
       <Stack.Screen name={SCREEN_NAMES.ADMIN_SCREEN} component={AdminScreen} />
 <Stack.Screen name={SCREEN_NAMES.LOGISTIC_SCREEN} component={LogisticScreen} />
+<Stack.Screen
+  name="CreateLead"
+  component={CreateLeadScreen}
+  options={{ headerShown: false }}
+/>
     </Stack.Navigator>
   );
 }

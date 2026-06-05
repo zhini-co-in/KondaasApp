@@ -26,132 +26,7 @@ import {
   startHighFrequencyTracking,
   stopHighFrequencyTracking,
 } from '../service/locationService';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// LeadCard
-// ─────────────────────────────────────────────────────────────────────────────
-const LeadCard = ({
-  item, currentLocation, onAccept, onReject, onStart, cardType,
-}) => {
-  const hasLatLong = item.latitude && item.longitude &&
-    item.latitude !== '' && item.longitude !== '';
-
-  const distToLead = currentLocation && hasLatLong
-    ? Math.round(getDistance(
-        currentLocation.latitude, currentLocation.longitude,
-        parseFloat(item.latitude), parseFloat(item.longitude)
-      ))
-    : null;
-
-  return (
-    <View style={[
-      styles.card,
-      cardType === 'unaccepted' && { borderLeftWidth: 4, borderLeftColor: '#ED1C25' },
-      cardType === 'completed'  && { borderLeftWidth: 4, borderLeftColor: '#22c55e' },
-    ]}>
-
-      {/* Top row */}
-      <View style={styles.rowBetween}>
-        <View style={styles.referredBadge}>
-          <Text style={styles.referredText}>
-            Referred by — <Text style={{ fontWeight: 'bold' }}>{item.referredBy || 'N/A'}</Text>
-          </Text>
-        </View>
-        <Text style={styles.date}>{item.date}</Text>
-      </View>
-
-      <View style={styles.userRow}>
-
-        {/* Avatar */}
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {item.name ? item.name.charAt(0).toUpperCase() : '?'}
-          </Text>
-        </View>
-
-        <View style={{ flex: 1 }}>
-          <Text style={styles.name}>{item.name}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Ionicons name="call-outline" size={12} color="#25D366" />
-            <Text style={styles.subText}>{item.phone}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Ionicons name="location-outline" size={12} color="#555" />
-            <Text style={styles.subText}>{item.city}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
-            <Ionicons name="notifications-outline" size={16} color="#aaa" />
-            <Ionicons name="logo-whatsapp" size={16} color={item.whatsappNo ? '#25D366' : '#ccc'} />
-            <Ionicons name="chatbubble-outline" size={16} color={item.phone ? '#555' : '#ccc'} />
-            <Ionicons name="mail-outline" size={16} color={item.email ? '#555' : '#ccc'} />
-          </View>
-        </View>
-
-        {/* Unaccepted — accept / reject icons */}
-        {cardType === 'unaccepted' && (
-          <View style={styles.iconContainer}>
-            <TouchableOpacity style={styles.iconBtn} onPress={() => onAccept(item)}>
-              <Ionicons name="checkmark-circle-outline" size={36} color="#22c55e" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconBtn} onPress={() => onReject(item.id)}>
-              <Ionicons name="close-circle-outline" size={36} color="#ef4444" />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Accepted — start / resume / completed */}
-        {cardType === 'accepted' && (
-          <View style={{ alignItems: 'center', gap: 6 }}>
-            {item.status === 'completed' ? (
-              <View style={styles.completedPill}>
-                <Ionicons name="checkmark-circle" size={14} color="#3B6D11" />
-                <Text style={styles.completedPillText}>Completed</Text>
-              </View>
-            ) : item.status === 'inprogress' ? (
-              <TouchableOpacity
-                style={[styles.startBtn, { backgroundColor: '#f97316' }]}
-                onPress={() => onStart(item.id)}
-              >
-                <Ionicons name="play-circle-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
-                <Text style={styles.startBtnText}>Resume</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={styles.startBtn} onPress={() => onStart(item.id)}>
-                <Ionicons name="play-circle-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
-                <Text style={styles.startBtnText}>Start</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-
-        {/* Completed card type */}
-        {cardType === 'completed' && (
-          <View style={styles.completedPill}>
-            <Ionicons name="checkmark-circle" size={14} color="#3B6D11" />
-            <Text style={styles.completedPillText}>Completed</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Comment */}
-      <View style={[styles.commentRow, {
-        borderTopWidth: 0.5, borderTopColor: '#eee', marginTop: 8, paddingTop: 8,
-      }]}>
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 12, fontWeight: '600', color: '#555', marginBottom: 2 }}>Comment</Text>
-          <Text numberOfLines={2} style={styles.comment}>{item.comment}</Text>
-        </View>
-        <TouchableOpacity disabled={!item.comment || item.comment.length <= 200}>
-          <Text style={[styles.seeMore, {
-            color: item.comment && item.comment.length > 200 ? '#1E88E5' : '#ccc',
-          }]}>
-            See more
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-};
+import LeadCard from '../components/LeadCard';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SurveyerScreen
@@ -308,7 +183,8 @@ const SurveyerScreen = () => {
   city: item.city, 
   comment: item.comment, 
   referredBy: item.referredBy,
-  date: item.time || item.createdAt,  // ✅ `time` field use pannu (full timestamp)
+  date: item.createdAt, 
+  time: item.time,
   latitude: item.latitude, 
   longitude: item.longitude,
   whatsappNo: item.whatsappNo, 
@@ -614,13 +490,13 @@ fetchAndMergeLeads();
                   ? <ActivityIndicator size="large" color="#fff" style={{ marginTop: 20 }} />
                   : leads.map((item) => (
                       <LeadCard
-                        key={item.id}
-                        item={item}
-                        currentLocation={locationRef.current}
-                        cardType="unaccepted"
-                        onAccept={handleAccept}
-                        onReject={handleReject}
-                      />
+                      key={item.id}
+  item={item}
+  type="unaccepted"
+  currentLocation={locationRef.current}
+  onAccept={handleAccept}
+  onReject={handleReject}
+/>
                     ))
                 }
               </>
@@ -715,11 +591,14 @@ fetchAndMergeLeads();
                 {activeFilter === 'all' && (
                   <>
                     {acceptedLeads.map((item) => (
-                      <LeadCard
-                        key={item.id} item={item} currentLocation={locationRef.current}
-                        cardType="accepted" onStart={handleStart}
-                      />
-                    ))}
+  <LeadCard
+    key={item.id}
+    item={item}
+    cardType="accepted"
+    currentLocation={locationRef.current}
+    onStart={handleStart}
+  />
+))}
                     {completedLeads.length > 0 && (
                       <>
                         <View style={[styles.sectionHeader, { justifyContent: 'space-between' }]}>
