@@ -85,6 +85,7 @@ android {
         applicationId "com.trisentrix.kondaas"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
+        missingDimensionStrategy 'react-native-camera', 'general'
         versionCode 26031202
         versionName "0.1.6"
     }
