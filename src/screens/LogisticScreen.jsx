@@ -272,13 +272,20 @@ const LogisticScreen = ({ navigation }) => {
             <>
               <View style={styles.cameraBox}>
                 {device && !cameraError ? (
-                  <Camera style={StyleSheet.absoluteFill} device={device} isActive={isScanning} codeScanner={codeScanner} onError={(e) => setCameraError(e.message)} />
+                  <Camera
+                    style={StyleSheet.absoluteFill}
+                    device={device}
+                    isActive={isScanning}
+                    codeScanner={codeScanner}
+                    onError={(error) => setCameraError(error.message)}
+                  />
                 ) : (
                   <View style={styles.cameraPlaceholder}>
                     <Ionicons name="camera-outline" size={40} color="#aaa" />
                     <Text style={{ color: '#aaa', marginTop: 8, fontSize: 12, textAlign: 'center' }}>{cameraError || 'No camera device found'}</Text>
                   </View>
                 )}
+
                 <View style={styles.scanFrameContainer}>
                   <View style={styles.scanFrame}>
                     <View style={[styles.corner, styles.cornerTL]} />
@@ -287,6 +294,7 @@ const LogisticScreen = ({ navigation }) => {
                     <View style={[styles.corner, styles.cornerBR]} />
                   </View>
                 </View>
+
                 <View style={styles.scanLabel}>
                   <Text style={{ color: '#fff', fontSize: 12 }}>{isScanning ? 'Align QR / Barcode within frame' : '✓ Scan successful'}</Text>
                 </View>
@@ -420,7 +428,7 @@ const LogisticScreen = ({ navigation }) => {
       </SafeAreaView>
 
       <Modal transparent visible={showLogoutPopup} animationType="fade" onRequestClose={() => setShowLogoutPopup(false)}>
-        {/* Modal */}
+        {/* Modal content */}
       </Modal>
     </View>
   );
