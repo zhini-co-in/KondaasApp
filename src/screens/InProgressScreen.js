@@ -140,6 +140,7 @@ const InProgressScreen = () => {
   const confirmMarkCompleted = async () => {
     const item = completedTargetLead;
     const leadId = item.id || item._id;
+    const dealId = item.dealId;
     const endAt  = Date.now();
 
     setCompletedModalVisible(false);
@@ -169,12 +170,21 @@ const InProgressScreen = () => {
       const surveyorNumber = await getSurveyorNumber();
 
       try {
+<<<<<<< Updated upstream
         await API.put('/order/updatestatus', { mobile: item.phone, status: 'completed' });
       } catch (err) {
         await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', {
           mobile: item.phone, status: 'completed',
         });
       }
+=======
+  await API.put('/order/updatestatus', { id: dealId, status: 'completed' });
+} catch (err) {
+  await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', {
+    id: leadId, status: 'completed',
+  });
+}
+>>>>>>> Stashed changes
 
       // ✅ FIX: Flowtrix sync — completed
       try {
@@ -194,6 +204,7 @@ const InProgressScreen = () => {
       }
 
       try {
+<<<<<<< Updated upstream
         await API.post('/notification/trigger', {
           customerMobile: item.phone, scenarioType: 4,
         });
@@ -202,6 +213,38 @@ const InProgressScreen = () => {
           customerMobile: item.phone, scenarioType: 4,
         });
       }
+=======
+  await API.post('/order/complete', {
+    customerMobile: item.phone,
+    customerName: item.name,
+    customerAddress: item.address,
+    surveyorNumber,
+    receivedAt: endAt,
+  });
+  console.log(`✅ Order completion tracked for ${item.phone}`);
+} catch (err) {
+  console.log(`⚠️ /order/complete failed, queuing:`, err.message);
+  await enqueue(`order_complete_${leadId}`, 'ORDER_COMPLETE', {
+    customerMobile: item.phone,
+    customerName: item.name,
+    customerAddress: item.address,
+    surveyorNumber,
+    receivedAt: endAt,
+  });
+}
+
+      // 2d. Notification trigger
+      try {
+  // AFTER
+await API.post('/notification/trigger', {
+  customerMobile: item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
+});
+} catch (err) {
+  await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
+    customerMobile: item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
+  });
+}
+>>>>>>> Stashed changes
     } else {
       const surveyorNumber = await getSurveyorNumber();
       await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', {

@@ -15,7 +15,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { storeData, getStorageData, USER_DATA } from "../service/localStorage";
 import { SCREEN_NAMES } from "../constants/screenNames";
 
+<<<<<<< Updated upstream
 // const BASE_URL = "https://board.trisentrix.com";
+=======
+>>>>>>> Stashed changes
 const BASE_URL = "http://192.168.0.3:8080";
 
 // ─────────────────────────────────────────────────────────────
@@ -347,7 +350,7 @@ if (freshRole === "admin") {
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.ADMIN_SCREEN }] });
 } else if (freshRole === "logistic") {
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.LOGISTIC_SCREEN }] });
-} else if (freshRole === "surveyer") {
+} else if (freshRole === "surveyor") {
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }] });
 } else if (freshRole === "installer") {
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.INSTALLER_SCREEN }] });
@@ -377,7 +380,7 @@ if (role === "admin") {
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.ADMIN_SCREEN }] });
 } else if (role === "logistic") {
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.LOGISTIC_SCREEN }] });
-} else if (role === "surveyer") {
+} else if (role === "surveyor") {
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }] });
 } else if (email?.trim()) {
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.MAIN }] });

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Switch, Image, StatusBar,
@@ -27,6 +26,8 @@ import {
   stopHighFrequencyTracking,
 } from '../service/locationService';
 import LeadCard from '../components/LeadCard';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import { PermissionsAndroid } from 'react-native';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SurveyerScreen
@@ -52,6 +53,7 @@ const SurveyerScreen = () => {
   const [activeFilter, setActiveFilter]     = useState('all');
   const [isOnline, setIsOnline]             = useState(true);
   const [pendingCount, setPendingCount]     = useState(0);
+  const [uploadedPhoto, setUploadedPhoto]   = useState(null);
 
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectComment, setRejectComment]           = useState('');
@@ -108,7 +110,12 @@ const SurveyerScreen = () => {
         Alert.alert('Permission Required', 'Location permission is required.', [
           { text: 'Open Settings', onPress: () => Linking.openSettings() },
         ]);
-      }
+      }await PermissionsAndroid.requestMultiple([
+        PermissionsAndroid.PERMISSIONS.CAMERA,
+        Platform.Version >= 33
+          ? PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES
+          : PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+      ]);
     };
     autoSetup();
   }, []);
@@ -166,6 +173,7 @@ const SurveyerScreen = () => {
   };
 
   // ── Fetch + merge ─────────────────────────────────────────────────────────
+<<<<<<< Updated upstream
   const fetchAndMergeLeads = async () => {
     setLeadsLoading(true);
     try {
@@ -199,10 +207,62 @@ const SurveyerScreen = () => {
 
       const serverNonNew = mapped.filter((l) => l.status !== 'unaccepted');
       const merged = await mergeWithServerLeads(serverNonNew);
+=======
+// ── Fetch + merge ─────────────────────────────────────────────────────────
+const fetchAndMergeLeads = async () => {
+  setLeadsLoading(true);
+  try {
+    const surveyorNumber = await getSurveyorNumber(); // ✅ define it first
+
+    const res = await API.get('/order/surveyor', {
+      params: { surveyorNumber },
+    });
+
+    // ✅ API returns { success: true, deals: [...] }
+    const rawData = Array.isArray(res.data?.deals)
+      ? res.data.deals
+      : [];
+
+    const storedRejected = await AsyncStorage.getItem('rejected_lead_ids');
+    const rejectedIds = storedRejected ? JSON.parse(storedRejected) : [];
+
+    const mapped = rawData.map((item) => ({
+      id: item._id,               // ✅ was item.id
+      dealId: item.deal_id,       // ✅ new field
+      name: item.deal_name || item.name || '—',  // ✅ deal_name first
+      phone: item.mobile,
+      city: item.city,
+      comment: item.comment,
+      referredBy: item.referredBy,
+      date: item.assignedAt,      // ✅ was item.date
+      time: item.time,
+      latitude: item.latitude,
+      longitude: item.longitude,
+      whatsappNo: item.whatsappNo,
+      email: item.email,
+      address: item.address,
+      status: item.siteSurveyStatus ?? 'notassigned', // ✅ fallback
+    }));
+
+    setLeads(
+      mapped.filter(
+        (l) => l.status === 'notassigned' && !rejectedIds.includes(l.id)
+      )
+    );
+
+    const serverNonNew = mapped.filter((l) => l.status !== 'notassigned');
+    const merged = await mergeWithServerLeads(serverNonNew);
+
+    const accepted = merged.filter(
+      (l) => l.status === 'accepted' || l.status === 'inprogress'
+    );
+    const completed = merged.filter((l) => l.status === 'completed');
+>>>>>>> Stashed changes
 
       const accepted = merged.filter((l) => l.status === 'accepted' || l.status === 'inprogress');
       const completed = merged.filter((l) => l.status === 'completed');
 
+<<<<<<< Updated upstream
       // ✅ ref sync
       acceptedLeadsRef.current = accepted;
       setAcceptedLeads(accepted);
@@ -214,6 +274,14 @@ const SurveyerScreen = () => {
       if (isMounted.current) setLeadsLoading(false);
     }
   };
+=======
+  } catch (err) {
+    console.log('[SurveyerScreen] API Error:', err?.response?.status, err?.response?.data, err?.message);
+  } finally {
+    if (isMounted.current) setLeadsLoading(false);
+  }
+};
+>>>>>>> Stashed changes
 
   // ── Try API ───────────────────────────────────────────────────────────────
   const tryApi = async (fn) => {
@@ -229,6 +297,75 @@ const SurveyerScreen = () => {
       return parsed?.UserInfo?.phoneNo || '';
     } catch (e) {
       return '';
+    }
+  };
+
+  // ✅ NEW: Auto-open Settings function
+  const openAppSettings = () => {
+    if (Platform.OS === 'ios') {
+      Linking.openURL('app-settings:');
+    } else {
+      Linking.openSettings().catch(() => {
+        Alert.alert('Error', 'Unable to open settings');
+      });
+    }
+  };
+
+  // ✅ ENHANCED: Detect never_ask_again and return detailed status
+  const requestCameraPermission = async () => {
+    if (Platform.OS !== 'android') return { granted: true, neverAskAgain: false };
+    
+    try {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.CAMERA,
+        {
+          title: 'Camera Permission Required',
+          message: 'We need camera access to take survey photos.',
+          buttonNegative: 'Cancel',
+          buttonPositive: 'Allow',
+        }
+      );
+      
+      console.log('[Camera Permission] Result:', granted);
+      
+      return {
+        granted: granted === PermissionsAndroid.RESULTS.GRANTED,
+        neverAskAgain: granted === 'never_ask_again',
+        status: granted,
+      };
+    } catch (err) {
+      console.error('[Camera Permission Error]:', err);
+      return { granted: false, neverAskAgain: false, status: 'error' };
+    }
+  };
+
+  // ✅ ENHANCED: Detect never_ask_again and return detailed status
+  const requestGalleryPermission = async () => {
+    if (Platform.OS !== 'android') return { granted: true, neverAskAgain: false };
+    
+    try {
+      const permission =
+        Platform.Version >= 33
+          ? PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES
+          : PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
+
+      const granted = await PermissionsAndroid.request(permission, {
+        title: 'Gallery Permission Required',
+        message: 'We need access to your gallery to select photos for surveys.',
+        buttonNegative: 'Cancel',
+        buttonPositive: 'Allow',
+      });
+      
+      console.log('[Gallery Permission] Result:', granted);
+      
+      return {
+        granted: granted === PermissionsAndroid.RESULTS.GRANTED,
+        neverAskAgain: granted === 'never_ask_again',
+        status: granted,
+      };
+    } catch (err) {
+      console.error('[Gallery Permission Error]:', err);
+      return { granted: false, neverAskAgain: false, status: 'error' };
     }
   };
 
@@ -251,7 +388,11 @@ const SurveyerScreen = () => {
 
     if (isOnline) {
       tryApi(() => API.post('/order/accept', payload));
+<<<<<<< Updated upstream
       tryApi(() => API.put('/order/updatestatus', { mobile: item.phone, status: 'accepted' }));
+=======
+      tryApi(() => API.put('/order/updatestatus', { id: lead.dealId, status: 'accepted' }));
+>>>>>>> Stashed changes
       tryApi(() => API.post('/order/sync-status', {
         customerMobile: item.phone,
         surveyorNumber,
@@ -287,17 +428,42 @@ const SurveyerScreen = () => {
     try {
       await API.post('/order/reject', {
         customerMobile: lead.phone,
+<<<<<<< Updated upstream
+=======
+        customerName: lead.name,
+        customerAddress: lead.address,
+>>>>>>> Stashed changes
         surveyorNumber,
         comment: rejectComment.trim(),
         receivedAt: Date.now(),
       });
 
+<<<<<<< Updated upstream
       setLeads((prev) => prev.filter((l) => l.id !== rejectLeadId));
+=======
+      // ✅ State-ல இருந்து remove பண்ணு
+      setLeads((prev) => prev.filter((l) => l.id !== rejectLeadId));
+
+      // ✅ Rejected lead-ஐ local blacklist-ல வை (refresh-லயும் வரக்கூடாது)
+      const existing = await AsyncStorage.getItem('rejected_lead_ids');
+      const rejectedIds = existing ? JSON.parse(existing) : [];
+      if (!rejectedIds.includes(rejectLeadId)) {
+        rejectedIds.push(rejectLeadId);
+        await AsyncStorage.setItem('rejected_lead_ids', JSON.stringify(rejectedIds));
+      }
+
+>>>>>>> Stashed changes
       setRejectModalVisible(false);
       setRejectLeadId(null);
       setRejectComment('');
       Alert.alert('Success', 'Lead rejected successfully.');
     } catch (err) {
+<<<<<<< Updated upstream
+=======
+      console.log('[SurveyerScreen] ERROR:', err?.message, err?.stack);
+      console.log('[LocalleadsStorage] ERROR:', err?.message, err?.stack);
+
+>>>>>>> Stashed changes
       Alert.alert('Error', err?.response?.data?.error || 'Failed to reject.');
     }
   };
@@ -354,7 +520,11 @@ const SurveyerScreen = () => {
       const startAt = Date.now();
       const dueAt   = startAt + (totalMins * 60 * 1000);
 
+<<<<<<< Updated upstream
       tryApi(() => API.put('/order/updatestatus', { mobile: lead.phone, status: 'inprogress' }));
+=======
+      tryApi(() => API.put('/order/updatestatus', { id: lead.dealId, status: 'inprogress' }));
+>>>>>>> Stashed changes
       tryApi(() => API.post('/order/inprogress', { mobile: lead.phone, surveyorNumber }));
       tryApi(() => API.post('/order/sync-status', {
         customerMobile: lead.phone,
@@ -365,15 +535,28 @@ const SurveyerScreen = () => {
       }));
 
       try {
+<<<<<<< Updated upstream
         await API.post('/notification/trigger', {
           surveyorNumber, customerMobile: lead.phone, scenarioType: 1, eta: totalMins, mapsUrl,
+=======
+        // scenarioType: 1 (handleStart)
+        await API.post('/notification/trigger', {
+          surveyorNumber, customerMobile: lead.phone, name: lead.name,
+          scenarioType: 1, eta: totalMins, mapsUrl,
+>>>>>>> Stashed changes
         });
       } catch (e) {
         console.log('[SurveyerScreen] Notification error:', e?.message);
       }
     } else {
+<<<<<<< Updated upstream
       await enqueue(`notif_start_${id}`, 'NOTIFICATION', {
         customerMobile: lead.phone, scenarioType: 1, eta: totalMins, mapsUrl,
+=======
+      // offline queue version
+      await enqueue(`notif_start_${id}`, 'NOTIFICATION', {
+        customerMobile: lead.phone, name: lead.name, scenarioType: 1, eta: totalMins, mapsUrl,
+>>>>>>> Stashed changes
       });
     }
 
@@ -381,7 +564,7 @@ const SurveyerScreen = () => {
     startHighFrequencyTracking(() => locationRef.current);
 
     navigation.navigate('InProgress', {
-      lead: { ...lead, status: 'inprogress' },
+      lead: { ...lead, status: 'inprogress',dealId: lead.dealId, },
       initialLocation: locationRef.current,
     });
   };
@@ -405,6 +588,7 @@ const SurveyerScreen = () => {
         }
         NativeModules.StartStopService?.startService();
       } else if (Platform.OS === 'ios') {
+<<<<<<< Updated upstream
   const granted = await requestIOSLocationPermission();
   if (!granted) {
     Alert.alert('Permission Required', 'Location permission is required.', [
@@ -417,6 +601,20 @@ setIsOn(true);
 await AsyncStorage.setItem('surveyer_is_on', 'true');
 startTracking();
 fetchAndMergeLeads();
+=======
+        const granted = await requestIOSLocationPermission();
+        if (!granted) {
+          Alert.alert('Permission Required', 'Location permission is required.', [
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ]);
+          return;
+        }
+      }
+      setIsOn(true);
+      await AsyncStorage.setItem('surveyer_is_on', 'true');
+      startTracking();
+      fetchAndMergeLeads();
+>>>>>>> Stashed changes
     } else {
       setIsOn(false);
       await AsyncStorage.setItem('surveyer_is_on', 'false');
@@ -446,6 +644,83 @@ fetchAndMergeLeads();
     ]);
   };
 
+  // ✅ ENHANCED: Auto-open Settings for never_ask_again with detailed handling
+  const handleLogoPress = () => {
+  Alert.alert(
+    'Upload Photo',
+    'Take a photo to upload',
+    [
+      {
+        text: 'Take Photo',
+        onPress: async () => {
+          try {
+            const result = await requestCameraPermission();
+            
+            console.log('[Camera] Permission result:', result);
+            
+            if (result.neverAskAgain) {
+              Alert.alert(
+                'Camera Permission Blocked',
+                'Camera permission was denied. Please enable it in app settings.\n\nWe\'ll open the settings for you.',
+                [
+                  {
+                    text: 'Open Settings',
+                    onPress: () => {
+                      openAppSettings();
+                      setTimeout(() => {
+                        Alert.alert(
+                          'Enable Camera Permission',
+                          'Tap "Permissions" → Select "Camera" → Choose "Allow"'
+                        );
+                      }, 500);
+                    },
+                  },
+                  { text: 'Cancel', style: 'cancel' },
+                ]
+              );
+              return;
+            }
+            
+            if (!result.granted) {
+              Alert.alert(
+                'Camera Permission Denied',
+                'Camera permission is required to take photos. Please allow it when prompted.'
+              );
+              return;
+            }
+
+            launchCamera(
+              {
+                mediaType: 'photo',
+                cameraType: 'back',
+                quality: 0.8,
+                saveToPhotos: true,
+              },
+              (response) => {
+                if (response.didCancel) return;
+
+                if (response.errorCode) {
+                  Alert.alert('Camera Error', `Error: ${response.errorMessage || response.errorCode}`);
+                  return;
+                }
+
+                const photo = response.assets?.[0];
+                if (photo?.uri) {
+                  setUploadedPhoto(photo.uri);
+                  Alert.alert('Success', 'Photo captured successfully!');
+                }
+              }
+            );
+          } catch (err) {
+            Alert.alert('Error', 'Failed to launch camera. Please try again.');
+          }
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]
+  );
+};
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <View style={{ flex: 1 }}>
@@ -457,24 +732,31 @@ fetchAndMergeLeads();
           <TouchableOpacity style={styles.offLogoutBtn} onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={28} color="#fff" />
           </TouchableOpacity>
-          <View style={styles.offToggleBtn}>
-            <Switch
-              trackColor={{ false: '#ffffff88', true: '#fff' }}
-              thumbColor="#ED1C25" value={isOn} onValueChange={handleToggle}
-            />
-          </View>
+          <View style={{ position: 'absolute', top: 50, right: 20, alignItems: 'center', zIndex: 10 }}>
+  <View style={styles.offToggleBtn}>
+    <Switch
+      trackColor={{ false: '#ffffff88', true: '#fff' }}
+      thumbColor="#ED1C25" value={isOn} onValueChange={handleToggle}
+    />
+  </View>
+  <TouchableOpacity style={{ marginTop: 10 }} onPress={handleLogoPress}>
+    <Ionicons name="cloud-upload-outline" size={28} color="#fff" />
+  </TouchableOpacity>
+</View>
+          
 
           <ScrollView
             contentContainerStyle={{ paddingTop: 60, paddingBottom: 30 }}
             showsVerticalScrollIndicator={false}
           >
             <View style={{ alignItems: 'center', paddingTop: 20, marginBottom: 20 }}>
-              <Image
-                source={require('../../assets/images/kondass.png')}
-                style={styles.logo}
-                resizeMode="contain"
-              />
+              {uploadedPhoto ? (
+                <Image source={{ uri: uploadedPhoto }} style={[styles.logo, { borderRadius: 10 }]} resizeMode="cover" />
+              ) : (
+                <Image source={require('../../assets/images/kondass.png')} style={styles.logo} resizeMode="contain" />
+              )}
             </View>
+
             <View style={styles.offTextContainer}>
               <Text style={styles.welcome}>Welcome!</Text>
               <Text style={styles.message}>Let's get started! Turn on availability!</Text>
@@ -490,6 +772,7 @@ fetchAndMergeLeads();
                   ? <ActivityIndicator size="large" color="#fff" style={{ marginTop: 20 }} />
                   : leads.map((item) => (
                       <LeadCard
+<<<<<<< Updated upstream
                       key={item.id}
   item={item}
   type="unaccepted"
@@ -497,6 +780,15 @@ fetchAndMergeLeads();
   onAccept={handleAccept}
   onReject={handleReject}
 />
+=======
+                        key={item.id}
+                        item={item}
+                        cardType="unaccepted"
+                        currentLocation={locationRef.current}
+                        onAccept={handleAccept}
+                        onReject={handleReject}
+                      />
+>>>>>>> Stashed changes
                     ))
                 }
               </>
@@ -591,14 +883,14 @@ fetchAndMergeLeads();
                 {activeFilter === 'all' && (
                   <>
                     {acceptedLeads.map((item) => (
-  <LeadCard
-    key={item.id}
-    item={item}
-    cardType="accepted"
-    currentLocation={locationRef.current}
-    onStart={handleStart}
-  />
-))}
+                      <LeadCard
+                        key={item.id}
+                        item={item}
+                        cardType="accepted"
+                        currentLocation={locationRef.current}
+                        onStart={handleStart}
+                      />
+                    ))}
                     {completedLeads.length > 0 && (
                       <>
                         <View style={[styles.sectionHeader, { justifyContent: 'space-between' }]}>
@@ -688,10 +980,12 @@ const styles = StyleSheet.create({
   logo: { width: 200, height: 100 },
   offLogoutBtn: { position: 'absolute', top: 55, left: 20, zIndex: 10 },
   offToggleBtn: {
-    position: 'absolute', top: 50, right: 20, zIndex: 10,
-    backgroundColor: '#fff', borderRadius: 20,
-    paddingHorizontal: 4, paddingVertical: 2, elevation: 4,
-  },
+  backgroundColor: '#fff',
+  borderRadius: 20,
+  paddingHorizontal: 4,
+  paddingVertical: 2,
+  elevation: 4,
+},
   offTextContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   welcome: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
   message: { marginTop: 10, color: '#ffffffcc', textAlign: 'center', paddingHorizontal: 30 },
@@ -778,4 +1072,8 @@ const styles = StyleSheet.create({
     borderRadius: 8, alignItems: 'center',
   },
   modalSaveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  uploadIconBtn: {
+  marginTop: 10,
+  alignItems: 'center',
+},
 });
