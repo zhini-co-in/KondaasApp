@@ -101,7 +101,7 @@ export const saveScannedProduct = async (rawValue, location = null) => {
 
     console.log('📤 Sending:', JSON.stringify(payload));
 
-    const res = await API.post('/logistic/products', payload);
+    const res = await API.post('/installer/products', payload);
     console.log('✅ Saved:', res.status, res.data);
     return res.data;
 
@@ -122,7 +122,7 @@ export const getScannedProducts = async () => {
     const phoneNo = await getUserPhone();
     if (!phoneNo) return [];
 
-    const res = await API.get('/logistic/products', {
+    const res = await API.get('/installer/products', {
       params: { phoneNo: phoneNo.toString().trim() },
     });
 

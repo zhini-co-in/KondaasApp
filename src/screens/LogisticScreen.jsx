@@ -581,6 +581,8 @@ export default LogisticScreen;
 const styles = StyleSheet.create({
   pageTitle: {
     fontSize: 14,
+    fontSize: 14, 
+
     color: '#888',
     paddingHorizontal: 16,
     paddingTop: 10,

@@ -1,3 +1,5 @@
+// InstallerService.js - Fixed for InstallerScreen
+
 import { useRef, useState, useEffect } from 'react';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import { 
@@ -57,11 +59,11 @@ export const sendLocationToServer = async (latitude, longitude, timestamp = null
 
     console.log('📤 Logistic Sending:', payload);
 
-    const res = await API.post('/logistic/add', payload);
-    console.log('✅ Logistic Location Saved:', res.status);
+    const res = await API.post('/installer/add', payload);
+    console.log('✅ Installer Location Saved:', res.status);
     return true;
   } catch (err) {
-    console.error('❌ Logistic Send Error:', err?.response?.data || err.message);
+    console.error('❌ Installer Send Error:', err?.response?.data || err.message);
     return false;
   }
 };
@@ -72,7 +74,7 @@ export const requestLocationPermissions = async () => {
   if (Platform.OS === 'android') {
     const fine = await PermissionsAndroid.request(
       PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      { title: 'Location Permission', message: 'Logistic tracking ku location access venum.', buttonPositive: 'Allow' }
+      { title: 'Location Permission', message: 'Installer tracking ku location access venum.', buttonPositive: 'Allow' }
     );
 
     if (fine !== PermissionsAndroid.RESULTS.GRANTED) return false;
@@ -106,7 +108,7 @@ export const isGPSEnabled = async () => {
 
 // ==================== MAIN HOOK - LOGISTIC TRACKING ====================
 
-export const useLogisticTracking = (isMountedRef) => {
+export const useInstallerTracking = (isMountedRef) => {
   const [currentLocation, setCurrentLocation] = useState(null);
   const watchIdRef = useRef(null);
   const isTrackingRef = useRef(false);
@@ -116,7 +118,7 @@ export const useLogisticTracking = (isMountedRef) => {
     if (isTrackingRef.current) return;
     isTrackingRef.current = true;
 
-    console.log('🟢 Logistic Tracking Started');
+    console.log('🟢 Installer Tracking Started');
 
     if (Platform.OS === 'android') {
       // Native Service (StartStopService) already started from LogisticScreen
@@ -161,7 +163,7 @@ export const useLogisticTracking = (isMountedRef) => {
   };
 
   const stopTracking = () => {
-    console.log('🔴 Logistic Tracking Stopped');
+    console.log('🔴 Installer Tracking Stopped');
     isTrackingRef.current = false;
 
     if (listenerRef.current) {

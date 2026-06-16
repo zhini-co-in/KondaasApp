@@ -5,7 +5,9 @@ import { getAuth } from "@react-native-firebase/auth";
 import DeviceInfo from "react-native-device-info";
 import { USER_DATA, getSessionInfo } from "../service/localStorage";
 
-const BASE_URL = "https://board.trisentrix.com";
+// const BASE_URL = "https://board.trisentrix.com";
+
+const BASE_URL = "http://192.168.0.3:8080";
 
 // ─────────────────────────────────────────────────────────────
 // Axios instance

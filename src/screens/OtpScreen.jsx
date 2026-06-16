@@ -15,7 +15,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { storeData, getStorageData, USER_DATA } from "../service/localStorage";
 import { SCREEN_NAMES } from "../constants/screenNames";
 
-const BASE_URL = "https://board.trisentrix.com";
+// const BASE_URL = "https://board.trisentrix.com";
+const BASE_URL = "http://192.168.0.3:8080";
 
 // ─────────────────────────────────────────────────────────────
 const safeApiCall = async (url, body, authToken = null, deviceId = null) => {
@@ -348,6 +349,8 @@ if (freshRole === "admin") {
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.LOGISTIC_SCREEN }] });
 } else if (freshRole === "surveyer") {
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }] });
+} else if (freshRole === "installer") {
+  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.INSTALLER_SCREEN }] });
 } else {
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.MAIN }] });
 }

@@ -1,5 +1,6 @@
 // src/constants/routes.js
 
+
 export const SCREEN_NAMES = {
   // Auth / Onboarding
   SPLASH: 'splash',
@@ -33,5 +34,7 @@ export const SCREEN_NAMES = {
   SURVEYER_SCREEN: "Surveyerscreen",
   ADMIN_SCREEN: 'AdminScreen',
 LOGISTIC_SCREEN: 'LogisticScreen',
+INSTALLER_SCREEN: 'InstallerScreen',
 CREATE_LEAD: 'CreateLead',
 };
+
