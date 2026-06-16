@@ -46,36 +46,13 @@ const styles = StyleSheet.create({
   statNum: { fontSize: 22, fontWeight: '700', color: '#fff', lineHeight: 24 },
   statLabel: { fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 3 },
 
-<<<<<<< Updated upstream
-=======
   btnRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
->>>>>>> Stashed changes
   createLeadBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#fff', marginBottom: 14, paddingVertical: 11,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#fff', paddingVertical: 11,
     borderRadius: 10, elevation: 3,
   },
   createLeadBtnText: { fontSize: 13, fontWeight: '700', color: '#C8000A', letterSpacing: 0.2 },
-<<<<<<< Updated upstream
-
-  filterStrip: {
-    flexDirection: 'row', gap: 8,
-    backgroundColor: '#fff',
-    paddingHorizontal: 14, paddingVertical: 12,
-    borderBottomWidth: 0.5, borderBottomColor: '#EAEAEA',
-  },
-  filterChip: {
-    flex: 1, paddingVertical: 8, borderRadius: 10,
-    borderWidth: 1, borderColor: '#EAEAEA',
-    backgroundColor: '#fff', alignItems: 'center',
-  },
-  filterChipText: { fontSize: 11, fontWeight: '600', color: '#999' },
-  chipAll:   { backgroundColor: '#1a1a1a', borderColor: '#1a1a1a' },
-  chipDone:  { backgroundColor: '#EAF3DE', borderColor: '#97C459' },
-  chipRej:   { backgroundColor: '#FCEBEB', borderColor: '#F09595' },
-  chipOther: { backgroundColor: '#E6F1FB', borderColor: '#85B7EB' },
-
-=======
   filterIconBtn: {
     width: 46, height: 46, borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.18)',
@@ -114,7 +91,6 @@ const styles = StyleSheet.create({
   menuCount: { fontSize: 10, fontWeight: '700', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 20 },
   menuCheck: { fontSize: 13, color: '#C8000A', fontWeight: '700' },
 
->>>>>>> Stashed changes
   searchBar: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: '#fff',
@@ -186,26 +162,23 @@ const styles = StyleSheet.create({
   },
   refTagText: { fontSize: 10.5, color: '#854F0B', fontWeight: '500' },
   badgeBase: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 11, paddingVertical: 5, borderRadius: 20 },
-  badgeDone:  { backgroundColor: '#EAF3DE', borderWidth: 1, borderColor: '#D1E9B8' },
+  badgeDone:      { backgroundColor: '#EAF3DE', borderWidth: 1, borderColor: '#D1E9B8' },
   badgeDoneText:  { fontSize: 11, fontWeight: '700', color: '#27500A', letterSpacing: 0.2 },
-<<<<<<< Updated upstream
-  badgeRej:   { backgroundColor: '#FCEBEB', borderWidth: 1, borderColor: '#F5CDCD' },
-  badgeRejText:   { fontSize: 11, fontWeight: '700', color: '#791F1F', letterSpacing: 0.2 },
-  badgeOther: { backgroundColor: '#E6F1FB', borderWidth: 1, borderColor: '#B5D4F4' },
-=======
   badgeRejected:      { backgroundColor: '#FCEBEB', borderWidth: 1, borderColor: '#F5CDCD' },
   badgeRejectedText:  { fontSize: 11, fontWeight: '700', color: '#791F1F', letterSpacing: 0.2 },
   badgeOther:     { backgroundColor: '#E6F1FB', borderWidth: 1, borderColor: '#B5D4F4' },
->>>>>>> Stashed changes
   badgeOtherText: { fontSize: 11, fontWeight: '700', color: '#0C447C', letterSpacing: 0.2 },
+  badgeInProg:    { backgroundColor: '#FEF3C7', borderWidth: 1, borderColor: '#FCD34D' },
+  badgeInProgText:{ fontSize: 11, fontWeight: '700', color: '#92400E', letterSpacing: 0.2 },
   badgeDot: { width: 6, height: 6, borderRadius: 3 },
 
   personRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 14 },
   av: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  avDone:  { backgroundColor: '#EAF3DE' },
-  avRej:   { backgroundColor: '#FCEBEB' },
-  avOther: { backgroundColor: '#E6F1FB' },
-  avText:  { fontSize: 18, fontWeight: '700' },
+  avDone:   { backgroundColor: '#EAF3DE' },
+  avRejected:    { backgroundColor: '#FCEBEB' },
+  avOther:  { backgroundColor: '#E6F1FB' },
+  avInProg: { backgroundColor: '#FEF3C7' },
+  avText:   { fontSize: 18, fontWeight: '700' },
   personMeta: { flex: 1 },
   pname: { fontSize: 15, fontWeight: '700', color: '#1a1a1a', marginBottom: 6, letterSpacing: -0.2 },
   pmeta: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 4 },
@@ -225,12 +198,6 @@ const styles = StyleSheet.create({
   },
   infoVal: { fontSize: 13, fontWeight: '600', color: '#2a2a2a', flex: 1, lineHeight: 18 },
 
-<<<<<<< Updated upstream
-  // ── Card action buttons ──
-  cardActions: {
-    flexDirection: 'row', gap: 8, marginTop: 14,
-  },
-=======
   assignedByBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     flex: 1,
@@ -296,7 +263,6 @@ const styles = StyleSheet.create({
   contactsLoading: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 40 },
 
   cardActions: { flexDirection: 'row', gap: 8, marginTop: 14 },
->>>>>>> Stashed changes
   editBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, paddingVertical: 9, borderRadius: 10,
@@ -310,9 +276,6 @@ const styles = StyleSheet.create({
   },
   deleteBtnText: { fontSize: 12, fontWeight: '700', color: '#A32D2D' },
 
-<<<<<<< Updated upstream
-  // ── Edit Modal ──
-=======
   // ── NEW: Track button style ──
   mapBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
@@ -322,7 +285,6 @@ const styles = StyleSheet.create({
   },
   mapBtnText: { fontSize: 12, fontWeight: '700', color: '#0C447C' },
 
->>>>>>> Stashed changes
   modalOverlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'flex-end',
@@ -404,21 +366,6 @@ const normaliseGeneral = (raw, index) => {
 
 const normalise = (raw, index) => ({
   id:             raw._id || raw.id || String(index),
-<<<<<<< Updated upstream
-  name:           raw.name || raw.customerName || '—',
-  phone:          raw.mobile || raw.phone || raw.customerMobile || '—',
-  city:           raw.city || '—',
-  referredBy:     raw.referredBy || raw.referred_by || 'N/A',
-  surveyorNumber: raw.surveyorNumber || raw.surveyor || '—',
-  comment:        raw.comment || raw.completionReason || raw.reason || raw.rejectReason || '—',
-  loanType:       raw.loanType || raw.loan_type || null,
-  amount:         raw.amount || null,
-  date:           fmtDate(raw.createdAt || raw.date),
-  rawDate:        raw.createdAt || raw.date || null,
-  status:         (raw.status || 'pending').toLowerCase(),
-});
-
-=======
   zohoId:         raw.deal_id || raw.id || raw._id || null,
   mongoId:        raw._id || null,
   name:           raw.deal_name || raw.name || raw.customerName || '—',
@@ -601,16 +548,15 @@ const AssignedByRow = ({ value, onPress, iconName = 'person-add-outline', iconCo
   </View>
 );
 
->>>>>>> Stashed changes
 // ─── Edit Modal ────────────────────────────────────────────────────────────
 const EditModal = ({ visible, item, onClose, onSave }) => {
-  const [name, setName]         = useState('');
-  const [phone, setPhone]       = useState('');
-  const [city, setCity]         = useState('');
+  const [name, setName]             = useState('');
+  const [phone, setPhone]           = useState('');
+  const [city, setCity]             = useState('');
   const [referredBy, setReferredBy] = useState('');
-  const [status, setStatus]     = useState('');
-  const [comment, setComment]   = useState('');
-  const [saving, setSaving]     = useState(false);
+  const [status, setStatus]         = useState('');
+  const [comment, setComment]       = useState('');
+  const [saving, setSaving]         = useState(false);
 
   useEffect(() => {
     if (item) {
@@ -623,38 +569,6 @@ const EditModal = ({ visible, item, onClose, onSave }) => {
     }
   }, [item]);
 
-<<<<<<< Updated upstream
-  // EditModal-க்கு phone state already இருக்கிறது ✅
-// handleSave — mobile அனுப்பவும்
-const handleSave = async () => {
-  if (!phone.trim()) {
-    Alert.alert('Error', 'Mobile number is required to update.');
-    return;
-  }
-  setSaving(true);
-  try {
-    await API.put('/order/update', {
-      mobile: phone,        // ← Zoho search key (mandatory)
-      name,
-      city,
-      referredBy,
-      status,
-      comment,
-      description: comment, // backend description field-க்கும்
-    });
-    onSave();
-    onClose();
-  } catch (e) {
-    Alert.alert('Error', 'Update failed: ' + (e?.message || 'Unknown error'));
-  }
-  setSaving(false);
-};
-
-  const statusOptions = [
-    { key: 'pending',   label: 'Pending',   color: '#0C447C', bg: '#E6F1FB', border: '#B5D4F4' },
-    { key: 'completed', label: 'Completed', color: '#27500A', bg: '#EAF3DE', border: '#97C459' },
-    { key: 'rejected',  label: 'Rejected',  color: '#791F1F', bg: '#FCEBEB', border: '#F09595' },
-=======
   const handleSave = async () => {
     if (!item?.zohoId) {
       Alert.alert('Error', 'Deal ID not found. Cannot update.');
@@ -680,7 +594,6 @@ const handleSave = async () => {
     { key: 'inprogress',  label: 'In Progress',  color: '#92400E', bg: '#FEF3C7', border: '#FCD34D' },
     { key: 'completed',   label: 'Completed',    color: '#27500A', bg: '#EAF3DE', border: '#97C459' },
     { key: 'rejected',    label: 'Rejected',     color: '#791F1F', bg: '#FCEBEB', border: '#F09595' },
->>>>>>> Stashed changes
   ];
 
   return (
@@ -693,7 +606,6 @@ const handleSave = async () => {
         <View style={styles.modalSheet}>
           <View style={styles.modalHandle} />
           <Text style={styles.modalTitle}>Edit Lead</Text>
-
           <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={styles.fieldLabel}>Name</Text>
             <TextInput style={styles.fieldInput} value={name} onChangeText={setName} placeholder="Customer name" placeholderTextColor="#ccc" />
@@ -704,25 +616,6 @@ const handleSave = async () => {
             <Text style={styles.fieldLabel}>Referred By</Text>
             <TextInput style={styles.fieldInput} value={referredBy} onChangeText={setReferredBy} placeholder="Referrer name" placeholderTextColor="#ccc" />
             <Text style={styles.fieldLabel}>Status</Text>
-<<<<<<< Updated upstream
-            <View style={styles.statusRow}>
-              {statusOptions.map(s => (
-                <TouchableOpacity
-                  key={s.key}
-                  onPress={() => setStatus(s.key)}
-                  style={[
-                    styles.statusChip,
-                    status === s.key && { backgroundColor: s.bg, borderColor: s.border },
-                  ]}
-                >
-                  <Text style={[styles.statusChipText, status === s.key && { color: s.color }]}>
-                    {s.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-=======
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 {statusOptions.map(s => (
@@ -736,7 +629,6 @@ const handleSave = async () => {
                 ))}
               </View>
             </ScrollView>
->>>>>>> Stashed changes
             <Text style={styles.fieldLabel}>Remarks / Reason</Text>
             <TextInput
               style={[styles.fieldInput, { height: 80, textAlignVertical: 'top' }]}
@@ -843,13 +735,13 @@ const RejectedCard = ({ item, onEdit, onDelete, onAssign, onViewLocation }) => (
         <View style={styles.refTag}>
           <Text style={styles.refTagText}>Referred by — <Text style={{ fontWeight: '700' }}>{item.referredBy}</Text></Text>
         </View>
-        <View style={[styles.badgeBase, styles.badgeRej]}>
+        <View style={[styles.badgeBase, styles.badgeRejected]}>
           <View style={[styles.badgeDot, { backgroundColor: '#E24B4A' }]} />
-          <Text style={styles.badgeRejText}>✕ Rejected</Text>
+          <Text style={styles.badgeRejectedText}>✕ Rejected</Text>
         </View>
       </View>
       <View style={styles.personRow}>
-        <View style={[styles.av, styles.avRej]}>
+        <View style={[styles.av, styles.avRejected]}>
           <Text style={[styles.avText, { color: '#791F1F' }]}>{initial(item.name)}</Text>
         </View>
         <View style={styles.personMeta}>
@@ -866,15 +758,12 @@ const RejectedCard = ({ item, onEdit, onDelete, onAssign, onViewLocation }) => (
           <Text style={styles.infoKey}>Rejected By</Text>
           <Text style={styles.infoVal}>{item.surveyorNumber}</Text>
         </View>
-<<<<<<< Updated upstream
-=======
         <AssignedByRow
           value={item.assignedBy}
           onPress={() => onAssign(item)}
           iconName="person-add-outline"
           iconColor="#A32D2D"
         />
->>>>>>> Stashed changes
         <View style={styles.infoLine}>
           <Ionicons name="alert-circle-outline" size={14} color="#A32D2D" style={styles.infoIcon} />
           <Text style={styles.infoKey}>Reason</Text>
@@ -890,9 +779,6 @@ const RejectedCard = ({ item, onEdit, onDelete, onAssign, onViewLocation }) => (
   </View>
 );
 
-<<<<<<< Updated upstream
-const OtherCard = ({ item, onEdit, onDelete }) => (
-=======
 const InProgressCard = ({ item, onEdit, onDelete }) => (
   <View style={styles.card}>
     <LinearGradient colors={['#D97706', '#F59E0B']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cardStripe} />
@@ -936,7 +822,6 @@ const InProgressCard = ({ item, onEdit, onDelete }) => (
 
 // ─── UPDATED: OtherCard with Track Surveyor button ────────────────────────
 const OtherCard = ({ item, onEdit, onDelete, onAssign, onViewLocation }) => (
->>>>>>> Stashed changes
   <View style={styles.card}>
     <LinearGradient colors={['#185FA5', '#378ADD']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cardStripe} />
     <View style={styles.cardInner}>
@@ -1006,15 +891,9 @@ const AdminScreen = ({ navigation }) => {
   const [showCustom, setShowCustom]         = useState(false);
   const [customApplied, setCustomApplied]   = useState(false);
 
-<<<<<<< Updated upstream
-  // Edit modal state
-  const [editVisible, setEditVisible]     = useState(false);
-  const [selectedItem, setSelectedItem]   = useState(null);
-=======
   const [editVisible, setEditVisible]       = useState(false);
   const [selectedItem, setSelectedItem]     = useState(null);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
->>>>>>> Stashed changes
 
   const [contactsVisible, setContactsVisible] = useState(false);
   const [assignTarget, setAssignTarget]       = useState(null);
@@ -1023,19 +902,6 @@ const AdminScreen = ({ navigation }) => {
   const fetchLeads = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-<<<<<<< Updated upstream
-      const res = await API.get('/order/all');
-      const raw = Array.isArray(res.data)
-        ? res.data
-        : Array.isArray(res.data?.data)
-        ? res.data.data
-        : Array.isArray(res.data?.orders)
-        ? res.data.orders
-        : [];
-      setAllLeads(raw.map((item, index) => normalise(item, index)));
-    } catch (e) {
-      console.log('[AdminScreen] error:', e?.message);
-=======
       const [allRes, completedRes, rejectedRes] = await Promise.all([
         API.get('/order/all'),
         API.get('/order/admin-completions'),
@@ -1088,7 +954,6 @@ const AdminScreen = ({ navigation }) => {
       setAllLeads([...completedNormalised, ...rejectedNormalised, ...nonCompletedOrRejected]);
     } catch (e) {
       console.log('[AdminScreen] fetchLeads error:', e?.message);
->>>>>>> Stashed changes
       setAllLeads([]);
     }
     if (isRefresh) setRefreshing(false); else setLoading(false);
@@ -1128,36 +993,6 @@ const AdminScreen = ({ navigation }) => {
     ]);
   };
 
-<<<<<<< Updated upstream
-  // ── delete ─────────────────────────────────────────────────────────────────
-  // AdminScreen-ல் handleDelete — mobile அனுப்பவும்
-const handleDelete = item => {
-  Alert.alert(
-    'Delete Lead',
-    `Are you sure you want to delete "${item.name}"?`,
-    [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive',
-        onPress: async () => {
-          if (!item.phone || item.phone === '—') {
-            Alert.alert('Error', 'Mobile number is required to delete this lead.');
-            return;
-          }
-          try {
-            await API.delete('/order/delete', {
-              data: { mobile: item.phone },
-            });
-            setAllLeads(prev => prev.filter(l => l.id !== item.id));
-          } catch (e) {
-            Alert.alert('Error', 'Delete failed: ' + (e?.message || 'Unknown error'));
-          }
-        },
-      },
-    ],
-  );
-};
-=======
   // ── Assign surveyor ────────────────────────────────────────────────────────
   const handleAssign = item => {
     setAssignTarget(item);
@@ -1227,7 +1062,6 @@ const handleDelete = item => {
       Alert.alert('Error', 'Could not fetch location: ' + (e?.message || 'Unknown error'));
     }
   };
->>>>>>> Stashed changes
 
   // ── date helpers ───────────────────────────────────────────────────────────
   const parseCardDate = dateStr => {
@@ -1286,11 +1120,6 @@ const handleDelete = item => {
   };
 
   // ── derived lists ──────────────────────────────────────────────────────────
-<<<<<<< Updated upstream
-  const completedLeads = allLeads.filter(i => i.status === 'completed');
-  const rejectedLeads  = allLeads.filter(i => i.status === 'rejected');
-  const otherLeads     = allLeads.filter(i => i.status !== 'completed' && i.status !== 'rejected');
-=======
   const completedLeads  = allLeads.filter(i => i.status === 'completed');
   const rejectedLeads   = allLeads.filter(i => i.status === 'rejected');
   const inprogressLeads = allLeads.filter(i =>
@@ -1301,12 +1130,12 @@ const handleDelete = item => {
     i.status !== 'inprogress' && i.status !== 'in progress' &&
     i.status !== 'in_progress' && i.status !== 'accepted'
   );
->>>>>>> Stashed changes
 
   const statusFiltered =
-    activeFilter === 'completed' ? completedLeads :
-    activeFilter === 'rejected'  ? rejectedLeads  :
-    activeFilter === 'other'     ? otherLeads      :
+    activeFilter === 'completed'  ? completedLeads  :
+    activeFilter === 'rejected'   ? rejectedLeads   :
+    activeFilter === 'inprogress' ? inprogressLeads :
+    activeFilter === 'other'      ? otherLeads      :
     allLeads;
 
   const searchFiltered = searchQuery.trim()
@@ -1322,22 +1151,14 @@ const handleDelete = item => {
 
   const todayLabel = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   const presetLabel =
-    datePreset === 'today'     ? 'Today'       :
-    datePreset === 'yesterday' ? 'Yesterday'   :
-    datePreset === 'last7'     ? 'Last 7 days' :
-    datePreset === 'last30'    ? 'Last 30 days':
-    datePreset === 'thisMonth' ? 'This month'  : '';
+    datePreset === 'today'     ? 'Today'        :
+    datePreset === 'yesterday' ? 'Yesterday'    :
+    datePreset === 'last7'     ? 'Last 7 days'  :
+    datePreset === 'last30'    ? 'Last 30 days' :
+    datePreset === 'thisMonth' ? 'This month'   : '';
 
   // ── UPDATED renderCard: onViewLocation passed to Rejected & Other only ────
   const renderCard = item => {
-<<<<<<< Updated upstream
-  if (item.status === 'completed')
-    return <CompletedCard key={item.id} item={item} onEdit={handleEdit} onDelete={handleDelete} />;
-  if (item.status === 'rejected')
-    return <RejectedCard key={item.id} item={item} onEdit={handleEdit} onDelete={handleDelete} />;
-  return <OtherCard key={item.id} item={item} onEdit={handleEdit} onDelete={handleDelete} />;
-};
-=======
     if (item.status === 'completed')
       return <CompletedCard key={item.id} item={item} onEdit={handleEdit} onDelete={handleDelete} />;
     if (item.status === 'rejected')
@@ -1346,13 +1167,11 @@ const handleDelete = item => {
       return <InProgressCard key={item.id} item={item} onEdit={handleEdit} onDelete={handleDelete} />;
     return <OtherCard key={item.id} item={item} onEdit={handleEdit} onDelete={handleDelete} onAssign={handleAssign} onViewLocation={handleViewLocation} />;
   };
->>>>>>> Stashed changes
 
   return (
     <View style={{ flex: 1, backgroundColor: '#F9F9FB' }}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
-      {/* EDIT MODAL */}
       <EditModal
         visible={editVisible}
         item={selectedItem}
@@ -1360,8 +1179,6 @@ const handleDelete = item => {
         onSave={() => fetchLeads()}
       />
 
-<<<<<<< Updated upstream
-=======
       <ContactsPickerModal
         visible={contactsVisible}
         onClose={() => { setContactsVisible(false); setAssignTarget(null); }}
@@ -1404,7 +1221,6 @@ const handleDelete = item => {
         </>
       )}
 
->>>>>>> Stashed changes
       {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
@@ -1417,18 +1233,11 @@ const handleDelete = item => {
 
         <View style={styles.statsRow}>
           {[
-<<<<<<< Updated upstream
-            { num: allLeads.length,       label: 'Total leads', dot: '#fff' },
-            { num: completedLeads.length, label: 'Completed',   dot: '#97C459' },
-            { num: rejectedLeads.length,  label: 'Rejected',    dot: '#F09595' },
-            { num: otherLeads.length,     label: 'Others',      dot: '#85B7EB' },
-=======
             { num: allLeads.length,        label: 'Total',       dot: '#fff' },
             { num: completedLeads.length,  label: 'Completed',   dot: '#97C459' },
             { num: rejectedLeads.length,   label: 'Rejected',    dot: '#F09595' },
             { num: inprogressLeads.length, label: 'In Progress', dot: '#F59E0B' },
             { num: otherLeads.length,      label: 'New',         dot: '#85B7EB' },
->>>>>>> Stashed changes
           ].map((s, i) => (
             <View key={i} style={styles.statBox}>
               <View style={[styles.statDot, { backgroundColor: s.dot }]} />
@@ -1438,50 +1247,6 @@ const handleDelete = item => {
           ))}
         </View>
 
-<<<<<<< Updated upstream
-        <TouchableOpacity
-          style={styles.createLeadBtn}
-          onPress={() => navigation.navigate(SCREEN_NAMES.CREATE_LEAD)}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="add-circle" size={18} color="#C8000A" />
-          <Text style={styles.createLeadBtnText}>Create New Lead</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* STATUS FILTER */}
-      <View style={styles.filterStrip}>
-        {[
-          { key: 'all',       label: `All (${allLeads.length})` },
-          { key: 'completed', label: `Done (${completedLeads.length})` },
-          { key: 'rejected',  label: `Rej (${rejectedLeads.length})` },
-          { key: 'other',     label: `Other (${otherLeads.length})` },
-        ].map(f => (
-          <TouchableOpacity
-            key={f.key}
-            onPress={() => setActiveFilter(f.key)}
-            style={[
-              styles.filterChip,
-              activeFilter === f.key && (
-                f.key === 'completed' ? styles.chipDone :
-                f.key === 'rejected'  ? styles.chipRej  :
-                f.key === 'other'     ? styles.chipOther :
-                styles.chipAll
-              ),
-            ]}
-          >
-            <Text style={[
-              styles.filterChipText,
-              activeFilter === f.key && (
-                f.key === 'completed' ? { color: '#27500A' } :
-                f.key === 'rejected'  ? { color: '#791F1F' } :
-                f.key === 'other'     ? { color: '#0C447C' } :
-                { color: '#fff' }
-              ),
-            ]}>
-              {f.label}
-            </Text>
-=======
         <View style={styles.btnRow}>
           <TouchableOpacity
             style={styles.createLeadBtn}
@@ -1497,9 +1262,8 @@ const handleDelete = item => {
             activeOpacity={0.8}
           >
             <Ionicons name="filter-outline" size={20} color={activeFilter !== 'all' ? '#C8000A' : '#fff'} />
->>>>>>> Stashed changes
           </TouchableOpacity>
-        ))}
+        </View>
       </View>
 
       {/* SEARCH */}

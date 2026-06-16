@@ -16,7 +16,7 @@ import {
   getAcceptedLeads,
   updateAcceptedLeadStatus,
   mergeWithServerLeads,
-} from '../service/LocalleadsStorage';
+} from '../service/Localleadsstorage';
 import { enqueue, processSyncQueue } from '../service/syncQueue';
 import { NativeModules } from 'react-native';
 import {
@@ -29,9 +29,9 @@ import LeadCard from '../components/LeadCard';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { PermissionsAndroid } from 'react-native';
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // SurveyerScreen
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const SurveyerScreen = () => {
   const navigation = useNavigation();
   const route      = useRoute();
@@ -39,7 +39,7 @@ const SurveyerScreen = () => {
 
   const { currentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
 
-  // ✅ FIX 2: locationRef — stale closure தடுக்க
+  // âœ… FIX 2: locationRef â€” stale closure à®¤à®Ÿà¯à®•à¯à®•
   const locationRef = useRef(null);
   useEffect(() => {
     locationRef.current = currentLocation;
@@ -59,10 +59,10 @@ const SurveyerScreen = () => {
   const [rejectComment, setRejectComment]           = useState('');
   const [rejectLeadId, setRejectLeadId]             = useState(null);
 
-  // ✅ FIX 1: acceptedLeadsRef — setState inside setState crash தடுக்க
+  // âœ… FIX 1: acceptedLeadsRef â€” setState inside setState crash à®¤à®Ÿà¯à®•à¯à®•
   const acceptedLeadsRef = useRef([]);
 
-  // ✅ acceptedLeads set பண்ணும்போது ref-ஐயும் sync பண்ணு
+  // âœ… acceptedLeads set à®ªà®£à¯à®£à¯à®®à¯à®ªà¯‹à®¤à¯ ref-à®à®¯à¯à®®à¯ sync à®ªà®£à¯à®£à¯
   const setAcceptedLeadsSafe = useCallback((updater) => {
     setAcceptedLeads((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -71,13 +71,13 @@ const SurveyerScreen = () => {
     });
   }, []);
 
-  // ── Net watcher ───────────────────────────────────────────────────────────
+  // â”€â”€ Net watcher â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     const unsub = NetInfo.addEventListener(async (state) => {
       const online = !!state.isConnected && !!state.isInternetReachable;
       setIsOnline(online);
       if (online) {
-        console.log('[SurveyerScreen] Net restored — running sync queue...');
+        console.log('[SurveyerScreen] Net restored â€” running sync queue...');
         const result = await processSyncQueue();
         if (result.synced > 0) {
           console.log(`[SurveyerScreen] Synced ${result.synced} offline actions`);
@@ -89,7 +89,7 @@ const SurveyerScreen = () => {
     return () => unsub();
   }, []);
 
-  // ── Mount ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Mount â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     isMounted.current = true;
     restoreState();
@@ -100,7 +100,7 @@ const SurveyerScreen = () => {
     };
   }, []);
 
-  // ── Android permissions ───────────────────────────────────────────────────
+  // â”€â”€ Android permissions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     const autoSetup = async () => {
       if (Platform.OS !== 'android') return;
@@ -110,7 +110,8 @@ const SurveyerScreen = () => {
         Alert.alert('Permission Required', 'Location permission is required.', [
           { text: 'Open Settings', onPress: () => Linking.openSettings() },
         ]);
-      }await PermissionsAndroid.requestMultiple([
+      }
+      await PermissionsAndroid.requestMultiple([
         PermissionsAndroid.PERMISSIONS.CAMERA,
         Platform.Version >= 33
           ? PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES
@@ -120,23 +121,23 @@ const SurveyerScreen = () => {
     autoSetup();
   }, []);
 
-  // ✅ FIX 1: useFocusEffect — setState inside setState CRASH FIX
+  // âœ… FIX 1: useFocusEffect â€” setState inside setState CRASH FIX
   useFocusEffect(
     useCallback(() => {
       const completedIds = route.params?.completedIds;
       if (!completedIds || completedIds.length === 0) return;
       navigation.setParams({ completedIds: null });
 
-      // Step 1: acceptedLeadsRef-ல் இருந்து toMove எடுக்கிறோம்
-      // (setState callback-க்கு வெளியே — safe)
+      // Step 1: acceptedLeadsRef-à®²à¯ à®‡à®°à¯à®¨à¯à®¤à¯ toMove à®Žà®Ÿà¯à®•à¯à®•à®¿à®±à¯‹à®®à¯
+      // (setState callback-à®•à¯à®•à¯ à®µà¯†à®³à®¿à®¯à¯‡ â€” safe)
       const toMove = acceptedLeadsRef.current.filter((l) =>
         completedIds.includes(l.id)
       );
 
-      // Step 2: acceptedLeads update — தனியா call பண்றோம்
+      // Step 2: acceptedLeads update â€” à®¤à®©à®¿à®¯à®¾ call à®ªà®£à¯à®±à¯‹à®®à¯
       setAcceptedLeadsSafe((prev) => prev.filter((l) => !completedIds.includes(l.id)));
 
-      // Step 3: completedLeads update — தனியா call பண்றோம் (setState inside setState இல்லை)
+      // Step 3: completedLeads update â€” à®¤à®©à®¿à®¯à®¾ call à®ªà®£à¯à®±à¯‹à®®à¯ (setState inside setState à®‡à®²à¯à®²à¯ˆ)
       if (toMove.length > 0) {
         setCompletedLeads((c) => [
           ...c.filter((cl) => !toMove.some((m) => m.id === cl.id)),
@@ -146,7 +147,7 @@ const SurveyerScreen = () => {
     }, [route.params?.completedIds])
   );
 
-  // ── Restore state ─────────────────────────────────────────────────────────
+  // â”€â”€ Restore state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const restoreState = async () => {
     const saved = await AsyncStorage.getItem('surveyer_is_on');
     if (saved === 'true') {
@@ -158,7 +159,7 @@ const SurveyerScreen = () => {
     await fetchAndMergeLeads();
   };
 
-  // ── Load local ────────────────────────────────────────────────────────────
+  // â”€â”€ Load local â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const loadLocalLeads = async () => {
     const local = await getAcceptedLeads();
     if (!isMounted.current) return;
@@ -166,130 +167,83 @@ const SurveyerScreen = () => {
     const accepted = local.filter((l) => l.status === 'accepted' || l.status === 'inprogress');
     const completed = local.filter((l) => l.status === 'completed');
 
-    // ✅ ref sync
+    // âœ… ref sync
     acceptedLeadsRef.current = accepted;
     setAcceptedLeads(accepted);
     setCompletedLeads(completed);
   };
 
-  // ── Fetch + merge ─────────────────────────────────────────────────────────
-<<<<<<< Updated upstream
+  // â”€â”€ Fetch + merge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const fetchAndMergeLeads = async () => {
     setLeadsLoading(true);
     try {
-      const res = await API.get('/order/all');
-      const rawData = Array.isArray(res.data)
-        ? res.data
-        : Array.isArray(res.data?.data)
-        ? res.data.data
+      const surveyorNumber = await getSurveyorNumber();
+
+      const res = await API.get('/order/surveyor', {
+        params: { surveyorNumber },
+      });
+
+      // âœ… API returns { success: true, deals: [...] }
+      const rawData = Array.isArray(res.data?.deals)
+        ? res.data.deals
         : [];
 
+      const storedRejected = await AsyncStorage.getItem('rejected_lead_ids');
+      const rejectedIds = storedRejected ? JSON.parse(storedRejected) : [];
+
       const mapped = rawData.map((item) => ({
-  id: item._id, 
-  name: item.name, 
-  phone: item.mobile,
-  city: item.city, 
-  comment: item.comment, 
-  referredBy: item.referredBy,
-  date: item.createdAt, 
-  time: item.time,
-  latitude: item.latitude, 
-  longitude: item.longitude,
-  whatsappNo: item.whatsappNo, 
-  email: item.email, 
-  address: item.address,
-  status: item.status,
-}));
+        id: item._id,
+        dealId: item.deal_id,
+        name: item.deal_name || item.name || 'â€”',
+        phone: item.mobile,
+        city: item.city,
+        comment: item.comment,
+        referredBy: item.referredBy,
+        date: item.assignedAt,
+        time: item.time,
+        latitude: item.latitude,
+        longitude: item.longitude,
+        whatsappNo: item.whatsappNo,
+        email: item.email,
+        address: item.address,
+        status: item.siteSurveyStatus ?? 'notassigned',
+      }));
 
       if (!isMounted.current) return;
 
-      setLeads(mapped.filter((l) => l.status === 'unaccepted'));
+      setLeads(
+        mapped.filter(
+          (l) => l.status === 'notassigned' && !rejectedIds.includes(l.id)
+        )
+      );
 
-      const serverNonNew = mapped.filter((l) => l.status !== 'unaccepted');
+      const serverNonNew = mapped.filter((l) => l.status !== 'notassigned');
       const merged = await mergeWithServerLeads(serverNonNew);
-=======
-// ── Fetch + merge ─────────────────────────────────────────────────────────
-const fetchAndMergeLeads = async () => {
-  setLeadsLoading(true);
-  try {
-    const surveyorNumber = await getSurveyorNumber(); // ✅ define it first
 
-    const res = await API.get('/order/surveyor', {
-      params: { surveyorNumber },
-    });
-
-    // ✅ API returns { success: true, deals: [...] }
-    const rawData = Array.isArray(res.data?.deals)
-      ? res.data.deals
-      : [];
-
-    const storedRejected = await AsyncStorage.getItem('rejected_lead_ids');
-    const rejectedIds = storedRejected ? JSON.parse(storedRejected) : [];
-
-    const mapped = rawData.map((item) => ({
-      id: item._id,               // ✅ was item.id
-      dealId: item.deal_id,       // ✅ new field
-      name: item.deal_name || item.name || '—',  // ✅ deal_name first
-      phone: item.mobile,
-      city: item.city,
-      comment: item.comment,
-      referredBy: item.referredBy,
-      date: item.assignedAt,      // ✅ was item.date
-      time: item.time,
-      latitude: item.latitude,
-      longitude: item.longitude,
-      whatsappNo: item.whatsappNo,
-      email: item.email,
-      address: item.address,
-      status: item.siteSurveyStatus ?? 'notassigned', // ✅ fallback
-    }));
-
-    setLeads(
-      mapped.filter(
-        (l) => l.status === 'notassigned' && !rejectedIds.includes(l.id)
-      )
-    );
-
-    const serverNonNew = mapped.filter((l) => l.status !== 'notassigned');
-    const merged = await mergeWithServerLeads(serverNonNew);
-
-    const accepted = merged.filter(
-      (l) => l.status === 'accepted' || l.status === 'inprogress'
-    );
-    const completed = merged.filter((l) => l.status === 'completed');
->>>>>>> Stashed changes
-
-      const accepted = merged.filter((l) => l.status === 'accepted' || l.status === 'inprogress');
+      const accepted = merged.filter(
+        (l) => l.status === 'accepted' || l.status === 'inprogress'
+      );
       const completed = merged.filter((l) => l.status === 'completed');
 
-<<<<<<< Updated upstream
-      // ✅ ref sync
+      // âœ… ref sync
       acceptedLeadsRef.current = accepted;
       setAcceptedLeads(accepted);
       setCompletedLeads(completed);
 
     } catch (err) {
-      console.log('[SurveyerScreen] Offline, using local data');
+      console.log('[SurveyerScreen] API Error:', err?.response?.status, err?.response?.data, err?.message);
     } finally {
       if (isMounted.current) setLeadsLoading(false);
     }
   };
-=======
-  } catch (err) {
-    console.log('[SurveyerScreen] API Error:', err?.response?.status, err?.response?.data, err?.message);
-  } finally {
-    if (isMounted.current) setLeadsLoading(false);
-  }
-};
->>>>>>> Stashed changes
 
-  // ── Try API ───────────────────────────────────────────────────────────────
+  // â”€â”€ Try API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const tryApi = async (fn) => {
     try { await fn(); }
     catch (e) { console.log('[SurveyerScreen] API failed (offline):', e?.message); }
   };
 
-  // ── Helper: get surveyor number ───────────────────────────────────────────
+  // â”€â”€ Helper: get surveyor number â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const getSurveyorNumber = async () => {
     try {
       const userData = await AsyncStorage.getItem(USER_DATA);
@@ -300,7 +254,7 @@ const fetchAndMergeLeads = async () => {
     }
   };
 
-  // ✅ NEW: Auto-open Settings function
+  // âœ… NEW: Auto-open Settings function
   const openAppSettings = () => {
     if (Platform.OS === 'ios') {
       Linking.openURL('app-settings:');
@@ -311,10 +265,10 @@ const fetchAndMergeLeads = async () => {
     }
   };
 
-  // ✅ ENHANCED: Detect never_ask_again and return detailed status
+  // âœ… ENHANCED: Detect never_ask_again and return detailed status
   const requestCameraPermission = async () => {
     if (Platform.OS !== 'android') return { granted: true, neverAskAgain: false };
-    
+
     try {
       const granted = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.CAMERA,
@@ -325,9 +279,9 @@ const fetchAndMergeLeads = async () => {
           buttonPositive: 'Allow',
         }
       );
-      
+
       console.log('[Camera Permission] Result:', granted);
-      
+
       return {
         granted: granted === PermissionsAndroid.RESULTS.GRANTED,
         neverAskAgain: granted === 'never_ask_again',
@@ -339,10 +293,10 @@ const fetchAndMergeLeads = async () => {
     }
   };
 
-  // ✅ ENHANCED: Detect never_ask_again and return detailed status
+  // âœ… ENHANCED: Detect never_ask_again and return detailed status
   const requestGalleryPermission = async () => {
     if (Platform.OS !== 'android') return { granted: true, neverAskAgain: false };
-    
+
     try {
       const permission =
         Platform.Version >= 33
@@ -355,9 +309,9 @@ const fetchAndMergeLeads = async () => {
         buttonNegative: 'Cancel',
         buttonPositive: 'Allow',
       });
-      
+
       console.log('[Gallery Permission] Result:', granted);
-      
+
       return {
         granted: granted === PermissionsAndroid.RESULTS.GRANTED,
         neverAskAgain: granted === 'never_ask_again',
@@ -369,12 +323,12 @@ const fetchAndMergeLeads = async () => {
     }
   };
 
-  // ── Accept ────────────────────────────────────────────────────────────────
+  // â”€â”€ Accept â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleAccept = async (item) => {
     await saveAcceptedLead(item);
     setLeads((prev) => prev.filter((l) => l.id !== item.id));
 
-    // ✅ setAcceptedLeadsSafe use பண்றோம்
+    // âœ… setAcceptedLeadsSafe use à®ªà®£à¯à®±à¯‹à®®à¯
     setAcceptedLeadsSafe((prev) => {
       if (prev.some((l) => l.id === item.id)) return prev;
       return [...prev, { ...item, status: 'accepted' }];
@@ -388,11 +342,7 @@ const fetchAndMergeLeads = async () => {
 
     if (isOnline) {
       tryApi(() => API.post('/order/accept', payload));
-<<<<<<< Updated upstream
-      tryApi(() => API.put('/order/updatestatus', { mobile: item.phone, status: 'accepted' }));
-=======
-      tryApi(() => API.put('/order/updatestatus', { id: lead.dealId, status: 'accepted' }));
->>>>>>> Stashed changes
+      tryApi(() => API.put('/order/updatestatus', { id: item.dealId, status: 'accepted' }));
       tryApi(() => API.post('/order/sync-status', {
         customerMobile: item.phone,
         surveyorNumber,
@@ -402,7 +352,7 @@ const fetchAndMergeLeads = async () => {
     }
   };
 
-  // ── Reject ────────────────────────────────────────────────────────────────
+  // â”€â”€ Reject â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleReject = (id) => {
     setRejectLeadId(id);
     setRejectComment('');
@@ -428,23 +378,17 @@ const fetchAndMergeLeads = async () => {
     try {
       await API.post('/order/reject', {
         customerMobile: lead.phone,
-<<<<<<< Updated upstream
-=======
         customerName: lead.name,
         customerAddress: lead.address,
->>>>>>> Stashed changes
         surveyorNumber,
         comment: rejectComment.trim(),
         receivedAt: Date.now(),
       });
 
-<<<<<<< Updated upstream
-      setLeads((prev) => prev.filter((l) => l.id !== rejectLeadId));
-=======
-      // ✅ State-ல இருந்து remove பண்ணு
+      // âœ… State-à®² à®‡à®°à¯à®¨à¯à®¤à¯ remove à®ªà®£à¯à®£à¯
       setLeads((prev) => prev.filter((l) => l.id !== rejectLeadId));
 
-      // ✅ Rejected lead-ஐ local blacklist-ல வை (refresh-லயும் வரக்கூடாது)
+      // âœ… Rejected lead-à® local blacklist-à®² à®µà¯ˆ (refresh-à®²à®¯à¯à®®à¯ à®µà®°à®•à¯à®•à¯‚à®Ÿà®¾à®¤à¯)
       const existing = await AsyncStorage.getItem('rejected_lead_ids');
       const rejectedIds = existing ? JSON.parse(existing) : [];
       if (!rejectedIds.includes(rejectLeadId)) {
@@ -452,23 +396,18 @@ const fetchAndMergeLeads = async () => {
         await AsyncStorage.setItem('rejected_lead_ids', JSON.stringify(rejectedIds));
       }
 
->>>>>>> Stashed changes
       setRejectModalVisible(false);
       setRejectLeadId(null);
       setRejectComment('');
       Alert.alert('Success', 'Lead rejected successfully.');
     } catch (err) {
-<<<<<<< Updated upstream
-=======
       console.log('[SurveyerScreen] ERROR:', err?.message, err?.stack);
-      console.log('[LocalleadsStorage] ERROR:', err?.message, err?.stack);
-
->>>>>>> Stashed changes
+      console.log('[Localleadsstorage] ERROR:', err?.message, err?.stack);
       Alert.alert('Error', err?.response?.data?.error || 'Failed to reject.');
     }
   };
 
-  // ── Start / Resume ────────────────────────────────────────────────────────
+  // â”€â”€ Start / Resume â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleStart = async (id) => {
     const lead = acceptedLeadsRef.current.find((l) => l.id === id);
     if (!lead) return;
@@ -506,7 +445,7 @@ const fetchAndMergeLeads = async () => {
 
     await updateAcceptedLeadStatus(id, 'inprogress');
 
-    // ✅ setAcceptedLeadsSafe use பண்றோம்
+    // âœ… setAcceptedLeadsSafe use à®ªà®£à¯à®±à¯‹à®®à¯
     setAcceptedLeadsSafe((prev) =>
       prev.map((l) => l.id === id ? { ...l, status: 'inprogress' } : l)
     );
@@ -520,11 +459,7 @@ const fetchAndMergeLeads = async () => {
       const startAt = Date.now();
       const dueAt   = startAt + (totalMins * 60 * 1000);
 
-<<<<<<< Updated upstream
-      tryApi(() => API.put('/order/updatestatus', { mobile: lead.phone, status: 'inprogress' }));
-=======
       tryApi(() => API.put('/order/updatestatus', { id: lead.dealId, status: 'inprogress' }));
->>>>>>> Stashed changes
       tryApi(() => API.post('/order/inprogress', { mobile: lead.phone, surveyorNumber }));
       tryApi(() => API.post('/order/sync-status', {
         customerMobile: lead.phone,
@@ -535,41 +470,31 @@ const fetchAndMergeLeads = async () => {
       }));
 
       try {
-<<<<<<< Updated upstream
-        await API.post('/notification/trigger', {
-          surveyorNumber, customerMobile: lead.phone, scenarioType: 1, eta: totalMins, mapsUrl,
-=======
         // scenarioType: 1 (handleStart)
         await API.post('/notification/trigger', {
           surveyorNumber, customerMobile: lead.phone, name: lead.name,
           scenarioType: 1, eta: totalMins, mapsUrl,
->>>>>>> Stashed changes
         });
       } catch (e) {
         console.log('[SurveyerScreen] Notification error:', e?.message);
       }
     } else {
-<<<<<<< Updated upstream
-      await enqueue(`notif_start_${id}`, 'NOTIFICATION', {
-        customerMobile: lead.phone, scenarioType: 1, eta: totalMins, mapsUrl,
-=======
       // offline queue version
       await enqueue(`notif_start_${id}`, 'NOTIFICATION', {
         customerMobile: lead.phone, name: lead.name, scenarioType: 1, eta: totalMins, mapsUrl,
->>>>>>> Stashed changes
       });
     }
 
-    // ✅ FIX 2: locationRef use பண்றோம் — stale closure இல்லை
+    // âœ… FIX 2: locationRef use à®ªà®£à¯à®±à¯‹à®®à¯ â€” stale closure à®‡à®²à¯à®²à¯ˆ
     startHighFrequencyTracking(() => locationRef.current);
 
     navigation.navigate('InProgress', {
-      lead: { ...lead, status: 'inprogress',dealId: lead.dealId, },
+      lead: { ...lead, status: 'inprogress', dealId: lead.dealId },
       initialLocation: locationRef.current,
     });
   };
 
-  // ── Toggle ────────────────────────────────────────────────────────────────
+  // â”€â”€ Toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleToggle = async () => {
     if (!isOn) {
       if (Platform.OS === 'android') {
@@ -588,20 +513,6 @@ const fetchAndMergeLeads = async () => {
         }
         NativeModules.StartStopService?.startService();
       } else if (Platform.OS === 'ios') {
-<<<<<<< Updated upstream
-  const granted = await requestIOSLocationPermission();
-  if (!granted) {
-    Alert.alert('Permission Required', 'Location permission is required.', [
-      { text: 'Open Settings', onPress: () => Linking.openSettings() },
-    ]);
-    return; // ← permission இல்லன்னா toggle ON ஆகாம return
-  }
-}
-setIsOn(true);
-await AsyncStorage.setItem('surveyer_is_on', 'true');
-startTracking();
-fetchAndMergeLeads();
-=======
         const granted = await requestIOSLocationPermission();
         if (!granted) {
           Alert.alert('Permission Required', 'Location permission is required.', [
@@ -614,7 +525,6 @@ fetchAndMergeLeads();
       await AsyncStorage.setItem('surveyer_is_on', 'true');
       startTracking();
       fetchAndMergeLeads();
->>>>>>> Stashed changes
     } else {
       setIsOn(false);
       await AsyncStorage.setItem('surveyer_is_on', 'false');
@@ -624,7 +534,7 @@ fetchAndMergeLeads();
     }
   };
 
-  // ── Logout ────────────────────────────────────────────────────────────────
+  // â”€â”€ Logout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
       { text: 'Cancel', style: 'cancel' },
@@ -644,106 +554,105 @@ fetchAndMergeLeads();
     ]);
   };
 
-  // ✅ ENHANCED: Auto-open Settings for never_ask_again with detailed handling
+  // âœ… ENHANCED: Auto-open Settings for never_ask_again with detailed handling
   const handleLogoPress = () => {
-  Alert.alert(
-    'Upload Photo',
-    'Take a photo to upload',
-    [
-      {
-        text: 'Take Photo',
-        onPress: async () => {
-          try {
-            const result = await requestCameraPermission();
-            
-            console.log('[Camera] Permission result:', result);
-            
-            if (result.neverAskAgain) {
-              Alert.alert(
-                'Camera Permission Blocked',
-                'Camera permission was denied. Please enable it in app settings.\n\nWe\'ll open the settings for you.',
-                [
-                  {
-                    text: 'Open Settings',
-                    onPress: () => {
-                      openAppSettings();
-                      setTimeout(() => {
-                        Alert.alert(
-                          'Enable Camera Permission',
-                          'Tap "Permissions" → Select "Camera" → Choose "Allow"'
-                        );
-                      }, 500);
+    Alert.alert(
+      'Upload Photo',
+      'Take a photo to upload',
+      [
+        {
+          text: 'Take Photo',
+          onPress: async () => {
+            try {
+              const result = await requestCameraPermission();
+
+              console.log('[Camera] Permission result:', result);
+
+              if (result.neverAskAgain) {
+                Alert.alert(
+                  'Camera Permission Blocked',
+                  'Camera permission was denied. Please enable it in app settings.\n\nWe\'ll open the settings for you.',
+                  [
+                    {
+                      text: 'Open Settings',
+                      onPress: () => {
+                        openAppSettings();
+                        setTimeout(() => {
+                          Alert.alert(
+                            'Enable Camera Permission',
+                            'Tap "Permissions" â†’ Select "Camera" â†’ Choose "Allow"'
+                          );
+                        }, 500);
+                      },
                     },
-                  },
-                  { text: 'Cancel', style: 'cancel' },
-                ]
-              );
-              return;
-            }
-            
-            if (!result.granted) {
-              Alert.alert(
-                'Camera Permission Denied',
-                'Camera permission is required to take photos. Please allow it when prompted.'
-              );
-              return;
-            }
-
-            launchCamera(
-              {
-                mediaType: 'photo',
-                cameraType: 'back',
-                quality: 0.8,
-                saveToPhotos: true,
-              },
-              (response) => {
-                if (response.didCancel) return;
-
-                if (response.errorCode) {
-                  Alert.alert('Camera Error', `Error: ${response.errorMessage || response.errorCode}`);
-                  return;
-                }
-
-                const photo = response.assets?.[0];
-                if (photo?.uri) {
-                  setUploadedPhoto(photo.uri);
-                  Alert.alert('Success', 'Photo captured successfully!');
-                }
+                    { text: 'Cancel', style: 'cancel' },
+                  ]
+                );
+                return;
               }
-            );
-          } catch (err) {
-            Alert.alert('Error', 'Failed to launch camera. Please try again.');
-          }
-        },
-      },
-      { text: 'Cancel', style: 'cancel' },
-    ]
-  );
-};
 
-  // ── Render ────────────────────────────────────────────────────────────────
+              if (!result.granted) {
+                Alert.alert(
+                  'Camera Permission Denied',
+                  'Camera permission is required to take photos. Please allow it when prompted.'
+                );
+                return;
+              }
+
+              launchCamera(
+                {
+                  mediaType: 'photo',
+                  cameraType: 'back',
+                  quality: 0.8,
+                  saveToPhotos: true,
+                },
+                (response) => {
+                  if (response.didCancel) return;
+
+                  if (response.errorCode) {
+                    Alert.alert('Camera Error', `Error: ${response.errorMessage || response.errorCode}`);
+                    return;
+                  }
+
+                  const photo = response.assets?.[0];
+                  if (photo?.uri) {
+                    setUploadedPhoto(photo.uri);
+                    Alert.alert('Success', 'Photo captured successfully!');
+                  }
+                }
+              );
+            } catch (err) {
+              Alert.alert('Error', 'Failed to launch camera. Please try again.');
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <View style={{ flex: 1 }}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
-      {/* ── OFF STATE ─────────────────────────────────────────────────────── */}
+      {/* â”€â”€ OFF STATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {!isOn && (
         <LinearGradient colors={['#F00001', '#B00100']} style={{ flex: 1 }}>
           <TouchableOpacity style={styles.offLogoutBtn} onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={28} color="#fff" />
           </TouchableOpacity>
           <View style={{ position: 'absolute', top: 50, right: 20, alignItems: 'center', zIndex: 10 }}>
-  <View style={styles.offToggleBtn}>
-    <Switch
-      trackColor={{ false: '#ffffff88', true: '#fff' }}
-      thumbColor="#ED1C25" value={isOn} onValueChange={handleToggle}
-    />
-  </View>
-  <TouchableOpacity style={{ marginTop: 10 }} onPress={handleLogoPress}>
-    <Ionicons name="cloud-upload-outline" size={28} color="#fff" />
-  </TouchableOpacity>
-</View>
-          
+            <View style={styles.offToggleBtn}>
+              <Switch
+                trackColor={{ false: '#ffffff88', true: '#fff' }}
+                thumbColor="#ED1C25" value={isOn} onValueChange={handleToggle}
+              />
+            </View>
+            <TouchableOpacity style={{ marginTop: 10 }} onPress={handleLogoPress}>
+              <Ionicons name="cloud-upload-outline" size={28} color="#fff" />
+            </TouchableOpacity>
+          </View>
 
           <ScrollView
             contentContainerStyle={{ paddingTop: 60, paddingBottom: 30 }}
@@ -772,15 +681,6 @@ fetchAndMergeLeads();
                   ? <ActivityIndicator size="large" color="#fff" style={{ marginTop: 20 }} />
                   : leads.map((item) => (
                       <LeadCard
-<<<<<<< Updated upstream
-                      key={item.id}
-  item={item}
-  type="unaccepted"
-  currentLocation={locationRef.current}
-  onAccept={handleAccept}
-  onReject={handleReject}
-/>
-=======
                         key={item.id}
                         item={item}
                         cardType="unaccepted"
@@ -788,7 +688,6 @@ fetchAndMergeLeads();
                         onAccept={handleAccept}
                         onReject={handleReject}
                       />
->>>>>>> Stashed changes
                     ))
                 }
               </>
@@ -797,7 +696,7 @@ fetchAndMergeLeads();
         </LinearGradient>
       )}
 
-      {/* ── ON STATE ──────────────────────────────────────────────────────── */}
+      {/* â”€â”€ ON STATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {isOn && (
         <>
           <View style={styles.fixedTopBar}>
@@ -929,7 +828,7 @@ fetchAndMergeLeads();
         </>
       )}
 
-      {/* ── Reject Modal ──────────────────────────────────────────────────── */}
+      {/* â”€â”€ Reject Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Modal
         visible={rejectModalVisible} transparent animationType="fade"
         onRequestClose={() => setRejectModalVisible(false)}
@@ -973,19 +872,19 @@ fetchAndMergeLeads();
 
 export default SurveyerScreen;
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Styles
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const styles = StyleSheet.create({
   logo: { width: 200, height: 100 },
   offLogoutBtn: { position: 'absolute', top: 55, left: 20, zIndex: 10 },
   offToggleBtn: {
-  backgroundColor: '#fff',
-  borderRadius: 20,
-  paddingHorizontal: 4,
-  paddingVertical: 2,
-  elevation: 4,
-},
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    elevation: 4,
+  },
   offTextContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   welcome: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
   message: { marginTop: 10, color: '#ffffffcc', textAlign: 'center', paddingHorizontal: 30 },
@@ -1073,7 +972,7 @@ const styles = StyleSheet.create({
   },
   modalSaveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
   uploadIconBtn: {
-  marginTop: 10,
-  alignItems: 'center',
-},
+    marginTop: 10,
+    alignItems: 'center',
+  },
 });

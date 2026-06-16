@@ -11,15 +11,15 @@ import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/nativ
 import { useLocationTracking, getDistance, stopHighFrequencyTracking } from '../service/locationService';
 import API from '../api/api1';
 import { USER_DATA } from '../service/localStorage';
-import { updateAcceptedLeadStatus } from '../service/LocalleadsStorage';
+import { updateAcceptedLeadStatus } from '../service/Localleadsstorage';
 import { enqueue } from '../service/syncQueue';
 import LeadCard from '../components/LeadCard';
 
 const { width } = Dimensions.get('window');
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // InProgressScreen
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const InProgressScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
@@ -37,7 +37,7 @@ const InProgressScreen = () => {
 
   const { currentLocation, setCurrentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
 
-  // ── Net watcher ───────────────────────────────────────────────────────────
+  // â”€â”€ Net watcher â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     const unsub = NetInfo.addEventListener((state) => {
       setIsOnline(!!state.isConnected && !!state.isInternetReachable);
@@ -66,7 +66,7 @@ const InProgressScreen = () => {
     };
   }, []);
 
-  // route.params.lead மாறும்போது state sync பண்ணு
+  // route.params.lead à®®à®¾à®±à¯à®®à¯à®ªà¯‹à®¤à¯ state sync à®ªà®£à¯à®£à¯
   useEffect(() => {
     const updatedLead = route.params?.lead;
     if (!updatedLead) return;
@@ -91,7 +91,7 @@ const InProgressScreen = () => {
     }, [route.params?.completedLeadId])
   );
 
-  // ── Helper: get surveyor number ───────────────────────────────────────────
+  // â”€â”€ Helper: get surveyor number â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const getSurveyorNumber = async () => {
     try {
       const userData = await AsyncStorage.getItem(USER_DATA);
@@ -102,7 +102,7 @@ const InProgressScreen = () => {
     }
   };
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
+  // â”€â”€ Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleManualEnable = async (item) => {
     setInProgressLeads((prev) =>
@@ -110,7 +110,10 @@ const InProgressScreen = () => {
     );
     const surveyorNumber = await getSurveyorNumber();
     try {
-      await API.post('/notification/trigger', { surveyorNumber, customerMobile: item.phone, scenarioType: 3 });
+      // handleManualEnable â€” scenarioType 3
+await API.post('/notification/trigger', {
+  surveyorNumber, customerMobile: item.phone, name: item.name, scenarioType: 3,
+});
     } catch (e) {}
     setSelectedLead({ ...item, id: item.id || item._id });
     setReachedModalVisible(true);
@@ -136,7 +139,7 @@ const InProgressScreen = () => {
     setCompletedModalVisible(true);
   };
 
-  // ✅ FIX: confirmMarkCompleted — sync-status call added for completed
+  // âœ… FIX: confirmMarkCompleted â€” with /order/complete endpoint
   const confirmMarkCompleted = async () => {
     const item = completedTargetLead;
     const leadId = item.id || item._id;
@@ -145,7 +148,7 @@ const InProgressScreen = () => {
 
     setCompletedModalVisible(false);
 
-    // Step 1 — Local update
+    // Step 1 â€” Local update
     await updateAcceptedLeadStatus(leadId, 'completed');
 
     setInProgressLeads((prev) => {
@@ -165,28 +168,20 @@ const InProgressScreen = () => {
       return updated;
     });
 
-    // Step 2 — API / Queue
+    // Step 2 â€” API / Queue
     if (isOnline) {
       const surveyorNumber = await getSurveyorNumber();
 
+      // 2a. Update order status
       try {
-<<<<<<< Updated upstream
-        await API.put('/order/updatestatus', { mobile: item.phone, status: 'completed' });
-      } catch (err) {
-        await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', {
-          mobile: item.phone, status: 'completed',
-        });
-      }
-=======
   await API.put('/order/updatestatus', { id: dealId, status: 'completed' });
 } catch (err) {
   await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', {
     id: leadId, status: 'completed',
   });
 }
->>>>>>> Stashed changes
 
-      // ✅ FIX: Flowtrix sync — completed
+      // 2b. Flowtrix sync
       try {
         await API.post('/order/sync-status', {
           customerMobile: item.phone,
@@ -203,17 +198,8 @@ const InProgressScreen = () => {
         });
       }
 
+      // âœ… 2c. NEW: Order completion endpoint (admin_complete collection)
       try {
-<<<<<<< Updated upstream
-        await API.post('/notification/trigger', {
-          customerMobile: item.phone, scenarioType: 4,
-        });
-      } catch (err) {
-        await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
-          customerMobile: item.phone, scenarioType: 4,
-        });
-      }
-=======
   await API.post('/order/complete', {
     customerMobile: item.phone,
     customerName: item.name,
@@ -221,9 +207,9 @@ const InProgressScreen = () => {
     surveyorNumber,
     receivedAt: endAt,
   });
-  console.log(`✅ Order completion tracked for ${item.phone}`);
+  console.log(`âœ… Order completion tracked for ${item.phone}`);
 } catch (err) {
-  console.log(`⚠️ /order/complete failed, queuing:`, err.message);
+  console.log(`âš ï¸ /order/complete failed, queuing:`, err.message);
   await enqueue(`order_complete_${leadId}`, 'ORDER_COMPLETE', {
     customerMobile: item.phone,
     customerName: item.name,
@@ -241,11 +227,11 @@ await API.post('/notification/trigger', {
 });
 } catch (err) {
   await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
-    customerMobile: item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
+    customerMobile: item.phone, name: item.name, scenarioType: 4,
   });
 }
->>>>>>> Stashed changes
     } else {
+      // Offline â€” queue all operations
       const surveyorNumber = await getSurveyorNumber();
       await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', {
         mobile: item.phone, status: 'completed',
@@ -256,13 +242,20 @@ await API.post('/notification/trigger', {
         status: 'completed',
         endAt,
       });
-      await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
-        customerMobile: item.phone, scenarioType: 4,
+      await enqueue(`order_complete_${leadId}`, 'ORDER_COMPLETE', {
+        customerMobile: item.phone,
+        surveyorNumber,
+        receivedAt: endAt,
       });
+      // Offline branch â€” also add name
+// AFTER
+await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
+  customerMobile: item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
+});
     }
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <View style={{ flex: 1, backgroundColor: '#F5F5F5' }}>
 
@@ -288,7 +281,7 @@ await API.post('/notification/trigger', {
       {!isOnline && (
         <View style={styles.offlineBanner}>
           <Ionicons name="cloud-offline-outline" size={14} color="#fff" style={{ marginRight: 6 }} />
-          <Text style={styles.offlineBannerText}>Offline — changes will sync when connected</Text>
+          <Text style={styles.offlineBannerText}>Offline â€” changes will sync when connected</Text>
         </View>
       )}
 
@@ -310,7 +303,7 @@ await API.post('/notification/trigger', {
         </View>
       </ScrollView>
 
-      {/* ── Reached Modal ── */}
+      {/* â”€â”€ Reached Modal â”€â”€ */}
       <Modal visible={reachedModalVisible} transparent animationType="fade"
         onRequestClose={() => setReachedModalVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -328,7 +321,7 @@ await API.post('/notification/trigger', {
               style={{ backgroundColor: '#ED1C25', width: '100%', paddingVertical: 13, borderRadius: 8, alignItems: 'center', marginBottom: 10 }}
               onPress={() => { setReachedModalVisible(false); handleSiteObservation(selectedLead); }}
             >
-              <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>🏗️  Start Site Observation</Text>
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>ðŸ—ï¸  Start Site Observation</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={{ backgroundColor: '#f1f1f1', width: '100%', paddingVertical: 13, borderRadius: 8, alignItems: 'center' }}
@@ -340,7 +333,7 @@ await API.post('/notification/trigger', {
         </View>
       </Modal>
 
-      {/* ── Completed Confirmation Modal ── */}
+      {/* â”€â”€ Completed Confirmation Modal â”€â”€ */}
       <Modal visible={completedModalVisible} transparent animationType="fade"
         onRequestClose={() => setCompletedModalVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -358,7 +351,7 @@ await API.post('/notification/trigger', {
               {completedTargetLead?.name}
             </Text>
             <Text style={{ fontSize: 13, color: '#666', marginBottom: 20, textAlign: 'center', lineHeight: 20 }}>
-              as completed. This means the job is done{'\n'}and the lead will be closed. ✅
+              as completed. This means the job is done{'\n'}and the lead will be closed. âœ…
             </Text>
 
             {/* Offline warning inside modal */}
@@ -379,7 +372,7 @@ await API.post('/notification/trigger', {
               style={{ backgroundColor: '#22c55e', width: '100%', paddingVertical: 13, borderRadius: 8, alignItems: 'center', marginBottom: 10 }}
               onPress={confirmMarkCompleted}
             >
-              <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>Yes, Mark as Completed 🎉</Text>
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>Yes, Mark as Completed ðŸŽ‰</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={{ backgroundColor: '#f1f1f1', width: '100%', paddingVertical: 13, borderRadius: 8, alignItems: 'center' }}
@@ -397,9 +390,9 @@ await API.post('/notification/trigger', {
 
 export default InProgressScreen;
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Styles
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const styles = StyleSheet.create({
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

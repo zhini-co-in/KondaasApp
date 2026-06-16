@@ -3,11 +3,14 @@ import notifee, { AndroidImportance, AndroidStyle, EventType } from '@notifee/re
 import API from '../api/api1';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { USER_DATA } from '../service/localStorage';
-import { saveAcceptedLead, getAcceptedLeads } from '../service/LocalleadsStorage';
+import {
+  saveAcceptedLead,
+  getAcceptedLeads
+} from '../service/Localleadsstorage';
 
-// ─────────────────────────────────────────────────────────────────
-// Channel — App start-ல் ஒரே ஒரு தடவை create பண்ணு
-// ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Channel â€” App start-à®²à¯ à®’à®°à¯‡ à®’à®°à¯ à®¤à®Ÿà®µà¯ˆ create à®ªà®£à¯à®£à¯
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function createNotificationChannel() {
   await notifee.createChannel({
     id: 'custom_sound_channel_v2',
@@ -23,28 +26,28 @@ export async function createNotificationChannel() {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Show Notification
-// ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function showLeadNotification(data) {
   if (!data) return;
 
-  // ✅ weekly_summary வந்தா skip பண்ணு
+  // âœ… weekly_summary à®µà®¨à¯à®¤à®¾ skip à®ªà®£à¯à®£à¯
   if (data.type === 'weekly_summary') {
-    console.log('[notificationService] Weekly summary — skipping lead UI');
+    console.log('[notificationService] Weekly summary â€” skipping lead UI');
     return;
   }
 
-  // ✅ leadId இல்லன்னா valid lead இல்லை
+  // âœ… leadId à®‡à®²à¯à®²à®©à¯à®©à®¾ valid lead à®‡à®²à¯à®²à¯ˆ
   if (!data.leadId && !data.customerMobile) {
-    console.log('[notificationService] No leadId/mobile — skipping');
+    console.log('[notificationService] No leadId/mobile â€” skipping');
     return;
   }
 
   await notifee.displayNotification({
     id: data.leadId || String(Date.now()),
-    title: '🔔 New Lead Nearby!',
-    body: `👤 ${data.customerName || 'Customer'}  ⚡ ${data.kilovolt || 'N/A'} kV`,
+    title: 'ðŸ”” New Lead Nearby!',
+    body: `ðŸ‘¤ ${data.customerName || 'Customer'}  âš¡ ${data.kilovolt || 'N/A'} kV`,
     data: {
       leadId:         data.leadId         || '',
       customerMobile: data.customerMobile || '',
@@ -58,23 +61,23 @@ export async function showLeadNotification(data) {
       pressAction:   { id: 'default' },
       showTimestamp: true,
       actions: [
-        { title: '✅ Accept', pressAction: { id: 'accept' } },
-        { title: '❌ Reject', pressAction: { id: 'reject' } },
+        { title: 'âœ… Accept', pressAction: { id: 'accept' } },
+        { title: 'âŒ Reject', pressAction: { id: 'reject' } },
       ],
       style: {
         type: AndroidStyle.BIGTEXT,
         text:
-          `👤 Name      : ${data.customerName || 'Unknown'}\n` +
-          `📍 Address   : ${data.address      || 'N/A'}\n`    +
-          `⚡ Kilovolts : ${data.kilovolt      || 'N/A'} kV\n`,
+          `ðŸ‘¤ Name      : ${data.customerName || 'Unknown'}\n` +
+          `ðŸ“ Address   : ${data.address      || 'N/A'}\n`    +
+          `âš¡ Kilovolts : ${data.kilovolt      || 'N/A'} kV\n`,
       },
     },
   });
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Helper — Surveyor number
-// ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Helper â€” Surveyor number
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function getSurveyorNumber() {
   try {
     const raw    = await AsyncStorage.getItem(USER_DATA);
@@ -86,9 +89,9 @@ async function getSurveyorNumber() {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Accept handler
-// ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function handleNotificationAccept(notifData) {
   const mobile = notifData?.customerMobile;
   if (!mobile) return;
@@ -113,15 +116,15 @@ async function handleNotificationAccept(notifData) {
     await API.post('/order/accept', { mobile, surveyorNumber });
     await API.put('/order/updatestatus', { mobile, status: 'accepted' });
 
-    console.log('✅ Accept done:', mobile);
+    console.log('âœ… Accept done:', mobile);
   } catch (e) {
     console.error('[notificationService] Accept error:', e?.message);
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Reject handler
-// ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function handleNotificationReject(mobile) {
   if (!mobile) return;
 
@@ -130,15 +133,15 @@ async function handleNotificationReject(mobile) {
       mobile,
       reason: 'Rejected via notification',
     });
-    console.log('❌ Reject done:', mobile);
+    console.log('âŒ Reject done:', mobile);
   } catch (e) {
     console.error('[notificationService] Reject error:', e?.message);
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Register handlers
-// ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function registerNotificationHandlers() {
 
   // Background
@@ -150,7 +153,7 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
   const actionId  = detail?.pressAction?.id;
   if (!notifData) return;
 
-  // ✅ weekly_summary notification-க்கு accept/reject வேண்டாம்
+  // âœ… weekly_summary notification-à®•à¯à®•à¯ accept/reject à®µà¯‡à®£à¯à®Ÿà®¾à®®à¯
   if (notifData.type === 'weekly_summary') {
     await notifee.cancelNotification(detail.notification.id);
     return;
@@ -162,7 +165,7 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
   await notifee.cancelNotification(detail.notification.id);
 });
 
-// Foreground — same guard
+// Foreground â€” same guard
 notifee.onForegroundEvent(async ({ type, detail }) => {
   if (type !== EventType.ACTION_PRESS) return;
 
@@ -170,7 +173,7 @@ notifee.onForegroundEvent(async ({ type, detail }) => {
   const actionId  = detail?.pressAction?.id;
   if (!notifData) return;
 
-  // ✅ same check
+  // âœ… same check
   if (notifData.type === 'weekly_summary') {
     await notifee.cancelNotification(detail.notification.id);
     return;

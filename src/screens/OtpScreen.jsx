@@ -15,10 +15,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { storeData, getStorageData, USER_DATA } from "../service/localStorage";
 import { SCREEN_NAMES } from "../constants/screenNames";
 
-<<<<<<< Updated upstream
-// const BASE_URL = "https://board.trisentrix.com";
-=======
->>>>>>> Stashed changes
 const BASE_URL = "http://192.168.0.3:8080";
 
 // ─────────────────────────────────────────────────────────────

@@ -5,19 +5,10 @@ import { getAuth } from "@react-native-firebase/auth";
 import DeviceInfo from "react-native-device-info";
 import { USER_DATA, getSessionInfo } from "../service/localStorage";
 
-<<<<<<< Updated upstream
-// const BASE_URL = "https://board.trisentrix.com";
-=======
-const BASE_URL = "http://192.168.0.3:8080";
->>>>>>> Stashed changes
 
 const BASE_URL = "http://192.168.0.3:8080";
 
 // ─────────────────────────────────────────────────────────────
-// Axios instance
-// NOTE: இந்த instance-ஐ solarman routes-க்கு use பண்ணாதே.
-//       SyncQueue (order/*, user/add, notification/*) மட்டும் use பண்ணு.
-//       Solarman routes எல்லாம் கீழே உள்ள solarmanFetch helper use பண்றது.
 // ─────────────────────────────────────────────────────────────
 const API1 = axios.create({
   baseURL: BASE_URL,

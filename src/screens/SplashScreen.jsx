@@ -86,7 +86,6 @@ if (role === "admin") {
     index: 0,
     routes: [{ name: SCREEN_NAMES.LOGISTIC_SCREEN }],
   });
-<<<<<<< Updated upstream
 }  else if (role === "installer") {
   console.log("Installer role detected → Navigating to Installer Screen");
   navigation.reset({
@@ -94,9 +93,6 @@ if (role === "admin") {
     routes: [{ name: SCREEN_NAMES.INSTALLER_SCREEN }],
   });
 }  else if (role === "surveyer") {
-=======
-} else if (role === "surveyor") {
->>>>>>> Stashed changes
   console.log("Surveyer role detected → Navigating to Surveyer Screen");
   navigation.reset({
     index: 0,

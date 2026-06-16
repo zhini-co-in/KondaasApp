@@ -11,12 +11,12 @@ import {
   getCachedTemplate,
   saveFormDataLocally,
   getSavedFormData,
-} from '../service/LocalleadsStorage';
+} from '../service/Localleadsstorage';
 import { enqueue } from '../service/syncQueue';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { USER_DATA } from '../service/localStorage';
 
-// ── Types ──────────────────────────────────────────────────────────────────
+// â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface FieldProperty {
   title?: string;
   description?: string;
@@ -35,7 +35,7 @@ interface UISchema { type: string; elements: UIElement[]; }
 interface Template { id: string; schema: Schema; uischema: UISchema; }
 interface Lead { id: string; name: string; phone: string; [key: string]: string; }
 
-// ── Dropdown Component ─────────────────────────────────────────────────────
+// â”€â”€ Dropdown Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const DropdownPicker = ({
   label, options, value, onChange, required,
 }: {
@@ -79,7 +79,7 @@ const DropdownPicker = ({
   );
 };
 
-// ── Field Renderer ─────────────────────────────────────────────────────────
+// â”€â”€ Field Renderer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const renderField = (
   fieldKey: string, field: FieldProperty,
   formValues: Record<string, string>,
@@ -153,7 +153,7 @@ const renderField = (
   );
 };
 
-// ── Main Screen ────────────────────────────────────────────────────────────
+// â”€â”€ Main Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const FormScreen = ({
   route, navigation,
 }: {
@@ -170,7 +170,7 @@ const FormScreen = ({
   const [isOnline, setIsOnline]           = useState(true);
   const [offlineBanner, setOfflineBanner] = useState(false);
 
-  // ── Net status ───────────────────────────────────────────────────────────
+  // â”€â”€ Net status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     const unsub = NetInfo.addEventListener((state) => {
       const online = !!state.isConnected && !!state.isInternetReachable;
@@ -180,12 +180,12 @@ const FormScreen = ({
     return () => unsub();
   }, []);
 
-  // ── Load template ────────────────────────────────────────────────────────
+  // â”€â”€ Load template â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     fetchTemplate();
   }, []);
 
-  // ── Restore draft / edit data ────────────────────────────────────────────
+  // â”€â”€ Restore draft / edit data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!template) return;
     const restoreData = async () => {
@@ -219,13 +219,13 @@ const FormScreen = ({
     restoreData();
   }, [template]);
 
-  // ── Auto-save draft ──────────────────────────────────────────────────────
+  // â”€â”€ Auto-save draft â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (Object.keys(formValues).length === 0) return;
     saveFormDataLocally(lead.id, formValues);
   }, [formValues]);
 
-  // ── Fetch template ───────────────────────────────────────────────────────
+  // â”€â”€ Fetch template â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const fetchTemplate = async () => {
     try {
       const res = await API.get('/template/get');
@@ -251,7 +251,7 @@ const FormScreen = ({
     }
   };
 
-  // ── Submit (New) — status-ஐ மாத்தாம just goBack ────────────────────────
+  // â”€â”€ Submit (New) â€” status-à® à®®à®¾à®¤à¯à®¤à®¾à®® just goBack â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleSubmit = async () => {
     setSubmitting(true);
     const formPayload = { mobileNumber: lead.phone, ...formValues };
@@ -259,8 +259,8 @@ const FormScreen = ({
     if (isOnline) {
       try {
         await API.post('/user/add', formPayload);
-        // ✅ Status மாத்தல — InProgressScreen-ல் "Completed" button click பண்ணினா மட்டும் மாறும்
-        Alert.alert('✓ Submitted', 'Form submitted successfully!', [
+        // âœ… Status à®®à®¾à®¤à¯à®¤à®² â€” InProgressScreen-à®²à¯ "Completed" button click à®ªà®£à¯à®£à®¿à®©à®¾ à®®à®Ÿà¯à®Ÿà¯à®®à¯ à®®à®¾à®±à¯à®®à¯
+        Alert.alert('âœ“ Submitted', 'Form submitted successfully!', [
           { text: 'OK', onPress: _navigateBack },
         ]);
       } catch (err: any) {
@@ -276,7 +276,7 @@ const FormScreen = ({
           mobile: lead.phone,
         });
         Alert.alert(
-          '✓ Saved Offline',
+          'âœ“ Saved Offline',
           'Form saved locally. It will be submitted automatically when internet is available.',
           [{ text: 'OK', onPress: _navigateBack }]
         );
@@ -288,7 +288,7 @@ const FormScreen = ({
     }
   };
 
-  // ── Update (Edit mode) ───────────────────────────────────────────────────
+  // â”€â”€ Update (Edit mode) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleUpdate = async () => {
     setSubmitting(true);
     const updatePayload = { mobileNumber: lead.phone, ...formValues };
@@ -296,7 +296,7 @@ const FormScreen = ({
     if (isOnline) {
       try {
         await API.put('https://board.trisentrix.com/user/update', updatePayload);
-        Alert.alert('✓ Updated', 'Form updated successfully!', [
+        Alert.alert('âœ“ Updated', 'Form updated successfully!', [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
       } catch (err: any) {
@@ -313,7 +313,7 @@ const FormScreen = ({
           url: 'https://board.trisentrix.com/user/update',
         });
         Alert.alert(
-          '✓ Saved Offline',
+          'âœ“ Saved Offline',
           'Update saved locally. It will be synced when internet is available.',
           [{ text: 'OK', onPress: () => navigation.goBack() }]
         );
@@ -325,7 +325,7 @@ const FormScreen = ({
     }
   };
 
-  // ✅ Submit பண்ணினா InProgressScreen-க்கு திரும்பு — status மாத்தல வேண்டாம்
+  // âœ… Submit à®ªà®£à¯à®£à®¿à®©à®¾ InProgressScreen-à®•à¯à®•à¯ à®¤à®¿à®°à¯à®®à¯à®ªà¯ â€” status à®®à®¾à®¤à¯à®¤à®² à®µà¯‡à®£à¯à®Ÿà®¾à®®à¯
   const _navigateBack = () => {
     navigation.reset({
       index: 1,
@@ -334,15 +334,15 @@ const FormScreen = ({
         {
           name: 'InProgress',
           params: {
-            lead: { ...lead, manualSiteEnabled: true }, // ✅ status மாத்தல — as-is pass பண்ணு
-            completedLeadId: null, // ✅ null — auto-complete trigger ஆகாது
+            lead: { ...lead, manualSiteEnabled: true }, // âœ… status à®®à®¾à®¤à¯à®¤à®² â€” as-is pass à®ªà®£à¯à®£à¯
+            completedLeadId: null, // âœ… null â€” auto-complete trigger à®†à®•à®¾à®¤à¯
           },
         },
       ],
     });
   };
 
-  // ── Loading ──────────────────────────────────────────────────────────────
+  // â”€â”€ Loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (loading) {
     return (
       <View style={styles.center}>
@@ -394,7 +394,7 @@ const FormScreen = ({
         <View style={styles.offlineBanner}>
           <Ionicons name="cloud-offline-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
           <Text style={styles.offlineBannerText}>
-            You're offline — form will be submitted when connected
+            You're offline â€” form will be submitted when connected
           </Text>
         </View>
       )}
@@ -454,7 +454,7 @@ const FormScreen = ({
 
 export default FormScreen;
 
-// ── Styles ───────────────────────────────────────────────────────────────────
+// â”€â”€ Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
