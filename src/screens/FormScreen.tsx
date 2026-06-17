@@ -376,6 +376,7 @@ const FormScreen = ({
         // Add JSON data as a single field (backend expects this)
         const dataPayload = {
           mobileNumber: lead.phone,
+          deal_id: lead.id,
           ...formValues,
         };
         formData.append('data', JSON.stringify(dataPayload));
