@@ -1,40 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, ActivityIndicator,
-  StyleSheet, TextInput, TouchableOpacity, Alert, Modal, FlatList,
+  StyleSheet, TextInput, TouchableOpacity, Alert, Modal, FlatList, Image,
 } from 'react-native';
 import API from '../api/api1';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import NetInfo from '@react-native-community/netinfo';
 import {
-  cacheTemplate,
-  getCachedTemplate,
-  saveFormDataLocally,
-  getSavedFormData,
+  cacheTemplate, getCachedTemplate,
+  saveFormDataLocally, getSavedFormData,
 } from '../service/Localleadsstorage';
 import { enqueue } from '../service/syncQueue';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { USER_DATA } from '../service/localStorage';
+import { launchImageLibrary } from 'react-native-image-picker';
 
 interface FieldProperty {
-  title?: string;
-  description?: string;
-  type?: string;
-  enum?: string[];
-  properties?: Record<string, FieldProperty>;
-  format?: string;
+  title?: string; description?: string; type?: string;
+  enum?: string[]; properties?: Record<string, FieldProperty>; format?: string;
 }
 interface SchemaProperties { [key: string]: FieldProperty; }
 interface Schema { properties?: SchemaProperties; required?: string[]; }
 interface UIElement {
   type: string; scope?: string; label?: string;
-  elements?: UIElement[]; options?: { multi?: boolean };
+  elements?: UIElement[]; options?: { multi?: boolean; uploadType?: string };
 }
 interface UISchema { type: string; elements: UIElement[]; }
 interface Template { id: string; schema: Schema; uischema: UISchema; }
 interface Lead { id: string; name: string; phone: string; [key: string]: string; }
 
-// â”€â”€ Dropdown Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Dropdown ──────────────────────────────────────────────────────────────────
 const DropdownPicker = ({
   label, options, value, onChange, required,
 }: {
@@ -53,7 +48,6 @@ const DropdownPicker = ({
         </Text>
         <Ionicons name="chevron-down-outline" size={16} color="#888" />
       </TouchableOpacity>
-
       <Modal visible={visible} transparent animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setVisible(false)}>
           <View style={styles.dropdownModal}>
@@ -78,15 +72,131 @@ const DropdownPicker = ({
   );
 };
 
-// â”€â”€ Field Renderer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── EB Bill Upload Field (MODIFIED: Just collects files, doesn't upload immediately) ───
+interface PhotoFile {
+  uri: string;
+  name: string;
+  type: string;
+}
+
+const EbBillUploadField = ({
+  label, photoFiles, onChange, required,
+}: {
+  label: string; photoFiles: PhotoFile[];
+  onChange: (files: PhotoFile[]) => void; required?: boolean;
+}) => {
+  const [previewUris, setPreviewUris] = useState<string[]>(photoFiles.map(f => f.uri));
+
+  const handlePick = async () => {
+    launchImageLibrary(
+      { mediaType: 'photo', selectionLimit: 6, quality: 0.8 },
+      (response) => {
+        if (response.didCancel || response.errorCode) return;
+        const assets = response.assets ?? [];
+        if (assets.length === 0) return;
+
+        // Convert to PhotoFile format
+        const newFiles: PhotoFile[] = assets.map((asset) => ({
+          uri: asset.uri ?? '',
+          name: asset.fileName ?? asset.uri?.split('/').pop() ?? `eb_bill_${Date.now()}.jpg`,
+          type: asset.type ?? 'image/jpeg',
+        })).filter(f => f.uri);
+
+        // Update both preview and parent state
+        setPreviewUris(newFiles.map(f => f.uri));
+        onChange(newFiles);
+      }
+    );
+  };
+
+  return (
+    <View style={styles.fieldContainer}>
+      <Text style={styles.label}>
+        {label} {required && <Text style={{ color: '#ED1C25' }}>*</Text>}
+      </Text>
+
+      <TouchableOpacity
+        style={{
+          borderWidth: 1.5,
+          borderColor: photoFiles.length > 0 ? '#22c55e' : '#ED1C25',
+          borderStyle: 'dashed',
+          borderRadius: 8,
+          padding: 16,
+          alignItems: 'center',
+          backgroundColor: photoFiles.length > 0 ? '#f0fdf4' : '#fff5f5',
+          flexDirection: 'row',
+          justifyContent: 'center',
+          gap: 8,
+        }}
+        onPress={handlePick}
+      >
+        <>
+          <Ionicons
+            name={photoFiles.length > 0 ? 'checkmark-circle' : 'cloud-upload-outline'}
+            size={24}
+            color={photoFiles.length > 0 ? '#22c55e' : '#ED1C25'}
+          />
+          <Text style={{
+            color: photoFiles.length > 0 ? '#22c55e' : '#ED1C25',
+            fontWeight: '600', fontSize: 13,
+          }}>
+            {photoFiles.length > 0 ? `✅ ${photoFiles.length} Bill(s) Selected` : 'Select Last 6 Months EB Bills'}
+          </Text>
+        </>
+      </TouchableOpacity>
+
+      {/* Preview thumbnails */}
+      {previewUris.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
+          {previewUris.map((uri, idx) => (
+            <Image
+              key={idx}
+              source={{ uri }}
+              style={{
+                width: 60, height: 60, borderRadius: 6,
+                marginRight: 8, borderWidth: 1, borderColor: '#ddd',
+              }}
+            />
+          ))}
+        </ScrollView>
+      )}
+
+      {photoFiles.length > 0 && (
+        <Text style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
+          Tap to change bills • Will upload on form submission
+        </Text>
+      )}
+    </View>
+  );
+};
+
+// ── Field Renderer ─────────────────────────────────────────────────────────────
 const renderField = (
-  fieldKey: string, field: FieldProperty,
+  fieldKey: string,
+  field: FieldProperty,
   formValues: Record<string, string>,
   setFormValues: React.Dispatch<React.SetStateAction<Record<string, string>>>,
-  required: boolean, isMulti?: boolean
+  photoFiles: PhotoFile[],
+  setPhotoFiles: React.Dispatch<React.SetStateAction<PhotoFile[]>>,
+  required: boolean,
+  isMulti?: boolean,
+  uploadType?: string,
 ) => {
   const label = field.title ?? fieldKey;
   const value = formValues[fieldKey] ?? '';
+
+  // ✅ EB Bill upload — special field
+  if (fieldKey === 'ebBillUpload' || uploadType === 'ebBill') {
+    return (
+      <EbBillUploadField
+        key={fieldKey}
+        label={label}
+        photoFiles={photoFiles}
+        onChange={(files) => setPhotoFiles(files)}
+        required={required}
+      />
+    );
+  }
 
   if (field.enum && field.enum.length > 0) {
     return (
@@ -152,7 +262,7 @@ const renderField = (
   );
 };
 
-// â”€â”€ Main Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Main Screen ────────────────────────────────────────────────────────────────
 const FormScreen = ({
   route, navigation,
 }: {
@@ -165,11 +275,12 @@ const FormScreen = ({
   const [template, setTemplate]           = useState<Template | null>(null);
   const [loading, setLoading]             = useState(true);
   const [formValues, setFormValues]       = useState<Record<string, string>>({});
+  const [photoFiles, setPhotoFiles]       = useState<PhotoFile[]>([]);
   const [submitting, setSubmitting]       = useState(false);
   const [isOnline, setIsOnline]           = useState(true);
   const [offlineBanner, setOfflineBanner] = useState(false);
 
-  // â”€â”€ Net status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Net status ────────────────────────────────────────────────────────────
   useEffect(() => {
     const unsub = NetInfo.addEventListener((state) => {
       const online = !!state.isConnected && !!state.isInternetReachable;
@@ -179,12 +290,10 @@ const FormScreen = ({
     return () => unsub();
   }, []);
 
-  // â”€â”€ Load template â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  useEffect(() => {
-    fetchTemplate();
-  }, []);
+  // ── Load template ─────────────────────────────────────────────────────────
+  useEffect(() => { fetchTemplate(); }, []);
 
-  // â”€â”€ Restore draft / edit data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Restore draft / edit data ─────────────────────────────────────────────
   useEffect(() => {
     if (!template) return;
     const restoreData = async () => {
@@ -206,7 +315,6 @@ const FormScreen = ({
           flatten(existing);
           setFormValues(flattened);
         } catch (err) {
-          console.log('[FormScreen] Edit fetch failed, trying local draft');
           const draft = await getSavedFormData(lead.id);
           if (draft) setFormValues(draft);
         }
@@ -218,6 +326,7 @@ const FormScreen = ({
     restoreData();
   }, [template]);
 
+  // ── Auto-save draft ───────────────────────────────────────────────────────
   useEffect(() => {
     if (Object.keys(formValues).length === 0) return;
     saveFormDataLocally(lead.id, formValues);
@@ -248,35 +357,85 @@ const FormScreen = ({
     }
   };
 
-  // â”€â”€ Submit (New) â€” status-à® à®®à®¾à®¤à¯à®¤à®¾à®® just goBack â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Submit (New) - MODIFIED: Now sends multipart with files ──────────────
   const handleSubmit = async () => {
+    // Validate required EB bills if field is required
+    const ebBillRequired = template?.schema?.required?.includes('ebBillUpload');
+    if (ebBillRequired && photoFiles.length === 0) {
+      Alert.alert('Validation Error', 'Please select at least one EB bill photo');
+      return;
+    }
+
     setSubmitting(true);
-    const formPayload = { mobileNumber: lead.phone, ...formValues };
 
     if (isOnline) {
       try {
-        await API.post('/user/add', formPayload);
-        // âœ… Status à®®à®¾à®¤à¯à®¤à®² â€” InProgressScreen-à®²à¯ "Completed" button click à®ªà®£à¯à®£à®¿à®©à®¾ à®®à®Ÿà¯à®Ÿà¯à®®à¯ à®®à®¾à®±à¯à®®à¯
-        Alert.alert('âœ“ Submitted', 'Form submitted successfully!', [
-          { text: 'OK', onPress: _navigateBack },
-        ]);
+        // Create FormData for multipart submission
+        const formData = new FormData();
+        
+        // Add JSON data as a single field (backend expects this)
+        const dataPayload = {
+          mobileNumber: lead.phone,
+          ...formValues,
+        };
+        formData.append('data', JSON.stringify(dataPayload));
+
+        // Add EB bill photos (backend expects 'ebBillPhotos')
+        photoFiles.forEach((file, index) => {
+          formData.append('ebBillPhotos', {
+            uri: file.uri,
+            name: file.name,
+            type: file.type,
+          } as any);
+        });
+
+        console.log(`📤 Submitting form with ${photoFiles.length} EB bill(s)...`);
+        
+        // Send to backend endpoint
+        const res = await API.post('/user/add', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+
+        if (res.status === 201 || res.data?.message) {
+          Alert.alert('✔ Submitted', 'Form submitted successfully with EB bill photos!', [
+            { text: 'OK', onPress: _navigateBack },
+          ]);
+          // Clear form after successful submission
+          setFormValues({});
+          setPhotoFiles([]);
+        }
       } catch (err: any) {
-        Alert.alert('Error', err?.response?.data?.error || 'Submit failed. Please try again.');
+        console.error('Submit error:', err);
+        Alert.alert(
+          'Error',
+          err?.response?.data?.error || err?.message || 'Submit failed. Please try again.',
+        );
       } finally {
         setSubmitting(false);
       }
     } else {
+      // Offline: Save for later sync
       try {
-        await saveFormDataLocally(lead.id, formPayload);
+        const offlinePayload = {
+          mobileNumber: lead.phone,
+          ...formValues,
+          _photoFiles: photoFiles, // Store photo files info
+        };
+        await saveFormDataLocally(lead.id, offlinePayload);
         await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', {
-          formData: formPayload,
+          formData: offlinePayload,
+          photoFiles: photoFiles,
           mobile: lead.phone,
         });
         Alert.alert(
-          'âœ“ Saved Offline',
-          'Form saved locally. It will be submitted automatically when internet is available.',
+          '✔ Saved Offline',
+          'Form and photos saved locally. Will be submitted when internet is available.',
           [{ text: 'OK', onPress: _navigateBack }]
         );
+        setFormValues({});
+        setPhotoFiles([]);
       } catch (e) {
         Alert.alert('Error', 'Failed to save form offline.');
       } finally {
@@ -285,35 +444,72 @@ const FormScreen = ({
     }
   };
 
-  // â”€â”€ Update (Edit mode) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Update (Edit) - MODIFIED: Now sends multipart with files ──────────────
   const handleUpdate = async () => {
     setSubmitting(true);
-    const updatePayload = { mobileNumber: lead.phone, ...formValues };
 
     if (isOnline) {
       try {
-        await API.put('https://board.trisentrix.com/user/update', updatePayload);
-        Alert.alert('âœ“ Updated', 'Form updated successfully!', [
+        const formData = new FormData();
+        
+        const updatePayload = {
+          mobileNumber: lead.phone,
+          ...formValues,
+        };
+        formData.append('data', JSON.stringify(updatePayload));
+
+        // Add any new EB bill photos
+        photoFiles.forEach((file) => {
+          formData.append('ebBillPhotos', {
+            uri: file.uri,
+            name: file.name,
+            type: file.type,
+          } as any);
+        });
+
+        console.log(`📤 Updating form with ${photoFiles.length} EB bill(s)...`);
+
+        const res = await API.put('https://board.trisentrix.com/user/update', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+
+        Alert.alert('✔ Updated', 'Form updated successfully!', [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
+        setFormValues({});
+        setPhotoFiles([]);
       } catch (err: any) {
-        Alert.alert('Error', err?.response?.data?.error || 'Update failed. Please try again.');
+        console.error('Update error:', err);
+        Alert.alert(
+          'Error',
+          err?.response?.data?.error || err?.message || 'Update failed. Please try again.',
+        );
       } finally {
         setSubmitting(false);
       }
     } else {
       try {
-        await saveFormDataLocally(lead.id, updatePayload);
+        const offlinePayload = {
+          mobileNumber: lead.phone,
+          ...formValues,
+          _photoFiles: photoFiles,
+        };
+        await saveFormDataLocally(lead.id, offlinePayload);
         await enqueue(`form_update_${lead.id}`, 'FORM_UPDATE', {
-          formData: updatePayload,
+          formData: offlinePayload,
+          photoFiles: photoFiles,
           mobile: lead.phone,
           url: 'https://board.trisentrix.com/user/update',
         });
         Alert.alert(
-          'âœ“ Saved Offline',
-          'Update saved locally. It will be synced when internet is available.',
+          '✔ Saved Offline',
+          'Update saved locally with photos. Will be synced when online.',
           [{ text: 'OK', onPress: () => navigation.goBack() }]
         );
+        setFormValues({});
+        setPhotoFiles([]);
       } catch (e) {
         Alert.alert('Error', 'Failed to save update offline.');
       } finally {
@@ -322,7 +518,6 @@ const FormScreen = ({
     }
   };
 
-  // âœ… Submit à®ªà®£à¯à®£à®¿à®©à®¾ InProgressScreen-à®•à¯à®•à¯ à®¤à®¿à®°à¯à®®à¯à®ªà¯ â€” status à®®à®¾à®¤à¯à®¤à®² à®µà¯‡à®£à¯à®Ÿà®¾à®®à¯
   const _navigateBack = () => {
     navigation.reset({
       index: 1,
@@ -331,15 +526,15 @@ const FormScreen = ({
         {
           name: 'InProgress',
           params: {
-            lead: { ...lead, manualSiteEnabled: true }, // âœ… status à®®à®¾à®¤à¯à®¤à®² â€” as-is pass à®ªà®£à¯à®£à¯
-            completedLeadId: null, // âœ… null â€” auto-complete trigger à®†à®•à®¾à®¤à¯
+            lead: { ...lead, manualSiteEnabled: true },
+            completedLeadId: null,
           },
         },
       ],
     });
   };
 
-  // â”€â”€ Loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Loading ───────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <View style={styles.center}>
@@ -391,7 +586,7 @@ const FormScreen = ({
         <View style={styles.offlineBanner}>
           <Ionicons name="cloud-offline-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
           <Text style={styles.offlineBannerText}>
-            You're offline â€” form will be submitted when connected
+            You're offline — form will be submitted when connected
           </Text>
         </View>
       )}
@@ -407,12 +602,23 @@ const FormScreen = ({
               <Text style={styles.sectionTitle}>{group.label}</Text>
             </View>
             {(group.elements ?? []).map((element) => {
-              const fieldKey = element.scope?.split('/').pop() ?? '';
-              const field    = properties[fieldKey];
+              const fieldKey   = element.scope?.split('/').pop() ?? '';
+              const field      = properties[fieldKey];
               if (!field) return null;
               const isRequired = requiredFields.includes(fieldKey);
               const isMulti    = element.options?.multi === true;
-              return renderField(fieldKey, field, formValues, setFormValues, isRequired, isMulti);
+              const uploadType = element.options?.uploadType;
+              return renderField(
+                fieldKey,
+                field,
+                formValues,
+                setFormValues,
+                photoFiles,
+                setPhotoFiles,
+                isRequired,
+                isMulti,
+                uploadType,
+              );
             })}
           </View>
         ))}
@@ -451,7 +657,7 @@ const FormScreen = ({
 
 export default FormScreen;
 
-// â”€â”€ Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Styles ─────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {

@@ -5,6 +5,24 @@ import { getDistance } from '../service/locationService';
 import API from '../api/api1';
 import { StyleSheet } from 'react-native'; // or inline styles
 
+const formatDate = (dateStr) => {
+  if (!dateStr) return '—';
+  try {
+    const date = new Date(dateStr);
+    return date.toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Kolkata',
+    });
+  } catch {
+    return dateStr;
+  }
+};
+
 const LeadCard = ({
   item,
   cardType, // 'unaccepted' | 'accepted' | 'inprogress' | 'completed'
