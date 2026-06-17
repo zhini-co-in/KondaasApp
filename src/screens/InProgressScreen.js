@@ -17,9 +17,9 @@ import LeadCard from '../components/LeadCard';
 
 const { width } = Dimensions.get('window');
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 // InProgressScreen
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 const InProgressScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
@@ -37,7 +37,7 @@ const InProgressScreen = () => {
 
   const { currentLocation, setCurrentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
 
-  // â”€â”€ Net watcher â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Net watcher ───────────────────────────────────────────────────────────
   useEffect(() => {
     const unsub = NetInfo.addEventListener((state) => {
       setIsOnline(!!state.isConnected && !!state.isInternetReachable);
@@ -66,7 +66,7 @@ const InProgressScreen = () => {
     };
   }, []);
 
-  // route.params.lead à®®à®¾à®±à¯à®®à¯à®ªà¯‹à®¤à¯ state sync à®ªà®£à¯à®£à¯
+  // route.params.lead மாறும்போது state sync பண்ணு
   useEffect(() => {
     const updatedLead = route.params?.lead;
     if (!updatedLead) return;
@@ -91,7 +91,7 @@ const InProgressScreen = () => {
     }, [route.params?.completedLeadId])
   );
 
-  // â”€â”€ Helper: get surveyor number â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Helper: get surveyor number ───────────────────────────────────────────
   const getSurveyorNumber = async () => {
     try {
       const userData = await AsyncStorage.getItem(USER_DATA);
@@ -102,7 +102,7 @@ const InProgressScreen = () => {
     }
   };
 
-  // â”€â”€ Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleManualEnable = async (item) => {
     setInProgressLeads((prev) =>
@@ -110,7 +110,7 @@ const InProgressScreen = () => {
     );
     const surveyorNumber = await getSurveyorNumber();
     try {
-      // handleManualEnable â€” scenarioType 3
+      // handleManualEnable — scenarioType 3
 await API.post('/notification/trigger', {
   surveyorNumber, customerMobile: item.phone, name: item.name, scenarioType: 3,
 });
@@ -139,7 +139,7 @@ await API.post('/notification/trigger', {
     setCompletedModalVisible(true);
   };
 
-  // âœ… FIX: confirmMarkCompleted â€” with /order/complete endpoint
+  // ✅ FIX: confirmMarkCompleted — with /order/complete endpoint
   const confirmMarkCompleted = async () => {
     const item = completedTargetLead;
     const leadId = item.id || item._id;
@@ -148,7 +148,7 @@ await API.post('/notification/trigger', {
 
     setCompletedModalVisible(false);
 
-    // Step 1 â€” Local update
+    // Step 1 — Local update
     await updateAcceptedLeadStatus(leadId, 'completed');
 
     setInProgressLeads((prev) => {
@@ -168,7 +168,7 @@ await API.post('/notification/trigger', {
       return updated;
     });
 
-    // Step 2 â€” API / Queue
+    // Step 2 — API / Queue
     if (isOnline) {
       const surveyorNumber = await getSurveyorNumber();
 
@@ -198,7 +198,7 @@ await API.post('/notification/trigger', {
         });
       }
 
-      // âœ… 2c. NEW: Order completion endpoint (admin_complete collection)
+      // ✅ 2c. NEW: Order completion endpoint (admin_complete collection)
       try {
   await API.post('/order/complete', {
     customerMobile: item.phone,
@@ -207,9 +207,9 @@ await API.post('/notification/trigger', {
     surveyorNumber,
     receivedAt: endAt,
   });
-  console.log(`âœ… Order completion tracked for ${item.phone}`);
+  console.log(`✅ Order completion tracked for ${item.phone}`);
 } catch (err) {
-  console.log(`âš ï¸ /order/complete failed, queuing:`, err.message);
+  console.log(`⚠️ /order/complete failed, queuing:`, err.message);
   await enqueue(`order_complete_${leadId}`, 'ORDER_COMPLETE', {
     customerMobile: item.phone,
     customerName: item.name,
@@ -231,7 +231,7 @@ await API.post('/notification/trigger', {
   });
 }
     } else {
-      // Offline â€” queue all operations
+      // Offline — queue all operations
       const surveyorNumber = await getSurveyorNumber();
       await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', {
         mobile: item.phone, status: 'completed',
@@ -247,7 +247,7 @@ await API.post('/notification/trigger', {
         surveyorNumber,
         receivedAt: endAt,
       });
-      // Offline branch â€” also add name
+      // Offline branch — also add name
 // AFTER
 await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
   customerMobile: item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
@@ -255,7 +255,7 @@ await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
     }
   };
 
-  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <View style={{ flex: 1, backgroundColor: '#F5F5F5' }}>
 
@@ -281,7 +281,7 @@ await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
       {!isOnline && (
         <View style={styles.offlineBanner}>
           <Ionicons name="cloud-offline-outline" size={14} color="#fff" style={{ marginRight: 6 }} />
-          <Text style={styles.offlineBannerText}>Offline â€” changes will sync when connected</Text>
+          <Text style={styles.offlineBannerText}>Offline — changes will sync when connected</Text>
         </View>
       )}
 
@@ -303,7 +303,7 @@ await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
         </View>
       </ScrollView>
 
-      {/* â”€â”€ Reached Modal â”€â”€ */}
+      {/* ── Reached Modal ── */}
       <Modal visible={reachedModalVisible} transparent animationType="fade"
         onRequestClose={() => setReachedModalVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -321,7 +321,7 @@ await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
               style={{ backgroundColor: '#ED1C25', width: '100%', paddingVertical: 13, borderRadius: 8, alignItems: 'center', marginBottom: 10 }}
               onPress={() => { setReachedModalVisible(false); handleSiteObservation(selectedLead); }}
             >
-              <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>ðŸ—ï¸  Start Site Observation</Text>
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}> Start Site Observation</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={{ backgroundColor: '#f1f1f1', width: '100%', paddingVertical: 13, borderRadius: 8, alignItems: 'center' }}
@@ -333,7 +333,7 @@ await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
         </View>
       </Modal>
 
-      {/* â”€â”€ Completed Confirmation Modal â”€â”€ */}
+      {/* ── Completed Confirmation Modal ── */}
       <Modal visible={completedModalVisible} transparent animationType="fade"
         onRequestClose={() => setCompletedModalVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -351,7 +351,7 @@ await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
               {completedTargetLead?.name}
             </Text>
             <Text style={{ fontSize: 13, color: '#666', marginBottom: 20, textAlign: 'center', lineHeight: 20 }}>
-              as completed. This means the job is done{'\n'}and the lead will be closed. âœ…
+              as completed. This means the job is done{'\n'}and the lead will be closed.
             </Text>
 
             {/* Offline warning inside modal */}
@@ -372,7 +372,9 @@ await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
               style={{ backgroundColor: '#22c55e', width: '100%', paddingVertical: 13, borderRadius: 8, alignItems: 'center', marginBottom: 10 }}
               onPress={confirmMarkCompleted}
             >
-              <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>Yes, Mark as Completed ðŸŽ‰</Text>
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>
+  Yes, Mark as Completed
+</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={{ backgroundColor: '#f1f1f1', width: '100%', paddingVertical: 13, borderRadius: 8, alignItems: 'center' }}
@@ -390,9 +392,9 @@ await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
 
 export default InProgressScreen;
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 // Styles
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

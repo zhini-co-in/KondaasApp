@@ -323,7 +323,6 @@ const SurveyerScreen = () => {
     }
   };
 
-  // â”€â”€ Accept â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleAccept = async (item) => {
     await saveAcceptedLead(item);
     setLeads((prev) => prev.filter((l) => l.id !== item.id));
@@ -555,81 +554,66 @@ const SurveyerScreen = () => {
   };
 
   // âœ… ENHANCED: Auto-open Settings for never_ask_again with detailed handling
-  const handleLogoPress = () => {
-    Alert.alert(
-      'Upload Photo',
-      'Take a photo to upload',
-      [
-        {
-          text: 'Take Photo',
-          onPress: async () => {
-            try {
-              const result = await requestCameraPermission();
+// ── Direct camera → upload (no menu) ──────────────────────────────────────
+const handleUploadPress = async () => {
+  try {
+    const result = await requestCameraPermission();
 
-              console.log('[Camera] Permission result:', result);
-
-              if (result.neverAskAgain) {
-                Alert.alert(
-                  'Camera Permission Blocked',
-                  'Camera permission was denied. Please enable it in app settings.\n\nWe\'ll open the settings for you.',
-                  [
-                    {
-                      text: 'Open Settings',
-                      onPress: () => {
-                        openAppSettings();
-                        setTimeout(() => {
-                          Alert.alert(
-                            'Enable Camera Permission',
-                            'Tap "Permissions" â†’ Select "Camera" â†’ Choose "Allow"'
-                          );
-                        }, 500);
-                      },
-                    },
-                    { text: 'Cancel', style: 'cancel' },
-                  ]
-                );
-                return;
-              }
-
-              if (!result.granted) {
-                Alert.alert(
-                  'Camera Permission Denied',
-                  'Camera permission is required to take photos. Please allow it when prompted.'
-                );
-                return;
-              }
-
-              launchCamera(
-                {
-                  mediaType: 'photo',
-                  cameraType: 'back',
-                  quality: 0.8,
-                  saveToPhotos: true,
-                },
-                (response) => {
-                  if (response.didCancel) return;
-
-                  if (response.errorCode) {
-                    Alert.alert('Camera Error', `Error: ${response.errorMessage || response.errorCode}`);
-                    return;
-                  }
-
-                  const photo = response.assets?.[0];
-                  if (photo?.uri) {
-                    setUploadedPhoto(photo.uri);
-                    Alert.alert('Success', 'Photo captured successfully!');
-                  }
-                }
-              );
-            } catch (err) {
-              Alert.alert('Error', 'Failed to launch camera. Please try again.');
-            }
-          },
-        },
+    if (result.neverAskAgain) {
+      Alert.alert('Camera Blocked', 'Enable camera in app settings.', [
+        { text: 'Open Settings', onPress: openAppSettings },
         { text: 'Cancel', style: 'cancel' },
-      ]
+      ]);
+      return;
+    }
+    if (!result.granted) {
+      Alert.alert('Permission Denied', 'Camera permission is required.');
+      return;
+    }
+
+    launchCamera(
+      { mediaType: 'photo', cameraType: 'back', quality: 0.8, saveToPhotos: true },
+      async (response) => {
+        if (response.didCancel) return;
+        if (response.errorCode) {
+          Alert.alert('Camera Error', response.errorMessage || response.errorCode);
+          return;
+        }
+
+        const photo = response.assets?.[0];
+        if (!photo?.uri) return;
+// preview update
+
+        try {
+          const surveyorNumber = await getSurveyorNumber();
+          const today = new Date().toISOString().split('T')[0];
+          const filename = photo.uri.split('/').pop();
+          const match = /\.(\w+)$/.exec(filename);
+          const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+          const formData = new FormData();
+          formData.append('photo',   { uri: photo.uri, name: filename, type });
+          formData.append('phoneNo', surveyorNumber);
+          formData.append('date',    today);
+
+          const res = await API.post('/notification/upload-photo', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+
+          if (res.data?.success) {
+            Alert.alert('Uploaded ✅', 'Photo synced successfully!');
+          } else {
+            throw new Error(res.data?.message || 'Upload failed');
+          }
+        } catch (e) {
+          Alert.alert('Upload Failed', e?.message || 'Could not upload photo.');
+        }
+      }
     );
-  };
+  } catch (err) {
+    Alert.alert('Error', 'Failed to launch camera.');
+  }
+};
 
   // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
@@ -649,7 +633,7 @@ const SurveyerScreen = () => {
                 thumbColor="#ED1C25" value={isOn} onValueChange={handleToggle}
               />
             </View>
-            <TouchableOpacity style={{ marginTop: 10 }} onPress={handleLogoPress}>
+            <TouchableOpacity style={{ marginTop: 10 }} onPress={handleUploadPress}>
               <Ionicons name="cloud-upload-outline" size={28} color="#fff" />
             </TouchableOpacity>
           </View>

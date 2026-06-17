@@ -92,7 +92,7 @@ if (role === "admin") {
     index: 0,
     routes: [{ name: SCREEN_NAMES.INSTALLER_SCREEN }],
   });
-}  else if (role === "surveyer") {
+}  else if (role === "surveyor") {
   console.log("Surveyer role detected → Navigating to Surveyer Screen");
   navigation.reset({
     index: 0,
