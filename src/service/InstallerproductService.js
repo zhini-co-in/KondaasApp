@@ -134,3 +134,35 @@ export const getScannedProducts = async () => {
     return [];
   }
 };
+
+
+// export const getScannedProducts = async () => {
+//   try {
+//     const phoneNo = await getUserPhone();
+//     if (!phoneNo) {
+//       console.warn('⚠️ phoneNo empty');
+//       // Still try without phoneNo as per your URL
+//     }
+
+//     const res = await API.get('/installer/get-products', {
+//       params: phoneNo ? { phoneNo: phoneNo.toString().trim() } : {}
+//     });
+
+//     console.log('📋 Products fetched:', res.data?.length || 0);
+
+//     // Handle different response formats
+//     if (res.data?.success && Array.isArray(res.data.products)) {
+//       return res.data.products;
+//     } else if (Array.isArray(res.data)) {
+//       return res.data;
+//     } else if (res.data) {
+//       return Array.isArray(res.data.data) ? res.data.data : [res.data];
+//     }
+
+//     return [];
+
+//   } catch (err) {
+//     console.error('❌ getScannedProducts error:', err?.response?.data || err.message);
+//     return [];
+//   }
+// };
