@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Switch, Image, StatusBar,
   Alert, TouchableOpacity, ScrollView, ActivityIndicator,
-  Modal, TextInput, Linking, Platform,
+  Modal, TextInput, Linking, Platform, RefreshControl,
 } from 'react-native';
 import API from '../api/api1';
 import LinearGradient from 'react-native-linear-gradient';
@@ -29,9 +29,9 @@ import LeadCard from '../components/LeadCard';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { PermissionsAndroid } from 'react-native';
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 // SurveyerScreen
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 const SurveyerScreen = () => {
   const navigation = useNavigation();
   const route      = useRoute();
@@ -39,7 +39,7 @@ const SurveyerScreen = () => {
 
   const { currentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
 
-  // âœ… FIX 2: locationRef â€” stale closure à®¤à®Ÿà¯à®•à¯à®•
+  // locationRef – stale closure தடுக்க
   const locationRef = useRef(null);
   useEffect(() => {
     locationRef.current = currentLocation;
@@ -54,15 +54,16 @@ const SurveyerScreen = () => {
   const [isOnline, setIsOnline]             = useState(true);
   const [pendingCount, setPendingCount]     = useState(0);
   const [uploadedPhoto, setUploadedPhoto]   = useState(null);
+  const [refreshing, setRefreshing]         = useState(false);
 
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectComment, setRejectComment]           = useState('');
   const [rejectLeadId, setRejectLeadId]             = useState(null);
 
-  // âœ… FIX 1: acceptedLeadsRef â€” setState inside setState crash à®¤à®Ÿà¯à®•à¯à®•
+  // acceptedLeadsRef – setState inside setState crash தடுக்க
   const acceptedLeadsRef = useRef([]);
 
-  // âœ… acceptedLeads set à®ªà®£à¯à®£à¯à®®à¯à®ªà¯‹à®¤à¯ ref-à®à®¯à¯à®®à¯ sync à®ªà®£à¯à®£à¯
+  // acceptedLeads set பண்ணும்போது ref-ஐயும் sync பண்ண
   const setAcceptedLeadsSafe = useCallback((updater) => {
     setAcceptedLeads((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -71,16 +72,14 @@ const SurveyerScreen = () => {
     });
   }, []);
 
-  // â”€â”€ Net watcher â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Net watcher ───────────────────────────────────────────────────────────
   useEffect(() => {
     const unsub = NetInfo.addEventListener(async (state) => {
       const online = !!state.isConnected && !!state.isInternetReachable;
       setIsOnline(online);
       if (online) {
-        console.log('[SurveyerScreen] Net restored â€” running sync queue...');
         const result = await processSyncQueue();
         if (result.synced > 0) {
-          console.log(`[SurveyerScreen] Synced ${result.synced} offline actions`);
           await fetchAndMergeLeads();
         }
         setPendingCount(0);
@@ -89,7 +88,7 @@ const SurveyerScreen = () => {
     return () => unsub();
   }, []);
 
-  // â”€â”€ Mount â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Mount ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     isMounted.current = true;
     restoreState();
@@ -100,7 +99,7 @@ const SurveyerScreen = () => {
     };
   }, []);
 
-  // â”€â”€ Android permissions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Android permissions ───────────────────────────────────────────────────
   useEffect(() => {
     const autoSetup = async () => {
       if (Platform.OS !== 'android') return;
@@ -121,23 +120,22 @@ const SurveyerScreen = () => {
     autoSetup();
   }, []);
 
-  // âœ… FIX 1: useFocusEffect â€” setState inside setState CRASH FIX
+  // useFocusEffect – setState inside setState CRASH FIX + auto refresh on screen focus
   useFocusEffect(
     useCallback(() => {
+      // Auto refresh data when screen comes into focus
+      fetchAndMergeLeads();
+
       const completedIds = route.params?.completedIds;
       if (!completedIds || completedIds.length === 0) return;
       navigation.setParams({ completedIds: null });
 
-      // Step 1: acceptedLeadsRef-à®²à¯ à®‡à®°à¯à®¨à¯à®¤à¯ toMove à®Žà®Ÿà¯à®•à¯à®•à®¿à®±à¯‹à®®à¯
-      // (setState callback-à®•à¯à®•à¯ à®µà¯†à®³à®¿à®¯à¯‡ â€” safe)
       const toMove = acceptedLeadsRef.current.filter((l) =>
         completedIds.includes(l.id)
       );
 
-      // Step 2: acceptedLeads update â€” à®¤à®©à®¿à®¯à®¾ call à®ªà®£à¯à®±à¯‹à®®à¯
       setAcceptedLeadsSafe((prev) => prev.filter((l) => !completedIds.includes(l.id)));
 
-      // Step 3: completedLeads update â€” à®¤à®©à®¿à®¯à®¾ call à®ªà®£à¯à®±à¯‹à®®à¯ (setState inside setState à®‡à®²à¯à®²à¯ˆ)
       if (toMove.length > 0) {
         setCompletedLeads((c) => [
           ...c.filter((cl) => !toMove.some((m) => m.id === cl.id)),
@@ -147,7 +145,7 @@ const SurveyerScreen = () => {
     }, [route.params?.completedIds])
   );
 
-  // â”€â”€ Restore state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Restore state ─────────────────────────────────────────────────────────
   const restoreState = async () => {
     const saved = await AsyncStorage.getItem('surveyer_is_on');
     if (saved === 'true') {
@@ -159,21 +157,20 @@ const SurveyerScreen = () => {
     await fetchAndMergeLeads();
   };
 
-  // â”€â”€ Load local â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Load local ────────────────────────────────────────────────────────────
   const loadLocalLeads = async () => {
     const local = await getAcceptedLeads();
     if (!isMounted.current) return;
 
-    const accepted = local.filter((l) => l.status === 'accepted' || l.status === 'inprogress');
+    const accepted  = local.filter((l) => l.status === 'accepted' || l.status === 'inprogress');
     const completed = local.filter((l) => l.status === 'completed');
 
-    // âœ… ref sync
     acceptedLeadsRef.current = accepted;
     setAcceptedLeads(accepted);
     setCompletedLeads(completed);
   };
 
-  // â”€â”€ Fetch + merge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Fetch + merge ─────────────────────────────────────────────────────────
   const fetchAndMergeLeads = async () => {
     setLeadsLoading(true);
     try {
@@ -183,78 +180,69 @@ const SurveyerScreen = () => {
         params: { surveyorNumber },
       });
 
-      // âœ… API returns { success: true, deals: [...] }
-      const rawData = Array.isArray(res.data?.deals)
-        ? res.data.deals
-        : [];
+      const rawData = Array.isArray(res.data?.deals) ? res.data.deals : [];
 
       const storedRejected = await AsyncStorage.getItem('rejected_lead_ids');
-      const rejectedIds = storedRejected ? JSON.parse(storedRejected) : [];
+      const rejectedIds    = storedRejected ? JSON.parse(storedRejected) : [];
 
       const mapped = rawData.map((item) => ({
-        id: item._id,
-        dealId: item.deal_id,
-        name: item.deal_name || item.name || 'â€”',
-        phone: item.mobile,
-        city: item.city,
-        comment: item.comment,
+        id:         item._id,
+        dealId:     item.deal_id,
+        name:       item.deal_name || item.name || '—',
+        phone:      item.mobile,
+        city:       item.city,
+        comment:    item.comment,
         referredBy: item.referredBy,
-        date: item.assignedAt,
-        time: item.time,
-        latitude: item.latitude,
-        longitude: item.longitude,
+        date:       item.assignedAt,
+        time:       item.time,
+        latitude:   item.latitude,
+        longitude:  item.longitude,
         whatsappNo: item.whatsappNo,
-        email: item.email,
-        address: item.address,
-        status: item.siteSurveyStatus ?? 'notassigned',
+        email:      item.email,
+        address:    item.address,
+        status:     item.siteSurveyStatus ?? 'notassigned',
       }));
 
       if (!isMounted.current) return;
 
       setLeads(
-        mapped.filter(
-          (l) => l.status === 'notassigned' && !rejectedIds.includes(l.id)
-        )
+        mapped.filter((l) => l.status === 'notassigned' && !rejectedIds.includes(l.id))
       );
 
       const serverNonNew = mapped.filter((l) => l.status !== 'notassigned');
-      const merged = await mergeWithServerLeads(serverNonNew);
+      const merged       = await mergeWithServerLeads(serverNonNew);
 
-      const accepted = merged.filter(
-        (l) => l.status === 'accepted' || l.status === 'inprogress'
-      );
+      const accepted  = merged.filter((l) => l.status === 'accepted' || l.status === 'inprogress');
       const completed = merged.filter((l) => l.status === 'completed');
 
-      // âœ… ref sync
       acceptedLeadsRef.current = accepted;
       setAcceptedLeads(accepted);
       setCompletedLeads(completed);
 
     } catch (err) {
-      console.log('[SurveyerScreen] API Error:', err?.response?.status, err?.response?.data, err?.message);
     } finally {
       if (isMounted.current) setLeadsLoading(false);
     }
   };
 
-  // â”€â”€ Try API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Try API ───────────────────────────────────────────────────────────────
   const tryApi = async (fn) => {
     try { await fn(); }
     catch (e) { console.log('[SurveyerScreen] API failed (offline):', e?.message); }
   };
 
-  // â”€â”€ Helper: get surveyor number â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Helper: get surveyor number ───────────────────────────────────────────
   const getSurveyorNumber = async () => {
     try {
       const userData = await AsyncStorage.getItem(USER_DATA);
-      const parsed = userData ? JSON.parse(userData) : null;
+      const parsed   = userData ? JSON.parse(userData) : null;
       return parsed?.UserInfo?.phoneNo || '';
     } catch (e) {
       return '';
     }
   };
 
-  // âœ… NEW: Auto-open Settings function
+  // ── Auto-open Settings ────────────────────────────────────────────────────
   const openAppSettings = () => {
     if (Platform.OS === 'ios') {
       Linking.openURL('app-settings:');
@@ -265,38 +253,32 @@ const SurveyerScreen = () => {
     }
   };
 
-  // âœ… ENHANCED: Detect never_ask_again and return detailed status
+  // ── Camera permission ─────────────────────────────────────────────────────
   const requestCameraPermission = async () => {
     if (Platform.OS !== 'android') return { granted: true, neverAskAgain: false };
-
     try {
       const granted = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.CAMERA,
         {
-          title: 'Camera Permission Required',
-          message: 'We need camera access to take survey photos.',
-          buttonNegative: 'Cancel',
-          buttonPositive: 'Allow',
+          title:           'Camera Permission Required',
+          message:         'We need camera access to take survey photos.',
+          buttonNegative:  'Cancel',
+          buttonPositive:  'Allow',
         }
       );
-
-      console.log('[Camera Permission] Result:', granted);
-
       return {
-        granted: granted === PermissionsAndroid.RESULTS.GRANTED,
+        granted:       granted === PermissionsAndroid.RESULTS.GRANTED,
         neverAskAgain: granted === 'never_ask_again',
-        status: granted,
+        status:        granted,
       };
     } catch (err) {
-      console.error('[Camera Permission Error]:', err);
       return { granted: false, neverAskAgain: false, status: 'error' };
     }
   };
 
-  // âœ… ENHANCED: Detect never_ask_again and return detailed status
+  // ── Gallery permission ────────────────────────────────────────────────────
   const requestGalleryPermission = async () => {
     if (Platform.OS !== 'android') return { granted: true, neverAskAgain: false };
-
     try {
       const permission =
         Platform.Version >= 33
@@ -304,39 +286,35 @@ const SurveyerScreen = () => {
           : PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
 
       const granted = await PermissionsAndroid.request(permission, {
-        title: 'Gallery Permission Required',
-        message: 'We need access to your gallery to select photos for surveys.',
-        buttonNegative: 'Cancel',
-        buttonPositive: 'Allow',
+        title:           'Gallery Permission Required',
+        message:         'We need access to your gallery to select photos for surveys.',
+        buttonNegative:  'Cancel',
+        buttonPositive:  'Allow',
       });
-
-      console.log('[Gallery Permission] Result:', granted);
-
       return {
-        granted: granted === PermissionsAndroid.RESULTS.GRANTED,
+        granted:       granted === PermissionsAndroid.RESULTS.GRANTED,
         neverAskAgain: granted === 'never_ask_again',
-        status: granted,
+        status:        granted,
       };
     } catch (err) {
-      console.error('[Gallery Permission Error]:', err);
       return { granted: false, neverAskAgain: false, status: 'error' };
     }
   };
 
+  // ── Accept ────────────────────────────────────────────────────────────────
   const handleAccept = async (item) => {
     await saveAcceptedLead(item);
     setLeads((prev) => prev.filter((l) => l.id !== item.id));
 
-    // âœ… setAcceptedLeadsSafe use à®ªà®£à¯à®±à¯‹à®®à¯
     setAcceptedLeadsSafe((prev) => {
       if (prev.some((l) => l.id === item.id)) return prev;
       return [...prev, { ...item, status: 'accepted' }];
     });
 
     const surveyorNumber = await getSurveyorNumber();
-    const acceptedAt = Date.now();
+    const acceptedAt     = Date.now();
+    const payload        = { mobile: item.phone, surveyorNumber };
 
-    const payload = { mobile: item.phone, surveyorNumber };
     await enqueue(`accept_${item.id}`, 'ACCEPT_LEAD', payload);
 
     if (isOnline) {
@@ -345,13 +323,13 @@ const SurveyerScreen = () => {
       tryApi(() => API.post('/order/sync-status', {
         customerMobile: item.phone,
         surveyorNumber,
-        status: 'accepted',
+        status:     'accepted',
         receivedAt: acceptedAt,
       }));
     }
   };
 
-  // â”€â”€ Reject â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Reject ────────────────────────────────────────────────────────────────
   const handleReject = (id) => {
     setRejectLeadId(id);
     setRejectComment('');
@@ -376,19 +354,17 @@ const SurveyerScreen = () => {
 
     try {
       await API.post('/order/reject', {
-        customerMobile: lead.phone,
-        customerName: lead.name,
+        customerMobile:  lead.phone,
+        customerName:    lead.name,
         customerAddress: lead.address,
         surveyorNumber,
-        comment: rejectComment.trim(),
+        comment:    rejectComment.trim(),
         receivedAt: Date.now(),
       });
 
-      // âœ… State-à®² à®‡à®°à¯à®¨à¯à®¤à¯ remove à®ªà®£à¯à®£à¯
       setLeads((prev) => prev.filter((l) => l.id !== rejectLeadId));
 
-      // âœ… Rejected lead-à® local blacklist-à®² à®µà¯ˆ (refresh-à®²à®¯à¯à®®à¯ à®µà®°à®•à¯à®•à¯‚à®Ÿà®¾à®¤à¯)
-      const existing = await AsyncStorage.getItem('rejected_lead_ids');
+      const existing    = await AsyncStorage.getItem('rejected_lead_ids');
       const rejectedIds = existing ? JSON.parse(existing) : [];
       if (!rejectedIds.includes(rejectLeadId)) {
         rejectedIds.push(rejectLeadId);
@@ -400,102 +376,16 @@ const SurveyerScreen = () => {
       setRejectComment('');
       Alert.alert('Success', 'Lead rejected successfully.');
     } catch (err) {
-      console.log('[SurveyerScreen] ERROR:', err?.message, err?.stack);
-      console.log('[Localleadsstorage] ERROR:', err?.message, err?.stack);
       Alert.alert('Error', err?.response?.data?.error || 'Failed to reject.');
     }
   };
 
-  // â”€â”€ Start / Resume â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const handleStart = async (id) => {
-    const lead = acceptedLeadsRef.current.find((l) => l.id === id);
-    if (!lead) return;
-
-    let etaText = 'N/A';
-    let totalMins = 0;
-    const hasLatLong = lead.latitude && lead.longitude;
-
-    if (locationRef.current && hasLatLong) {
-      const distMeters = Math.round(getDistance(
-        locationRef.current.latitude, locationRef.current.longitude,
-        parseFloat(lead.latitude), parseFloat(lead.longitude)
-      ));
-      const speed = distMeters <= 300 ? 1.4 : 8.3;
-      totalMins = Math.round(distMeters / speed / 60);
-      if (totalMins < 1) {
-        etaText = 'Less than a minute';
-      } else if (totalMins < 60) {
-        etaText = `${totalMins} min`;
-      } else {
-        const hrs = Math.floor(totalMins / 60);
-        const mins = totalMins % 60;
-        etaText = mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`;
-      }
-    }
-
-    let mapsUrl = '';
-    if (locationRef.current && hasLatLong) {
-      mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${locationRef.current.latitude},${locationRef.current.longitude}&destination=${lead.latitude},${lead.longitude}`;
-    } else if (hasLatLong) {
-      mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lead.latitude},${lead.longitude}`;
-    } else if (lead.address || lead.city) {
-      mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lead.address || lead.city)}`;
-    }
-
-    await updateAcceptedLeadStatus(id, 'inprogress');
-
-    // âœ… setAcceptedLeadsSafe use à®ªà®£à¯à®±à¯‹à®®à¯
-    setAcceptedLeadsSafe((prev) =>
-      prev.map((l) => l.id === id ? { ...l, status: 'inprogress' } : l)
-    );
-
-    await enqueue(`status_inprogress_${id}`, 'STATUS_UPDATE', {
-      mobile: lead.phone, status: 'inprogress',
-    });
-
-    if (isOnline) {
-      const surveyorNumber = await getSurveyorNumber();
-      const startAt = Date.now();
-      const dueAt   = startAt + (totalMins * 60 * 1000);
-
-      tryApi(() => API.put('/order/updatestatus', { id: lead.dealId, status: 'inprogress' }));
-      tryApi(() => API.post('/order/inprogress', { mobile: lead.phone, surveyorNumber }));
-      tryApi(() => API.post('/order/sync-status', {
-        customerMobile: lead.phone,
-        surveyorNumber,
-        status: 'inprogress',
-        startAt,
-        dueAt,
-      }));
-
-      try {
-        // scenarioType: 1 (handleStart)
-        await API.post('/notification/trigger', {
-          surveyorNumber, customerMobile: lead.phone, name: lead.name,
-          scenarioType: 1, eta: totalMins, mapsUrl,
-        });
-      } catch (e) {
-        console.log('[SurveyerScreen] Notification error:', e?.message);
-      }
-    } else {
-      // offline queue version
-      await enqueue(`notif_start_${id}`, 'NOTIFICATION', {
-        customerMobile: lead.phone, name: lead.name, scenarioType: 1, eta: totalMins, mapsUrl,
-      });
-    }
-
-    // âœ… FIX 2: locationRef use à®ªà®£à¯à®±à¯‹à®®à¯ â€” stale closure à®‡à®²à¯à®²à¯ˆ
-    startHighFrequencyTracking(() => locationRef.current);
-
-    navigation.navigate('InProgress', {
-      lead: { ...lead, status: 'inprogress', dealId: lead.dealId },
-      initialLocation: locationRef.current,
-    });
-  };
-
-  // â”€â”€ Toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Toggle ────────────────────────────────────────────────────────────────
   const handleToggle = async () => {
     if (!isOn) {
+      const uploadSuccess = await takeAndUploadPhoto();
+      if (!uploadSuccess) return;
+
       if (Platform.OS === 'android') {
         const gpsOn = await isGPSEnabled();
         if (!gpsOn) {
@@ -520,6 +410,7 @@ const SurveyerScreen = () => {
           return;
         }
       }
+
       setIsOn(true);
       await AsyncStorage.setItem('surveyer_is_on', 'true');
       startTracking();
@@ -533,7 +424,7 @@ const SurveyerScreen = () => {
     }
   };
 
-  // â”€â”€ Logout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Logout ────────────────────────────────────────────────────────────────
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
       { text: 'Cancel', style: 'cancel' },
@@ -553,74 +444,314 @@ const SurveyerScreen = () => {
     ]);
   };
 
-  // âœ… ENHANCED: Auto-open Settings for never_ask_again with detailed handling
-// ── Direct camera → upload (no menu) ──────────────────────────────────────
-const handleUploadPress = async () => {
-  try {
-    const result = await requestCameraPermission();
+  // ── Daily toggle photo upload (surveyor check-in) ─────────────────────────
+  const takeAndUploadPhoto = async () => {
+    try {
+      const perm = await requestCameraPermission();
 
-    if (result.neverAskAgain) {
-      Alert.alert('Camera Blocked', 'Enable camera in app settings.', [
-        { text: 'Open Settings', onPress: openAppSettings },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-      return;
-    }
-    if (!result.granted) {
-      Alert.alert('Permission Denied', 'Camera permission is required.');
-      return;
-    }
-
-    launchCamera(
-      { mediaType: 'photo', cameraType: 'back', quality: 0.8, saveToPhotos: true },
-      async (response) => {
-        if (response.didCancel) return;
-        if (response.errorCode) {
-          Alert.alert('Camera Error', response.errorMessage || response.errorCode);
-          return;
-        }
-
-        const photo = response.assets?.[0];
-        if (!photo?.uri) return;
-// preview update
-
-        try {
-          const surveyorNumber = await getSurveyorNumber();
-          const today = new Date().toISOString().split('T')[0];
-          const filename = photo.uri.split('/').pop();
-          const match = /\.(\w+)$/.exec(filename);
-          const type = match ? `image/${match[1]}` : 'image/jpeg';
-
-          const formData = new FormData();
-          formData.append('photo',   { uri: photo.uri, name: filename, type });
-          formData.append('phoneNo', surveyorNumber);
-          formData.append('date',    today);
-
-          const res = await API.post('/notification/upload-photo', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
-
-          if (res.data?.success) {
-            Alert.alert('Uploaded ✅', 'Photo synced successfully!');
-          } else {
-            throw new Error(res.data?.message || 'Upload failed');
-          }
-        } catch (e) {
-          Alert.alert('Upload Failed', e?.message || 'Could not upload photo.');
-        }
+      if (perm.neverAskAgain) {
+        Alert.alert('Camera Blocked', 'Enable camera in app settings.', [
+          { text: 'Open Settings', onPress: openAppSettings },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+        return false;
       }
-    );
-  } catch (err) {
-    Alert.alert('Error', 'Failed to launch camera.');
-  }
-};
+      if (!perm.granted) {
+        Alert.alert('Permission Denied', 'Camera permission is required.');
+        return false;
+      }
 
-  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      const response = await new Promise((resolve) => {
+        launchCamera(
+          { mediaType: 'photo', cameraType: 'back', quality: 0.8, saveToPhotos: true },
+          resolve
+        );
+      });
+
+      if (response.didCancel) return false;
+      if (response.errorCode) {
+        Alert.alert('Camera Error', response.errorMessage || 'Failed to open camera');
+        return false;
+      }
+
+      const photo = response.assets?.[0];
+      if (!photo?.uri) return false;
+
+      const phoneNo = await getSurveyorNumber();
+      if (!phoneNo) {
+        Alert.alert('Error', 'Surveyor phone number not found.');
+        return false;
+      }
+
+      const filename = photo.uri.split('/').pop();
+      const match    = /\.(\w+)$/.exec(filename);
+      const type     = match ? `image/${match[1]}` : 'image/jpeg';
+
+      const formData = new FormData();
+      formData.append('photo',   { uri: photo.uri, name: filename, type });
+      formData.append('phoneNo', phoneNo);
+
+
+      const res = await API.post('/notification/daily-photo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      if (res.data?.success) {
+        Alert.alert('Success ✅', 'Photo uploaded successfully!');
+        return true;
+      } else {
+        throw new Error(res.data?.message || 'Upload failed');
+      }
+    } catch (err) {
+      Alert.alert(
+        'Upload Failed',
+        err?.response?.data?.message || err?.message || 'Could not upload photo. Please try again.'
+      );
+      return false;
+    }
+  };
+
+  // ── Manual camera upload button ───────────────────────────────────────────
+  const handleUploadPress = async () => {
+    try {
+      const result = await requestCameraPermission();
+
+      if (result.neverAskAgain) {
+        Alert.alert('Camera Blocked', 'Enable camera in app settings.', [
+          { text: 'Open Settings', onPress: openAppSettings },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+        return;
+      }
+      if (!result.granted) {
+        Alert.alert('Permission Denied', 'Camera permission is required.');
+        return;
+      }
+
+      launchCamera(
+        { mediaType: 'photo', cameraType: 'back', quality: 0.8, saveToPhotos: true },
+        async (response) => {
+          if (response.didCancel) return;
+          if (response.errorCode) {
+            Alert.alert('Camera Error', response.errorMessage || response.errorCode);
+            return;
+          }
+
+          const photo = response.assets?.[0];
+          if (!photo?.uri) return;
+
+          try {
+            const surveyorNumber = await getSurveyorNumber();
+            const filename       = photo.uri.split('/').pop();
+            const match          = /\.(\w+)$/.exec(filename);
+            const type           = match ? `image/${match[1]}` : 'image/jpeg';
+
+            const formData = new FormData();
+            formData.append('photo',   { uri: photo.uri, name: filename, type });
+            formData.append('phoneNo', surveyorNumber);
+
+            const res = await API.post('/notification/upload-photo', formData, {
+              headers: { 'Content-Type': 'multipart/form-data' },
+            });
+
+            if (res.data?.success) {
+              Alert.alert('Uploaded ✅', 'Photo synced successfully!');
+            } else {
+              throw new Error(res.data?.message || 'Upload failed');
+            }
+          } catch (e) {
+            Alert.alert('Upload Failed', e?.message || 'Could not upload photo.');
+          }
+        }
+      );
+    } catch (err) {
+      Alert.alert('Error', 'Failed to launch camera.');
+    }
+  };
+
+  // ── NEW: Lead photo — taken when Start button is pressed ──────────────────
+  const takeLeadPhoto = async (lead) => {
+    try {
+      // 1. Camera permission check
+      const perm = await requestCameraPermission();
+
+      if (perm.neverAskAgain) {
+        Alert.alert('Camera Blocked', 'Enable camera in app settings.', [
+          { text: 'Open Settings', onPress: openAppSettings },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+        return false;
+      }
+      if (!perm.granted) {
+        Alert.alert('Permission Denied', 'Camera permission is required to start.');
+        return false;
+      }
+
+      // 2. Open camera
+      const response = await new Promise((resolve) => {
+        launchCamera(
+          { mediaType: 'photo', cameraType: 'back', quality: 0.8, saveToPhotos: true },
+          resolve
+        );
+      });
+
+      if (response.didCancel) return false;
+      if (response.errorCode) {
+        Alert.alert('Camera Error', response.errorMessage || 'Failed to open camera');
+        return false;
+      }
+
+      const photo = response.assets?.[0];
+      if (!photo?.uri) return false;
+
+      // 3. Build FormData — backend expects: photo, customerNumber, date
+      const filename = photo.uri.split('/').pop();
+      const match    = /\.(\w+)$/.exec(filename);
+      const type     = match ? `image/${match[1]}` : 'image/jpeg';
+      const today    = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
+
+      const formData = new FormData();
+      formData.append('photo',          { uri: photo.uri, name: filename, type });
+      formData.append('customerNumber', lead.phone);  // backend field: customerNumber
+      formData.append('date',           today);
+
+
+      // 4. POST to lead photo endpoint
+      const res = await API.post('/notification/leads-photo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 30000,
+      });
+
+
+      if (res.data?.success) {
+        return true;
+      } else {
+        throw new Error(res.data?.message || 'Upload failed');
+      }
+    } catch (err) {
+
+      const errorMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        'Could not upload photo.';
+
+      Alert.alert('Photo Upload Failed', errorMsg);
+      return false;
+    }
+  };
+
+  // ── Start / Resume ────────────────────────────────────────────────────────
+  const handleStart = async (id) => {
+    const lead = acceptedLeadsRef.current.find((l) => l.id === id);
+    if (!lead) return;
+
+    // STEP 1: Take & upload lead photo — only on first Start, not Resume
+    if (lead.status !== 'inprogress') {
+      const photoUploaded = await takeLeadPhoto(lead);
+      if (!photoUploaded) return; // user cancelled or upload failed → stop
+    }
+
+    // STEP 2: ETA + Maps URL calculation
+    let etaText  = 'N/A';
+    let totalMins = 0;
+    const hasLatLong = lead.latitude && lead.longitude;
+
+    if (locationRef.current && hasLatLong) {
+      const distMeters = Math.round(getDistance(
+        locationRef.current.latitude, locationRef.current.longitude,
+        parseFloat(lead.latitude), parseFloat(lead.longitude)
+      ));
+      const speed = distMeters <= 300 ? 1.4 : 8.3;
+      totalMins = Math.round(distMeters / speed / 60);
+      if (totalMins < 1) {
+        etaText = 'Less than a minute';
+      } else if (totalMins < 60) {
+        etaText = `${totalMins} min`;
+      } else {
+        const hrs  = Math.floor(totalMins / 60);
+        const mins = totalMins % 60;
+        etaText = mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`;
+      }
+    }
+
+    let mapsUrl = '';
+    if (locationRef.current && hasLatLong) {
+      mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${locationRef.current.latitude},${locationRef.current.longitude}&destination=${lead.latitude},${lead.longitude}`;
+    } else if (hasLatLong) {
+      mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lead.latitude},${lead.longitude}`;
+    } else if (lead.address || lead.city) {
+      mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lead.address || lead.city)}`;
+    }
+
+    // STEP 3: Status update
+    await updateAcceptedLeadStatus(id, 'inprogress');
+
+    setAcceptedLeadsSafe((prev) =>
+      prev.map((l) => l.id === id ? { ...l, status: 'inprogress' } : l)
+    );
+
+    await enqueue(`status_inprogress_${id}`, 'STATUS_UPDATE', {
+      mobile: lead.phone, status: 'inprogress',
+    });
+
+    if (isOnline) {
+      const surveyorNumber = await getSurveyorNumber();
+      const startAt = Date.now();
+      const dueAt   = startAt + (totalMins * 60 * 1000);
+
+      tryApi(() => API.put('/order/updatestatus', { id: lead.dealId, status: 'inprogress' }));
+      tryApi(() => API.post('/order/inprogress', { mobile: lead.phone, surveyorNumber }));
+      tryApi(() => API.post('/order/sync-status', {
+        customerMobile: lead.phone,
+        surveyorNumber,
+        status: 'inprogress',
+        startAt,
+        dueAt,
+      }));
+
+      try {
+        await API.post('/notification/trigger', {
+          surveyorNumber,
+          customerMobile: lead.phone,
+          name:           lead.name,
+          scenarioType:   1,
+          eta:            totalMins,
+          mapsUrl,
+        });
+      } catch (e) {
+      }
+    } else {
+      await enqueue(`notif_start_${id}`, 'NOTIFICATION', {
+        customerMobile: lead.phone,
+        name:           lead.name,
+        scenarioType:   1,
+        eta:            totalMins,
+        mapsUrl,
+      });
+    }
+
+    startHighFrequencyTracking(() => locationRef.current);
+
+    navigation.navigate('InProgress', {
+      lead:            { ...lead, status: 'inprogress', dealId: lead.dealId },
+      initialLocation: locationRef.current,
+    });
+  };
+
+  // ── Pull to refresh ──────────────────────────────────────────────────────
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchAndMergeLeads();
+    setRefreshing(false);
+  }, []);
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <View style={{ flex: 1 }}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
-      {/* â”€â”€ OFF STATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* OFF STATE */}
       {!isOn && (
         <LinearGradient colors={['#F00001', '#B00100']} style={{ flex: 1 }}>
           <TouchableOpacity style={styles.offLogoutBtn} onPress={handleLogout}>
@@ -633,20 +764,28 @@ const handleUploadPress = async () => {
                 thumbColor="#ED1C25" value={isOn} onValueChange={handleToggle}
               />
             </View>
-            <TouchableOpacity style={{ marginTop: 10 }} onPress={handleUploadPress}>
-              <Ionicons name="cloud-upload-outline" size={28} color="#fff" />
-            </TouchableOpacity>
           </View>
 
           <ScrollView
             contentContainerStyle={{ paddingTop: 60, paddingBottom: 30 }}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#fff']} tintColor="#fff" />
+            }
           >
             <View style={{ alignItems: 'center', paddingTop: 20, marginBottom: 20 }}>
               {uploadedPhoto ? (
-                <Image source={{ uri: uploadedPhoto }} style={[styles.logo, { borderRadius: 10 }]} resizeMode="cover" />
+                <Image
+                  source={{ uri: uploadedPhoto }}
+                  style={[styles.logo, { borderRadius: 10 }]}
+                  resizeMode="cover"
+                />
               ) : (
-                <Image source={require('../../assets/images/kondass.png')} style={styles.logo} resizeMode="contain" />
+                <Image
+                  source={require('../../assets/images/kondass.png')}
+                  style={styles.logo}
+                  resizeMode="contain"
+                />
               )}
             </View>
 
@@ -680,7 +819,7 @@ const handleUploadPress = async () => {
         </LinearGradient>
       )}
 
-      {/* â”€â”€ ON STATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ON STATE */}
       {isOn && (
         <>
           <View style={styles.fixedTopBar}>
@@ -703,6 +842,9 @@ const handleUploadPress = async () => {
           <ScrollView
             style={{ flex: 1, backgroundColor: '#F5F5F5' }}
             contentContainerStyle={{ paddingTop: !isOnline ? 120 : 90, paddingBottom: 30 }}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#ED1C25']} tintColor="#ED1C25" />
+            }
           >
             {/* New Leads */}
             <View style={styles.sectionHeader}>
@@ -812,7 +954,7 @@ const handleUploadPress = async () => {
         </>
       )}
 
-      {/* â”€â”€ Reject Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* Reject Modal */}
       <Modal
         visible={rejectModalVisible} transparent animationType="fade"
         onRequestClose={() => setRejectModalVisible(false)}
@@ -856,13 +998,13 @@ const handleUploadPress = async () => {
 
 export default SurveyerScreen;
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 // Styles
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  logo: { width: 200, height: 100 },
-  offLogoutBtn: { position: 'absolute', top: 55, left: 20, zIndex: 10 },
-  offToggleBtn: {
+  logo:          { width: 200, height: 100 },
+  offLogoutBtn:  { position: 'absolute', top: 55, left: 20, zIndex: 10 },
+  offToggleBtn:  {
     backgroundColor: '#fff',
     borderRadius: 20,
     paddingHorizontal: 4,
@@ -870,8 +1012,8 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   offTextContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  welcome: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
-  message: { marginTop: 10, color: '#ffffffcc', textAlign: 'center', paddingHorizontal: 30 },
+  welcome:          { fontSize: 20, fontWeight: 'bold', color: '#fff' },
+  message:          { marginTop: 10, color: '#ffffffcc', textAlign: 'center', paddingHorizontal: 30 },
   fixedTopBar: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
@@ -888,7 +1030,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 15, paddingTop: 16, paddingBottom: 6,
   },
-  sectionDot: { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
+  sectionDot:   { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
   sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#333' },
   emptyText: {
     textAlign: 'center', marginTop: 40,
@@ -898,29 +1040,30 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff', marginHorizontal: 15, marginBottom: 12,
     borderRadius: 12, padding: 14, elevation: 3,
   },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  rowBetween:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   referredBadge: {
     backgroundColor: '#FCEBEB', paddingHorizontal: 8,
     paddingVertical: 3, borderRadius: 20, alignSelf: 'flex-start',
   },
-  referredText: { fontSize: 11, color: '#A32D2D' },
-  date: { fontSize: 11, color: '#888' },
-  userRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
+  referredText:   { fontSize: 11, color: '#A32D2D' },
+  date:           { fontSize: 11, color: '#888' },
+  userRow:        { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
   avatar: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: '#E6F1FB', marginRight: 10,
     justifyContent: 'center', alignItems: 'center',
   },
-  avatarText: { fontSize: 16, fontWeight: '600', color: '#185FA5' },
-  name: { fontSize: 16, fontWeight: 'bold' },
-  subText: { fontSize: 12, color: '#555' },
-  iconContainer: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  iconBtn: { padding: 4 },
+  avatarText:     { fontSize: 16, fontWeight: '600', color: '#185FA5' },
+  name:           { fontSize: 16, fontWeight: 'bold' },
+  subText:        { fontSize: 12, color: '#555' },
+  iconContainer:  { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  iconBtn:        { padding: 4 },
   commentRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 8,
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'flex-start', marginTop: 8,
   },
-  comment: { flex: 1, fontSize: 12, color: '#555' },
-  seeMore: { fontSize: 12 },
+  comment:  { flex: 1, fontSize: 12, color: '#555' },
+  seeMore:  { fontSize: 12 },
   completedPill: {
     backgroundColor: '#EAF3DE', paddingHorizontal: 10,
     paddingVertical: 6, borderRadius: 20,
@@ -955,8 +1098,5 @@ const styles = StyleSheet.create({
     borderRadius: 8, alignItems: 'center',
   },
   modalSaveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
-  uploadIconBtn: {
-    marginTop: 10,
-    alignItems: 'center',
-  },
+  uploadIconBtn:    { marginTop: 10, alignItems: 'center' },
 });

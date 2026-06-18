@@ -29,6 +29,13 @@ interface UISchema { type: string; elements: UIElement[]; }
 interface Template { id: string; schema: Schema; uischema: UISchema; }
 interface Lead { id: string; name: string; phone: string; [key: string]: string; }
 
+// ── PhotoFile type ─────────────────────────────────────────────────────────────
+interface PhotoFile {
+  uri: string;
+  name: string;
+  type: string;
+}
+
 // ── Dropdown ──────────────────────────────────────────────────────────────────
 const DropdownPicker = ({
   label, options, value, onChange, required,
@@ -72,13 +79,7 @@ const DropdownPicker = ({
   );
 };
 
-// ── EB Bill Upload Field (MODIFIED: Just collects files, doesn't upload immediately) ───
-interface PhotoFile {
-  uri: string;
-  name: string;
-  type: string;
-}
-
+// ── EB Bill Upload Field ───────────────────────────────────────────────────────
 const EbBillUploadField = ({
   label, photoFiles, onChange, required,
 }: {
@@ -95,14 +96,12 @@ const EbBillUploadField = ({
         const assets = response.assets ?? [];
         if (assets.length === 0) return;
 
-        // Convert to PhotoFile format
         const newFiles: PhotoFile[] = assets.map((asset) => ({
           uri: asset.uri ?? '',
           name: asset.fileName ?? asset.uri?.split('/').pop() ?? `eb_bill_${Date.now()}.jpg`,
           type: asset.type ?? 'image/jpeg',
         })).filter(f => f.uri);
 
-        // Update both preview and parent state
         setPreviewUris(newFiles.map(f => f.uri));
         onChange(newFiles);
       }
@@ -130,22 +129,19 @@ const EbBillUploadField = ({
         }}
         onPress={handlePick}
       >
-        <>
-          <Ionicons
-            name={photoFiles.length > 0 ? 'checkmark-circle' : 'cloud-upload-outline'}
-            size={24}
-            color={photoFiles.length > 0 ? '#22c55e' : '#ED1C25'}
-          />
-          <Text style={{
-            color: photoFiles.length > 0 ? '#22c55e' : '#ED1C25',
-            fontWeight: '600', fontSize: 13,
-          }}>
-            {photoFiles.length > 0 ? `✅ ${photoFiles.length} Bill(s) Selected` : 'Select Last 6 Months EB Bills'}
-          </Text>
-        </>
+        <Ionicons
+          name={photoFiles.length > 0 ? 'checkmark-circle' : 'cloud-upload-outline'}
+          size={24}
+          color={photoFiles.length > 0 ? '#22c55e' : '#ED1C25'}
+        />
+        <Text style={{
+          color: photoFiles.length > 0 ? '#22c55e' : '#ED1C25',
+          fontWeight: '600', fontSize: 13,
+        }}>
+          {photoFiles.length > 0 ? `✅ ${photoFiles.length} Bill(s) Selected` : 'Select Last 6 Months EB Bills'}
+        </Text>
       </TouchableOpacity>
 
-      {/* Preview thumbnails */}
       {previewUris.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
           {previewUris.map((uri, idx) => (
@@ -170,6 +166,95 @@ const EbBillUploadField = ({
   );
 };
 
+// ── Site Survey Photo Upload Field ────────────────────────────────────────────
+const SiteSurveyUploadField = ({
+  label, photoFiles, onChange, required,
+}: {
+  label: string; photoFiles: PhotoFile[];
+  onChange: (files: PhotoFile[]) => void; required?: boolean;
+}) => {
+  const [previewUris, setPreviewUris] = useState<string[]>(photoFiles.map(f => f.uri));
+
+  const handlePick = async () => {
+    launchImageLibrary(
+      { mediaType: 'photo', selectionLimit: 10, quality: 0.8 },
+      (response) => {
+        if (response.didCancel || response.errorCode) return;
+        const assets = response.assets ?? [];
+        if (assets.length === 0) return;
+
+        const newFiles: PhotoFile[] = assets.map((asset) => ({
+          uri: asset.uri ?? '',
+          name: asset.fileName ?? asset.uri?.split('/').pop() ?? `site_survey_${Date.now()}.jpg`,
+          type: asset.type ?? 'image/jpeg',
+        })).filter(f => f.uri);
+
+        setPreviewUris(newFiles.map(f => f.uri));
+        onChange(newFiles);
+      }
+    );
+  };
+
+  return (
+    <View style={styles.fieldContainer}>
+      <Text style={styles.label}>
+        {label} {required && <Text style={{ color: '#ED1C25' }}>*</Text>}
+      </Text>
+
+      <TouchableOpacity
+        style={{
+          borderWidth: 1.5,
+          borderColor: photoFiles.length > 0 ? '#3b82f6' : '#ED1C25',
+          borderStyle: 'dashed',
+          borderRadius: 8,
+          padding: 16,
+          alignItems: 'center',
+          backgroundColor: photoFiles.length > 0 ? '#eff6ff' : '#fff5f5',
+          flexDirection: 'row',
+          justifyContent: 'center',
+          gap: 8,
+        }}
+        onPress={handlePick}
+      >
+        <Ionicons
+          name={photoFiles.length > 0 ? 'images' : 'camera-outline'}
+          size={24}
+          color={photoFiles.length > 0 ? '#3b82f6' : '#ED1C25'}
+        />
+        <Text style={{
+          color: photoFiles.length > 0 ? '#3b82f6' : '#ED1C25',
+          fontWeight: '600', fontSize: 13,
+        }}>
+          {photoFiles.length > 0
+            ? `📷 ${photoFiles.length} Site Photo(s) Selected`
+            : 'Upload Site Survey Photos'}
+        </Text>
+      </TouchableOpacity>
+
+      {previewUris.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
+          {previewUris.map((uri, idx) => (
+            <Image
+              key={idx}
+              source={{ uri }}
+              style={{
+                width: 70, height: 70, borderRadius: 8,
+                marginRight: 8, borderWidth: 1.5, borderColor: '#3b82f6',
+              }}
+            />
+          ))}
+        </ScrollView>
+      )}
+
+      {photoFiles.length > 0 && (
+        <Text style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
+          Tap to change photos • Will upload on form submission
+        </Text>
+      )}
+    </View>
+  );
+};
+
 // ── Field Renderer ─────────────────────────────────────────────────────────────
 const renderField = (
   fieldKey: string,
@@ -178,6 +263,8 @@ const renderField = (
   setFormValues: React.Dispatch<React.SetStateAction<Record<string, string>>>,
   photoFiles: PhotoFile[],
   setPhotoFiles: React.Dispatch<React.SetStateAction<PhotoFile[]>>,
+  siteSurveyPhotos: PhotoFile[],
+  setSiteSurveyPhotos: React.Dispatch<React.SetStateAction<PhotoFile[]>>,
   required: boolean,
   isMulti?: boolean,
   uploadType?: string,
@@ -185,7 +272,7 @@ const renderField = (
   const label = field.title ?? fieldKey;
   const value = formValues[fieldKey] ?? '';
 
-  // ✅ EB Bill upload — special field
+  // ✅ EB Bill upload
   if (fieldKey === 'ebBillUpload' || uploadType === 'ebBill') {
     return (
       <EbBillUploadField
@@ -193,6 +280,19 @@ const renderField = (
         label={label}
         photoFiles={photoFiles}
         onChange={(files) => setPhotoFiles(files)}
+        required={required}
+      />
+    );
+  }
+
+  // ✅ Site Survey Photos upload
+  if (fieldKey === 'siteSurveyPhotos' || uploadType === 'siteSurvey') {
+    return (
+      <SiteSurveyUploadField
+        key={fieldKey}
+        label={label}
+        photoFiles={siteSurveyPhotos}
+        onChange={(files) => setSiteSurveyPhotos(files)}
         required={required}
       />
     );
@@ -272,13 +372,14 @@ const FormScreen = ({
   const { lead, mode } = route.params;
   const isEditMode = mode === 'edit';
 
-  const [template, setTemplate]           = useState<Template | null>(null);
-  const [loading, setLoading]             = useState(true);
-  const [formValues, setFormValues]       = useState<Record<string, string>>({});
-  const [photoFiles, setPhotoFiles]       = useState<PhotoFile[]>([]);
-  const [submitting, setSubmitting]       = useState(false);
-  const [isOnline, setIsOnline]           = useState(true);
-  const [offlineBanner, setOfflineBanner] = useState(false);
+  const [template, setTemplate]                   = useState<Template | null>(null);
+  const [loading, setLoading]                     = useState(true);
+  const [formValues, setFormValues]               = useState<Record<string, string>>({});
+  const [photoFiles, setPhotoFiles]               = useState<PhotoFile[]>([]);       // EB Bills
+  const [siteSurveyPhotos, setSiteSurveyPhotos]   = useState<PhotoFile[]>([]);       // Site Survey
+  const [submitting, setSubmitting]               = useState(false);
+  const [isOnline, setIsOnline]                   = useState(true);
+  const [offlineBanner, setOfflineBanner]         = useState(false);
 
   // ── Net status ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -357,23 +458,14 @@ const FormScreen = ({
     }
   };
 
-  // ── Submit (New) - MODIFIED: Now sends multipart with files ──────────────
+  // ── Submit (New) ──────────────────────────────────────────────────────────
   const handleSubmit = async () => {
-    // Validate required EB bills if field is required
-    const ebBillRequired = template?.schema?.required?.includes('ebBillUpload');
-    if (ebBillRequired && photoFiles.length === 0) {
-      Alert.alert('Validation Error', 'Please select at least one EB bill photo');
-      return;
-    }
-
     setSubmitting(true);
 
     if (isOnline) {
       try {
-        // Create FormData for multipart submission
         const formData = new FormData();
-        
-        // Add JSON data as a single field (backend expects this)
+
         const dataPayload = {
           mobileNumber: lead.phone,
           deal_id: lead.id,
@@ -381,8 +473,8 @@ const FormScreen = ({
         };
         formData.append('data', JSON.stringify(dataPayload));
 
-        // Add EB bill photos (backend expects 'ebBillPhotos')
-        photoFiles.forEach((file, index) => {
+        // EB Bill photos
+        photoFiles.forEach((file) => {
           formData.append('ebBillPhotos', {
             uri: file.uri,
             name: file.name,
@@ -390,22 +482,30 @@ const FormScreen = ({
           } as any);
         });
 
-        console.log(`📤 Submitting form with ${photoFiles.length} EB bill(s)...`);
-        
-        // Send to backend endpoint
+        // Site Survey photos
+        siteSurveyPhotos.forEach((file) => {
+          formData.append('siteSurveyPhotos', {
+            uri: file.uri,
+            name: file.name,
+            type: file.type,
+          } as any);
+        });
+
+        console.log(
+          `📤 Submitting form with ${photoFiles.length} EB bill(s) and ${siteSurveyPhotos.length} site survey photo(s)...`
+        );
+
         const res = await API.post('/user/add', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
+          headers: { 'Content-Type': 'multipart/form-data' },
         });
 
         if (res.status === 201 || res.data?.message) {
-          Alert.alert('✔ Submitted', 'Form submitted successfully with EB bill photos!', [
+          Alert.alert('✔ Submitted', 'Form submitted successfully!', [
             { text: 'OK', onPress: _navigateBack },
           ]);
-          // Clear form after successful submission
           setFormValues({});
           setPhotoFiles([]);
+          setSiteSurveyPhotos([]);
         }
       } catch (err: any) {
         console.error('Submit error:', err);
@@ -417,26 +517,28 @@ const FormScreen = ({
         setSubmitting(false);
       }
     } else {
-      // Offline: Save for later sync
       try {
         const offlinePayload = {
           mobileNumber: lead.phone,
           ...formValues,
-          _photoFiles: photoFiles, // Store photo files info
+          _photoFiles: photoFiles,
+          _siteSurveyPhotos: siteSurveyPhotos,
         };
         await saveFormDataLocally(lead.id, offlinePayload);
         await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', {
           formData: offlinePayload,
           photoFiles: photoFiles,
+          siteSurveyPhotos: siteSurveyPhotos,
           mobile: lead.phone,
         });
         Alert.alert(
           '✔ Saved Offline',
           'Form and photos saved locally. Will be submitted when internet is available.',
-          [{ text: 'OK', onPress: _navigateBack }]
+          [{ text: 'OK', onPress: _navigateBack }],
         );
         setFormValues({});
         setPhotoFiles([]);
+        setSiteSurveyPhotos([]);
       } catch (e) {
         Alert.alert('Error', 'Failed to save form offline.');
       } finally {
@@ -445,21 +547,21 @@ const FormScreen = ({
     }
   };
 
-  // ── Update (Edit) - MODIFIED: Now sends multipart with files ──────────────
+  // ── Update (Edit) ─────────────────────────────────────────────────────────
   const handleUpdate = async () => {
     setSubmitting(true);
 
     if (isOnline) {
       try {
         const formData = new FormData();
-        
+
         const updatePayload = {
           mobileNumber: lead.phone,
           ...formValues,
         };
         formData.append('data', JSON.stringify(updatePayload));
 
-        // Add any new EB bill photos
+        // EB Bill photos
         photoFiles.forEach((file) => {
           formData.append('ebBillPhotos', {
             uri: file.uri,
@@ -468,12 +570,21 @@ const FormScreen = ({
           } as any);
         });
 
-        console.log(`📤 Updating form with ${photoFiles.length} EB bill(s)...`);
+        // Site Survey photos
+        siteSurveyPhotos.forEach((file) => {
+          formData.append('siteSurveyPhotos', {
+            uri: file.uri,
+            name: file.name,
+            type: file.type,
+          } as any);
+        });
+
+        console.log(
+          `📤 Updating form with ${photoFiles.length} EB bill(s) and ${siteSurveyPhotos.length} site survey photo(s)...`
+        );
 
         const res = await API.put('https://board.trisentrix.com/user/update', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
+          headers: { 'Content-Type': 'multipart/form-data' },
         });
 
         Alert.alert('✔ Updated', 'Form updated successfully!', [
@@ -481,6 +592,7 @@ const FormScreen = ({
         ]);
         setFormValues({});
         setPhotoFiles([]);
+        setSiteSurveyPhotos([]);
       } catch (err: any) {
         console.error('Update error:', err);
         Alert.alert(
@@ -496,21 +608,24 @@ const FormScreen = ({
           mobileNumber: lead.phone,
           ...formValues,
           _photoFiles: photoFiles,
+          _siteSurveyPhotos: siteSurveyPhotos,
         };
         await saveFormDataLocally(lead.id, offlinePayload);
         await enqueue(`form_update_${lead.id}`, 'FORM_UPDATE', {
           formData: offlinePayload,
           photoFiles: photoFiles,
+          siteSurveyPhotos: siteSurveyPhotos,
           mobile: lead.phone,
           url: 'https://board.trisentrix.com/user/update',
         });
         Alert.alert(
           '✔ Saved Offline',
           'Update saved locally with photos. Will be synced when online.',
-          [{ text: 'OK', onPress: () => navigation.goBack() }]
+          [{ text: 'OK', onPress: () => navigation.goBack() }],
         );
         setFormValues({});
         setPhotoFiles([]);
+        setSiteSurveyPhotos([]);
       } catch (e) {
         Alert.alert('Error', 'Failed to save update offline.');
       } finally {
@@ -616,6 +731,8 @@ const FormScreen = ({
                 setFormValues,
                 photoFiles,
                 setPhotoFiles,
+                siteSurveyPhotos,
+                setSiteSurveyPhotos,
                 isRequired,
                 isMulti,
                 uploadType,
