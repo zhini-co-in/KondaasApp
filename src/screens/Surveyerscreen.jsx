@@ -336,49 +336,49 @@ const SurveyerScreen = () => {
     setRejectModalVisible(true);
   };
 
-  const confirmReject = async () => {
-    if (!rejectComment.trim()) {
-      Alert.alert('Error', 'Please enter a reason for rejection.');
-      return;
+const confirmReject = async () => {
+  if (!rejectComment.trim()) {
+    Alert.alert('Error', 'Please enter a reason for rejection.');
+    return;
+  }
+
+  const lead = leads.find((l) => l.id === rejectLeadId);
+  if (!lead) return;
+
+  if (!isOnline) {
+    Alert.alert('No Connection', 'Rejecting a lead requires internet connection.');
+    return;
+  }
+
+  const surveyorNumber = await getSurveyorNumber();
+
+  try {
+    await API.post('/order/reject', {
+      customerMobile: lead.phone,
+      name:           lead.name,      // 👈 customerName -> name
+      address:        lead.address,   // 👈 customerAddress -> address
+      surveyorNumber,
+      comment:    rejectComment.trim(),
+      receivedAt: Date.now(),
+    });
+
+    setLeads((prev) => prev.filter((l) => l.id !== rejectLeadId));
+
+    const existing    = await AsyncStorage.getItem('rejected_lead_ids');
+    const rejectedIds = existing ? JSON.parse(existing) : [];
+    if (!rejectedIds.includes(rejectLeadId)) {
+      rejectedIds.push(rejectLeadId);
+      await AsyncStorage.setItem('rejected_lead_ids', JSON.stringify(rejectedIds));
     }
 
-    const lead = leads.find((l) => l.id === rejectLeadId);
-    if (!lead) return;
-
-    if (!isOnline) {
-      Alert.alert('No Connection', 'Rejecting a lead requires internet connection.');
-      return;
-    }
-
-    const surveyorNumber = await getSurveyorNumber();
-
-    try {
-      await API.post('/order/reject', {
-        customerMobile:  lead.phone,
-        customerName:    lead.name,
-        customerAddress: lead.address,
-        surveyorNumber,
-        comment:    rejectComment.trim(),
-        receivedAt: Date.now(),
-      });
-
-      setLeads((prev) => prev.filter((l) => l.id !== rejectLeadId));
-
-      const existing    = await AsyncStorage.getItem('rejected_lead_ids');
-      const rejectedIds = existing ? JSON.parse(existing) : [];
-      if (!rejectedIds.includes(rejectLeadId)) {
-        rejectedIds.push(rejectLeadId);
-        await AsyncStorage.setItem('rejected_lead_ids', JSON.stringify(rejectedIds));
-      }
-
-      setRejectModalVisible(false);
-      setRejectLeadId(null);
-      setRejectComment('');
-      Alert.alert('Success', 'Lead rejected successfully.');
-    } catch (err) {
-      Alert.alert('Error', err?.response?.data?.error || 'Failed to reject.');
-    }
-  };
+    setRejectModalVisible(false);
+    setRejectLeadId(null);
+    setRejectComment('');
+    Alert.alert('Success', 'Lead rejected successfully.');
+  } catch (err) {
+    Alert.alert('Error', err?.response?.data?.error || 'Failed to reject.');
+  }
+};
 
   // ── Toggle ────────────────────────────────────────────────────────────────
   const handleToggle = async () => {
@@ -445,71 +445,79 @@ const SurveyerScreen = () => {
   };
 
   // ── Daily toggle photo upload (surveyor check-in) ─────────────────────────
-  const takeAndUploadPhoto = async () => {
-    try {
-      const perm = await requestCameraPermission();
+const takeAndUploadPhoto = async () => {
+  try {
+    const perm = await requestCameraPermission();
 
-      if (perm.neverAskAgain) {
-        Alert.alert('Camera Blocked', 'Enable camera in app settings.', [
-          { text: 'Open Settings', onPress: openAppSettings },
-          { text: 'Cancel', style: 'cancel' },
-        ]);
-        return false;
-      }
-      if (!perm.granted) {
-        Alert.alert('Permission Denied', 'Camera permission is required.');
-        return false;
-      }
-
-      const response = await new Promise((resolve) => {
-        launchCamera(
-          { mediaType: 'photo', cameraType: 'back', quality: 0.8, saveToPhotos: true },
-          resolve
-        );
-      });
-
-      if (response.didCancel) return false;
-      if (response.errorCode) {
-        Alert.alert('Camera Error', response.errorMessage || 'Failed to open camera');
-        return false;
-      }
-
-      const photo = response.assets?.[0];
-      if (!photo?.uri) return false;
-
-      const phoneNo = await getSurveyorNumber();
-      if (!phoneNo) {
-        Alert.alert('Error', 'Surveyor phone number not found.');
-        return false;
-      }
-
-      const filename = photo.uri.split('/').pop();
-      const match    = /\.(\w+)$/.exec(filename);
-      const type     = match ? `image/${match[1]}` : 'image/jpeg';
-
-      const formData = new FormData();
-      formData.append('photo',   { uri: photo.uri, name: filename, type });
-      formData.append('phoneNo', phoneNo);
-
-
-      const res = await API.post('/notification/daily-photo', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
-      if (res.data?.success) {
-        Alert.alert('Success ✅', 'Photo uploaded successfully!');
-        return true;
-      } else {
-        throw new Error(res.data?.message || 'Upload failed');
-      }
-    } catch (err) {
-      Alert.alert(
-        'Upload Failed',
-        err?.response?.data?.message || err?.message || 'Could not upload photo. Please try again.'
-      );
+    if (perm.neverAskAgain) {
+      Alert.alert('Camera Blocked', 'Enable camera in app settings.', [
+        { text: 'Open Settings', onPress: openAppSettings },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
       return false;
     }
-  };
+    if (!perm.granted) {
+      Alert.alert('Permission Denied', 'Camera permission is required.');
+      return false;
+    }
+
+    const response = await new Promise((resolve) => {
+      launchCamera(
+        { mediaType: 'photo', cameraType: 'back', quality: 0.8, saveToPhotos: true },
+        resolve
+      );
+    });
+
+    if (response.didCancel) return false;
+    if (response.errorCode) {
+      Alert.alert('Camera Error', response.errorMessage || 'Failed to open camera');
+      return false;
+    }
+
+    const photo = response.assets?.[0];
+    if (!photo?.uri) return false;
+
+    const phoneNo = await getSurveyorNumber();
+    if (!phoneNo) {
+      Alert.alert('Error', 'Surveyor phone number not found.');
+      return false;
+    }
+
+    const filename = photo.uri.split('/').pop();
+    const match    = /\.(\w+)$/.exec(filename);
+    const type     = match ? `image/${match[1]}` : 'image/jpeg';
+
+    // 🕒 backend-ku required "HH-MM-SS" format-la time generate pannunga
+    const now = new Date();
+    const time = [
+      String(now.getHours()).padStart(2, '0'),
+      String(now.getMinutes()).padStart(2, '0'),
+      String(now.getSeconds()).padStart(2, '0'),
+    ].join('-');
+
+    const formData = new FormData();
+    formData.append('photo',   { uri: photo.uri, name: filename, type });
+    formData.append('phoneNo', phoneNo);
+    formData.append('time',    time);   // 👈 add panniten
+
+    const res = await API.post('/notification/daily-photo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+
+    if (res.data?.success) {
+      Alert.alert('Success ✅', 'Photo uploaded successfully!');
+      return true;
+    } else {
+      throw new Error(res.data?.message || 'Upload failed');
+    }
+  } catch (err) {
+    Alert.alert(
+      'Upload Failed',
+      err?.response?.data?.message || err?.message || 'Could not upload photo. Please try again.'
+    );
+    return false;
+  }
+};
 
   // ── Manual camera upload button ───────────────────────────────────────────
   const handleUploadPress = async () => {
@@ -569,90 +577,14 @@ const SurveyerScreen = () => {
     }
   };
 
-  // ── NEW: Lead photo — taken when Start button is pressed ──────────────────
-  const takeLeadPhoto = async (lead) => {
-    try {
-      // 1. Camera permission check
-      const perm = await requestCameraPermission();
-
-      if (perm.neverAskAgain) {
-        Alert.alert('Camera Blocked', 'Enable camera in app settings.', [
-          { text: 'Open Settings', onPress: openAppSettings },
-          { text: 'Cancel', style: 'cancel' },
-        ]);
-        return false;
-      }
-      if (!perm.granted) {
-        Alert.alert('Permission Denied', 'Camera permission is required to start.');
-        return false;
-      }
-
-      // 2. Open camera
-      const response = await new Promise((resolve) => {
-        launchCamera(
-          { mediaType: 'photo', cameraType: 'back', quality: 0.8, saveToPhotos: true },
-          resolve
-        );
-      });
-
-      if (response.didCancel) return false;
-      if (response.errorCode) {
-        Alert.alert('Camera Error', response.errorMessage || 'Failed to open camera');
-        return false;
-      }
-
-      const photo = response.assets?.[0];
-      if (!photo?.uri) return false;
-
-      // 3. Build FormData — backend expects: photo, customerNumber, date
-      const filename = photo.uri.split('/').pop();
-      const match    = /\.(\w+)$/.exec(filename);
-      const type     = match ? `image/${match[1]}` : 'image/jpeg';
-      const today    = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
-
-      const formData = new FormData();
-      formData.append('photo',          { uri: photo.uri, name: filename, type });
-      formData.append('customerNumber', lead.phone);  // backend field: customerNumber
-      formData.append('date',           today);
-
-
-      // 4. POST to lead photo endpoint
-      const res = await API.post('/notification/leads-photo', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 30000,
-      });
-
-
-      if (res.data?.success) {
-        return true;
-      } else {
-        throw new Error(res.data?.message || 'Upload failed');
-      }
-    } catch (err) {
-
-      const errorMsg =
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        err?.message ||
-        'Could not upload photo.';
-
-      Alert.alert('Photo Upload Failed', errorMsg);
-      return false;
-    }
-  };
 
   // ── Start / Resume ────────────────────────────────────────────────────────
+// ── Start / Resume ────────────────────────────────────────────────────────
   const handleStart = async (id) => {
     const lead = acceptedLeadsRef.current.find((l) => l.id === id);
     if (!lead) return;
 
-    // STEP 1: Take & upload lead photo — only on first Start, not Resume
-    if (lead.status !== 'inprogress') {
-      const photoUploaded = await takeLeadPhoto(lead);
-      if (!photoUploaded) return; // user cancelled or upload failed → stop
-    }
-
-    // STEP 2: ETA + Maps URL calculation
+    // STEP 1: ETA + Maps URL calculation
     let etaText  = 'N/A';
     let totalMins = 0;
     const hasLatLong = lead.latitude && lead.longitude;
@@ -684,7 +616,7 @@ const SurveyerScreen = () => {
       mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lead.address || lead.city)}`;
     }
 
-    // STEP 3: Status update
+    // STEP 2: Status update
     await updateAcceptedLeadStatus(id, 'inprogress');
 
     setAcceptedLeadsSafe((prev) =>

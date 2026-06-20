@@ -468,9 +468,11 @@ const FormScreen = ({
 
         const dataPayload = {
           mobileNumber: lead.phone,
-          deal_id: lead.id,
+          deal_id: lead.dealId, // ✅ FIX: was lead.id (local leadId) — must be lead.dealId (backend order id)
           ...formValues,
         };
+        // 🆔 deal_id console log — shows exactly what deal_id is being sent to /user/add
+        console.log('🆔 [handleSubmit] leadId (local):', lead.id, '| deal_id (backend):', dataPayload.deal_id);
         formData.append('data', JSON.stringify(dataPayload));
 
         // EB Bill photos
@@ -484,7 +486,7 @@ const FormScreen = ({
 
         // Site Survey photos
         siteSurveyPhotos.forEach((file) => {
-          formData.append('siteSurveyPhotos', {
+          formData.append('sitePhotos', {
             uri: file.uri,
             name: file.name,
             type: file.type,
@@ -520,10 +522,13 @@ const FormScreen = ({
       try {
         const offlinePayload = {
           mobileNumber: lead.phone,
+          deal_id: lead.dealId, // ✅ FIX: was lead.id — must be lead.dealId
           ...formValues,
           _photoFiles: photoFiles,
           _siteSurveyPhotos: siteSurveyPhotos,
         };
+        // 🆔 deal_id console log — offline path
+        console.log('🆔 [handleSubmit/offline] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
         await saveFormDataLocally(lead.id, offlinePayload);
         await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', {
           formData: offlinePayload,
@@ -557,8 +562,11 @@ const FormScreen = ({
 
         const updatePayload = {
           mobileNumber: lead.phone,
+          deal_id: lead.dealId, // ✅ FIX: was lead.id — must be lead.dealId
           ...formValues,
         };
+        // 🆔 deal_id console log — shows exactly what deal_id is being sent to /user/update
+        console.log('🆔 [handleUpdate] leadId (local):', lead.id, '| deal_id (backend):', updatePayload.deal_id);
         formData.append('data', JSON.stringify(updatePayload));
 
         // EB Bill photos
@@ -572,7 +580,7 @@ const FormScreen = ({
 
         // Site Survey photos
         siteSurveyPhotos.forEach((file) => {
-          formData.append('siteSurveyPhotos', {
+          formData.append('sitePhotos', {
             uri: file.uri,
             name: file.name,
             type: file.type,
@@ -606,10 +614,13 @@ const FormScreen = ({
       try {
         const offlinePayload = {
           mobileNumber: lead.phone,
+          deal_id: lead.dealId, // ✅ FIX: was lead.id — must be lead.dealId
           ...formValues,
           _photoFiles: photoFiles,
           _siteSurveyPhotos: siteSurveyPhotos,
         };
+        // 🆔 deal_id console log — offline path
+        console.log('🆔 [handleUpdate/offline] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
         await saveFormDataLocally(lead.id, offlinePayload);
         await enqueue(`form_update_${lead.id}`, 'FORM_UPDATE', {
           formData: offlinePayload,

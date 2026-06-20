@@ -220,16 +220,16 @@ await API.post('/notification/trigger', {
 }
 
       // 2d. Notification trigger
+      // 2d. Notification trigger
       try {
-  // AFTER
-await API.post('/notification/trigger', {
-  customerMobile: item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
-});
-} catch (err) {
-  await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
-    customerMobile: item.phone, name: item.name, scenarioType: 4,
-  });
-}
+        await API.post('/notification/trigger', {
+          customerMobile: item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
+        });
+      } catch (err) {
+        await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
+          customerMobile: item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
+        });
+      }
     } else {
       // Offline — queue all operations
       const surveyorNumber = await getSurveyorNumber();
