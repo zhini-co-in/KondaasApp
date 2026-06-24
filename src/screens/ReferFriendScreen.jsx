@@ -22,7 +22,7 @@ import NetInfo from "@react-native-community/netinfo";
 import LinearGradient from "react-native-linear-gradient";
 import { SCREEN_NAMES } from "../constants/screenNames";
 
-const BASE_URL = "https://board.trisentrix.com";
+const BASE_URL = "https://crucial-purifier-canopener.ngrok-free.dev";
 
 const ReferFriendScreen = ({ navigation }) => {
   const [name, setName] = useState("");
@@ -119,104 +119,89 @@ const ReferFriendScreen = ({ navigation }) => {
     setShowList(false);
   };
 
-  const handleRefer = async () => {
-    const net = await NetInfo.fetch();
-const isOffline = net.isConnected === false || net.isInternetReachable === false;
-if (isOffline) return;
-    if (!net.isConnected) {
-      alert("No network connection available");
-      return;
-    }
-    if (!name || !mobile || !product) {
-      Alert.alert("Missing Info", "Please fill all fields before submitting.");
-      return;
-    }
-    const mobileRegex = /^[6-9]\d{9}$/;
-    if (!mobileRegex.test(mobile)) {
-      Alert.alert("Invalid Mobile Number", "Enter a valid 10-digit mobile number.");
+const handleRefer = async () => {
+  const net = await NetInfo.fetch();
+  const isOffline = !net.isConnected || !net.isInternetReachable;
+  if (isOffline) {
+    Alert.alert("No Internet", "Please check your network connection.");
+    return;
+  }
+
+  if (!name || !mobile || !product) {
+    Alert.alert("Missing Info", "Please fill all fields before submitting.");
+    return;
+  }
+
+  const mobileRegex = /^[6-9]\d{9}$/;
+  if (!mobileRegex.test(mobile)) {
+    Alert.alert("Invalid Mobile Number", "Enter a valid 10-digit mobile number starting with 6-9.");
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    // Get referer phone
+    const userDataJson = await AsyncStorage.getItem(USER_DATA);
+    const userData = userDataJson ? JSON.parse(userDataJson) : null;
+    const refererPhNo = userData?.UserInfo?.phoneNo || userData?.phoneNumber || userData?.mobile || "";
+
+    if (!refererPhNo) {
+      Alert.alert("Error", "Referer phone number missing.");
       return;
     }
 
-    try {
-      setLoading(true);
-
-      // ─── Get referer phone from AsyncStorage ───
-      const userDataJson = await AsyncStorage.getItem(USER_DATA);
-      const userData = userDataJson ? JSON.parse(userDataJson) : null;
-      const refererPhNo =
-        userData?.UserInfo?.phoneNo ||
-        userData?.phoneNumber ||
-        userData?.mobile ||
-        "";
-      if (!refererPhNo) {
-        Alert.alert("Error", "Referer phone number missing in user data.");
+    // Optional: Existing duplicate check
+    const checkRes = await fetch(
+      `${BASE_URL}/referral/get?refererPhNo=${encodeURIComponent(refererPhNo)}`
+    );
+    const checkData = await checkRes.json();
+    if (checkData.success && checkData.data?.length) {
+      const alreadyReferred = checkData.data.some((r) => r.friendPhNo === mobile);
+      if (alreadyReferred) {
+        Alert.alert("Already Referred", "This number has already been referred.");
         return;
       }
-
-      // ─── Check duplicate via your API ───
-      const checkRes = await fetch(
-        `${BASE_URL}/referral/get?refererPhNo=${encodeURIComponent(refererPhNo)}`
-      );
-      const checkData = await checkRes.json();
-      if (checkData.success && checkData.data?.length) {
-        const alreadyReferred = checkData.data.some(
-          (r) => r.friendPhNo === mobile
-        );
-        if (alreadyReferred) {
-          Alert.alert(
-            "Already Exists",
-            "This mobile number has already been referred."
-          );
-          setLoading(false);
-          return;
-        }
-      }
-
-      // ─── Build referral payload ───
-      const salesId = `REF-${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2, 6)
-        .toUpperCase()}`;
-
-      const referralPayload = {
-        id: salesId,
-        salesId,
-        refererPhNo,
-        friendPhNo: mobile,
-        friendName: name,
-        productID: product,
-        status: "",
-        bonusAmount: null,
-        amountCredited: null,
-        description: null,
-        PurchaseAt: "",
-        PurchaseTracking: "",
-      };
-
-      // ─── POST to your endpoint ───
-      const res = await fetch(`${BASE_URL}/referral/create`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(referralPayload),
-      });
-      const data = await res.json();
-
-      if (data.success) {
-        Alert.alert("Success", "Referral submitted successfully!");
-        setName("");
-        setMobile("");
-        setProduct("");
-        navigation.navigate(SCREEN_NAMES.REFER_AND_EARN);
-      } else {
-        Alert.alert("Error", data.error || "Failed to submit referral.");
-      }
-    } catch (error) {
-      console.error("❌ handleRefer error:", error);
-      Alert.alert("Error", "Something went wrong while submitting referral.");
-    } finally {
-      setLoading(false);
     }
-  };
+
+    // === NEW: Call /order/add ===
+    const orderPayload = {
+      mobileNumber: mobile,
+      customerName: name,
+      firstName: name,
+      product: product,           // or productID if your backend prefers
+      refererPhNo: refererPhNo,
+      source: "Referral",
+      description: `Referred by ${refererPhNo} for product: ${product}`,
+    };
+
+    const res = await fetch(`${BASE_URL}/order/add`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(orderPayload),
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      Alert.alert("Success", "Referral submitted successfully!");
+      
+      // Reset form
+      setName("");
+      setMobile("");
+      setProduct("");
+      
+      navigation.navigate(SCREEN_NAMES.REFER_AND_EARN);
+    } else {
+      Alert.alert("Error", data.error || "Failed to submit referral.");
+    }
+  } catch (error) {
+    console.error("❌ handleRefer error:", error);
+    Alert.alert("Error", "Something went wrong. Please try again.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <SafeAreaView style={styles.container}>

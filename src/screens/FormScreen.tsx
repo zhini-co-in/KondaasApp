@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, ActivityIndicator,
   StyleSheet, TextInput, TouchableOpacity, Alert, Modal, FlatList, Image,
+  PermissionsAndroid, Platform,
 } from 'react-native';
 import API from '../api/api1';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import NetInfo from '@react-native-community/netinfo';
+import { useLocationTracking, requestLocationPermissions } from '../service/locationService';
 import {
   cacheTemplate, getCachedTemplate,
   saveFormDataLocally, getSavedFormData,
@@ -13,7 +15,7 @@ import {
 import { enqueue } from '../service/syncQueue';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { USER_DATA } from '../service/localStorage';
-import { launchImageLibrary } from 'react-native-image-picker';
+import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 
 interface FieldProperty {
   title?: string; description?: string; type?: string;
@@ -29,12 +31,137 @@ interface UISchema { type: string; elements: UIElement[]; }
 interface Template { id: string; schema: Schema; uischema: UISchema; }
 interface Lead { id: string; name: string; phone: string; [key: string]: string; }
 
-// ── PhotoFile type ─────────────────────────────────────────────────────────────
 interface PhotoFile {
   uri: string;
   name: string;
   type: string;
 }
+
+interface GpsCoords {
+  latitude: number | null;
+  longitude: number | null;
+  accuracy: number | null;
+}
+
+interface LocationCoords {
+  latitude: number;
+  longitude: number;
+  accuracy: number | null;
+  [key: string]: any;
+}
+
+// ── Zoho Field Mapping ─────────────────────────────────────────────────────────
+const zohoFieldMap: Record<string, string> = {
+  clientName:                       'Consumer_Name',
+  clientContact:                    'Phone',
+  engineerName:                     'engineerName',          // ✅ no confirmed Zoho field — kept distinct (was clashing with engineerContact)
+  engineerContact:                  'Site_Engineer_Contact',
+  siteAddress:                      'Street_Address',
+  ksebConnectionUnderContactPerson: 'KSEB_Connection_Under_Contact_Person',
+  latitude:                         'Latitude',
+  longitude:                        'Longitude',
+  gpsAccuracy:                      'gpsAccuracy',
+  googleMapLink:                    'Google_Map_Location',
+  orderType:                        'Order_Type',
+  telecallerName:                   'telecallerName',
+  projectType:                      'Project_Type',
+  consumerNumber:                   'Consumer_Number',
+  consumerName:                     'Consumer_Name',
+  connectionStatus:                 'Connection_Type',
+  tariffType:                       'Tariff',
+  connectionPhase:                  'connectionPhase',       // ✅ no confirmed Zoho field — kept distinct (was clashing with connectionStatus)
+  connectedLoad:                    'Connected_Load',
+  balanceTransformerCapacity:       'Balance_Transformer_Capacity',
+  inverterType:                     'inverterType',          // ✅ no confirmed Zoho field — kept distinct (was clashing with inverterConnectionType)
+  inverterConnectionType:           'Inverter_Connection_Type',
+  inverterCapacity:                 'Inverter_Capacity',
+  panelType:                        'Solar_Panel_Model',
+  numberOfPanels:                   'No_of_Panels',
+  spaceNorthSouth:                  'North_to_South_Space_Available_in_meters',
+  spaceEastWest:                    'West_to_East_Space_Available_meters',
+  structureType:                    'Structure_Type',
+  roofType:                         'Roof_Type',
+  roofCondition:                    'Roof_Surface_Physical_Condition',
+  buildingHeight:                   'Building_Height_Profile',
+  shadowPossibility:                'Shadow_Possibility',
+  roofAccess:                       'Roof_Access_Available',
+  ladderRequirement:                'Ladder',
+  walkwayRequirement:               'Walkway',
+  slidingDoorRequirement:           'Sliding_Door',
+  cableRequirement:                 'Cable_Requirements',
+  customerDocsProvided:             'customerDocsProvided',  // ✅ no confirmed Zoho field — kept distinct (was clashing with documentsCollectedStatus)
+  ksebNameChange:                   'Name_Change_In_EB_Bill',
+  bankNameChange:                   'Name_Change_in_Bank',
+  gridLoadChange:                   'Connected_Load_Revise',
+  paymentMode:                      'Mode_of_Payment',
+  advanceCollectionStatus:          'Advance_payment_Received',
+  documentsCollectedStatus:         'Document_collected',
+  collectedSitePhotosStatus:        'Site_Survey',
+  photoNorthSouth:                  'photoNorthSouth',
+  photoSouthNorth:                  'photoSouthNorth',
+  photoEastWest:                    'photoEastWest',
+  photoWestEast:                    'photoWestEast',
+  photoPanelMounting:               'photoPanelMounting',
+  photoGeoTagged:                   'photoGeoTagged',
+  videoRoof:                        'videoRoof',
+  videoSurround:                    'videoSurround',
+  photoBuildingView:                'photoBuildingView',
+  photoMeter:                       'photoMeter',
+  photoEarthing:                    'photoEarthing',
+  photoInverterDb:                  'photoInverterDb',
+  productName:                      'Product_Name',
+  totalPlantCost:                   'Total_Plant_Cost',
+  governmentSubsidy:                'Subsidy_Amount',
+  netCostAfterSubsidy:              'Plant_Cost_After_Subsidy',
+  additionalKsebCharges:            'Additional_EB_Charges',
+  additionalStructureCost:          'Additional_Structure_Cost',
+  remarks:                          'Site_Survey_Remarks',
+  siteEngineerSignature:            'Site_Engineer_Signature',
+  customerConfirmationSignature:    'Customer_Confirmation',
+};
+
+const mapToZohoFields = (values: Record<string, string>): Record<string, string> => {
+  const mapped: Record<string, string> = {};
+  Object.entries(values).forEach(([key, value]) => {
+    const zohoKey = zohoFieldMap[key] ?? key;
+    mapped[zohoKey] = value;
+  });
+  return mapped;
+};
+const numberFields = new Set([
+  'Consumer_Number',
+  'Connected_Load',
+  'Balance_Transformer_Capacity',
+  'Inverter_Capacity',
+  'No_of_Panels',
+  'North_to_South_Space_Available_in_meters',
+  'West_to_East_Space_Available_meters',
+  'Total_Plant_Cost',
+  'Subsidy_Amount',
+  'Plant_Cost_After_Subsidy',
+  'Additional_EB_Charges',
+  'Additional_Structure_Cost',
+  'gpsAccuracy',
+]);
+
+const coerceNumbers = (mapped: Record<string, string>): Record<string, any> => {
+  const result: Record<string, any> = {};
+  Object.entries(mapped).forEach(([key, val]) => {
+    if (numberFields.has(key) && val !== '' && val != null) {
+      // Consumer_Number must be strict integer
+      if (key === 'Consumer_Number') {
+  const parsed = Math.trunc(Number(val));
+  result[key] = isNaN(parsed) ? 0 : parsed;
+} else {
+        const num = Number(val);
+        result[key] = isNaN(num) ? val : num;
+      }
+    } else {
+      result[key] = val;
+    }
+  });
+  return result;
+};
 
 // ── Dropdown ──────────────────────────────────────────────────────────────────
 const DropdownPicker = ({
@@ -79,120 +206,127 @@ const DropdownPicker = ({
   );
 };
 
-// ── EB Bill Upload Field ───────────────────────────────────────────────────────
-const EbBillUploadField = ({
-  label, photoFiles, onChange, required,
+// ── GPS Location Field ─────────────────────────────────────────────────────────
+const GpsLocationField = ({
+  label, coords, mapLink, loading, onRefetch, required,
 }: {
-  label: string; photoFiles: PhotoFile[];
-  onChange: (files: PhotoFile[]) => void; required?: boolean;
+  label: string; coords: GpsCoords; mapLink: string;
+  loading: boolean; onRefetch: () => void; required?: boolean;
 }) => {
-  const [previewUris, setPreviewUris] = useState<string[]>(photoFiles.map(f => f.uri));
-
-  const handlePick = async () => {
-    launchImageLibrary(
-      { mediaType: 'photo', selectionLimit: 6, quality: 0.8 },
-      (response) => {
-        if (response.didCancel || response.errorCode) return;
-        const assets = response.assets ?? [];
-        if (assets.length === 0) return;
-
-        const newFiles: PhotoFile[] = assets.map((asset) => ({
-          uri: asset.uri ?? '',
-          name: asset.fileName ?? asset.uri?.split('/').pop() ?? `eb_bill_${Date.now()}.jpg`,
-          type: asset.type ?? 'image/jpeg',
-        })).filter(f => f.uri);
-
-        setPreviewUris(newFiles.map(f => f.uri));
-        onChange(newFiles);
-      }
-    );
-  };
+  const hasCoords = coords.latitude != null && coords.longitude != null;
 
   return (
-    <View style={styles.fieldContainer}>
-      <Text style={styles.label}>
-        {label} {required && <Text style={{ color: '#ED1C25' }}>*</Text>}
-      </Text>
+    <View style={[styles.fieldContainer, { padding: 16 }]}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Ionicons name="location" size={16} color="#ED1C25" />
+          <Text style={styles.label}>
+            {label} {required && <Text style={{ color: '#ED1C25' }}>*</Text>}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={{
+            backgroundColor: '#1e293b', flexDirection: 'row', alignItems: 'center',
+            gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6,
+          }}
+          onPress={onRefetch}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Ionicons name="navigate" size={14} color="#fff" />
+          )}
+          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+            {hasCoords ? 'Refetch GPS' : 'Fetch GPS Location'}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-      <TouchableOpacity
-        style={{
-          borderWidth: 1.5,
-          borderColor: photoFiles.length > 0 ? '#22c55e' : '#ED1C25',
-          borderStyle: 'dashed',
-          borderRadius: 8,
-          padding: 16,
-          alignItems: 'center',
-          backgroundColor: photoFiles.length > 0 ? '#f0fdf4' : '#fff5f5',
-          flexDirection: 'row',
-          justifyContent: 'center',
-          gap: 8,
-        }}
-        onPress={handlePick}
-      >
-        <Ionicons
-          name={photoFiles.length > 0 ? 'checkmark-circle' : 'cloud-upload-outline'}
-          size={24}
-          color={photoFiles.length > 0 ? '#22c55e' : '#ED1C25'}
-        />
-        <Text style={{
-          color: photoFiles.length > 0 ? '#22c55e' : '#ED1C25',
-          fontWeight: '600', fontSize: 13,
-        }}>
-          {photoFiles.length > 0 ? `✅ ${photoFiles.length} Bill(s) Selected` : 'Select Last 6 Months EB Bills'}
-        </Text>
-      </TouchableOpacity>
-
-      {previewUris.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
-          {previewUris.map((uri, idx) => (
-            <Image
-              key={idx}
-              source={{ uri }}
-              style={{
-                width: 60, height: 60, borderRadius: 6,
-                marginRight: 8, borderWidth: 1, borderColor: '#ddd',
-              }}
-            />
-          ))}
-        </ScrollView>
-      )}
-
-      {photoFiles.length > 0 && (
-        <Text style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
-          Tap to change bills • Will upload on form submission
-        </Text>
-      )}
+      <View style={{
+        backgroundColor: '#fff5f5', borderWidth: 1, borderColor: '#fecaca',
+        borderRadius: 6, padding: 12,
+      }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <View>
+            <Text style={{ fontSize: 9, fontWeight: '700', color: '#888' }}>LATITUDE</Text>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#333' }}>
+              {coords.latitude != null ? coords.latitude.toFixed(6) : '—'}
+            </Text>
+          </View>
+          <View>
+            <Text style={{ fontSize: 9, fontWeight: '700', color: '#888' }}>LONGITUDE</Text>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#333' }}>
+              {coords.longitude != null ? coords.longitude.toFixed(6) : '—'}
+            </Text>
+          </View>
+          <View>
+            <Text style={{ fontSize: 9, fontWeight: '700', color: '#888' }}>ACCURACY</Text>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#ED1C25' }}>
+              {coords.accuracy != null ? `±${coords.accuracy.toFixed(1)}m` : '—'}
+            </Text>
+          </View>
+        </View>
+        {!!mapLink && (
+          <Text style={{ fontSize: 10, color: '#ED1C25', marginTop: 8 }} numberOfLines={1}>
+            {mapLink}
+          </Text>
+        )}
+      </View>
     </View>
   );
 };
 
-// ── Site Survey Photo Upload Field ────────────────────────────────────────────
-const SiteSurveyUploadField = ({
+// ── Photo Upload Field ─────────────────────────────────────────────────────────
+const PhotoUploadField = ({
   label, photoFiles, onChange, required,
+  selectionLimit, namePrefix, accentColor,
 }: {
   label: string; photoFiles: PhotoFile[];
   onChange: (files: PhotoFile[]) => void; required?: boolean;
+  selectionLimit: number; namePrefix: string; accentColor: string;
 }) => {
-  const [previewUris, setPreviewUris] = useState<string[]>(photoFiles.map(f => f.uri));
+  const appendFiles = (newFiles: PhotoFile[]) => {
+    onChange([...photoFiles, ...newFiles]);
+  };
 
-  const handlePick = async () => {
-    launchImageLibrary(
-      { mediaType: 'photo', selectionLimit: 10, quality: 0.8 },
+  const mapAssets = (assets: any[]): PhotoFile[] =>
+    assets
+      .map((asset) => ({
+        uri: asset.uri ?? '',
+        name: asset.fileName ?? asset.uri?.split('/').pop() ?? `${namePrefix}_${Date.now()}.jpg`,
+        type: asset.type ?? 'image/jpeg',
+      }))
+      .filter((f) => f.uri);
+
+  const handleTakePhoto = () => {
+    launchCamera(
+      { mediaType: 'photo', quality: 0.8, saveToPhotos: true },
       (response) => {
         if (response.didCancel || response.errorCode) return;
         const assets = response.assets ?? [];
         if (assets.length === 0) return;
-
-        const newFiles: PhotoFile[] = assets.map((asset) => ({
-          uri: asset.uri ?? '',
-          name: asset.fileName ?? asset.uri?.split('/').pop() ?? `site_survey_${Date.now()}.jpg`,
-          type: asset.type ?? 'image/jpeg',
-        })).filter(f => f.uri);
-
-        setPreviewUris(newFiles.map(f => f.uri));
-        onChange(newFiles);
+        appendFiles(mapAssets(assets));
       }
     );
+  };
+
+  const handleUpload = () => {
+    const remaining = Math.max(selectionLimit - photoFiles.length, 1);
+    launchImageLibrary(
+      { mediaType: 'photo', selectionLimit: remaining, quality: 0.8 },
+      (response) => {
+        if (response.didCancel || response.errorCode) return;
+        const assets = response.assets ?? [];
+        if (assets.length === 0) return;
+        appendFiles(mapAssets(assets));
+      }
+    );
+  };
+
+  const removeAt = (idx: number) => {
+    const next = photoFiles.filter((_, i) => i !== idx);
+    onChange(next);
   };
 
   return (
@@ -201,55 +335,63 @@ const SiteSurveyUploadField = ({
         {label} {required && <Text style={{ color: '#ED1C25' }}>*</Text>}
       </Text>
 
-      <TouchableOpacity
-        style={{
-          borderWidth: 1.5,
-          borderColor: photoFiles.length > 0 ? '#3b82f6' : '#ED1C25',
-          borderStyle: 'dashed',
-          borderRadius: 8,
-          padding: 16,
-          alignItems: 'center',
-          backgroundColor: photoFiles.length > 0 ? '#eff6ff' : '#fff5f5',
-          flexDirection: 'row',
-          justifyContent: 'center',
-          gap: 8,
-        }}
-        onPress={handlePick}
-      >
-        <Ionicons
-          name={photoFiles.length > 0 ? 'images' : 'camera-outline'}
-          size={24}
-          color={photoFiles.length > 0 ? '#3b82f6' : '#ED1C25'}
-        />
-        <Text style={{
-          color: photoFiles.length > 0 ? '#3b82f6' : '#ED1C25',
-          fontWeight: '600', fontSize: 13,
-        }}>
-          {photoFiles.length > 0
-            ? `📷 ${photoFiles.length} Site Photo(s) Selected`
-            : 'Upload Site Survey Photos'}
-        </Text>
-      </TouchableOpacity>
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <TouchableOpacity
+          style={{
+            flex: 1, borderWidth: 1.5, borderColor: accentColor, borderStyle: 'dashed',
+            borderRadius: 8, paddingVertical: 14, alignItems: 'center',
+            flexDirection: 'row', justifyContent: 'center', gap: 6,
+            backgroundColor: '#fff',
+          }}
+          onPress={handleTakePhoto}
+        >
+          <Ionicons name="camera-outline" size={20} color={accentColor} />
+          <Text style={{ color: accentColor, fontWeight: '700', fontSize: 13 }}>Take Photo</Text>
+        </TouchableOpacity>
 
-      {previewUris.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
-          {previewUris.map((uri, idx) => (
-            <Image
-              key={idx}
-              source={{ uri }}
-              style={{
-                width: 70, height: 70, borderRadius: 8,
-                marginRight: 8, borderWidth: 1.5, borderColor: '#3b82f6',
-              }}
-            />
-          ))}
-        </ScrollView>
-      )}
+        <TouchableOpacity
+          style={{
+            flex: 1, borderWidth: 1.5, borderColor: accentColor, borderStyle: 'dashed',
+            borderRadius: 8, paddingVertical: 14, alignItems: 'center',
+            flexDirection: 'row', justifyContent: 'center', gap: 6,
+            backgroundColor: '#fff',
+          }}
+          onPress={handleUpload}
+        >
+          <Ionicons name="cloud-upload-outline" size={20} color={accentColor} />
+          <Text style={{ color: accentColor, fontWeight: '700', fontSize: 13 }}>Upload</Text>
+        </TouchableOpacity>
+      </View>
 
       {photoFiles.length > 0 && (
-        <Text style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
-          Tap to change photos • Will upload on form submission
-        </Text>
+        <>
+          <Text style={{ fontSize: 12, color: accentColor, fontWeight: '600', marginTop: 10 }}>
+            {photoFiles.length} file(s) selected
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+            {photoFiles.map((file, idx) => (
+              <View key={idx} style={{ marginRight: 10 }}>
+                <Image
+                  source={{ uri: file.uri }}
+                  style={{
+                    width: 64, height: 64, borderRadius: 8,
+                    borderWidth: 1.5, borderColor: accentColor,
+                  }}
+                />
+                <TouchableOpacity
+                  style={{
+                    position: 'absolute', top: -6, right: -6,
+                    backgroundColor: '#ED1C25', borderRadius: 10,
+                    width: 20, height: 20, alignItems: 'center', justifyContent: 'center',
+                  }}
+                  onPress={() => removeAt(idx)}
+                >
+                  <Ionicons name="close" size={12} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </ScrollView>
+        </>
       )}
     </View>
   );
@@ -266,34 +408,59 @@ const renderField = (
   siteSurveyPhotos: PhotoFile[],
   setSiteSurveyPhotos: React.Dispatch<React.SetStateAction<PhotoFile[]>>,
   required: boolean,
-  isMulti?: boolean,
-  uploadType?: string,
+  isMulti: boolean | undefined,
+  uploadType: string | undefined,
+  gpsCoords: GpsCoords,
+  gpsMapLink: string,
+  gpsLoading: boolean,
+  onRefetchGps: () => void,
 ) => {
   const label = field.title ?? fieldKey;
   const value = formValues[fieldKey] ?? '';
 
-  // ✅ EB Bill upload
+  if (fieldKey === 'latitude') {
+    return (
+      <GpsLocationField
+        key="gps-location-group"
+        label="GPS Geo-Location Coordinates"
+        coords={gpsCoords}
+        mapLink={gpsMapLink}
+        loading={gpsLoading}
+        onRefetch={onRefetchGps}
+        required={required}
+      />
+    );
+  }
+  if (fieldKey === 'longitude' || fieldKey === 'gpsAccuracy' || fieldKey === 'googleMapLink') {
+    return null;
+  }
+
   if (fieldKey === 'ebBillUpload' || uploadType === 'ebBill') {
     return (
-      <EbBillUploadField
+      <PhotoUploadField
         key={fieldKey}
         label={label}
         photoFiles={photoFiles}
         onChange={(files) => setPhotoFiles(files)}
         required={required}
+        selectionLimit={6}
+        namePrefix="eb_bill"
+        accentColor="#22c55e"
       />
     );
   }
 
-  // ✅ Site Survey Photos upload
   if (fieldKey === 'siteSurveyPhotos' || uploadType === 'siteSurvey') {
     return (
-      <SiteSurveyUploadField
+      <PhotoUploadField
         key={fieldKey}
         label={label}
         photoFiles={siteSurveyPhotos}
         onChange={(files) => setSiteSurveyPhotos(files)}
         required={required}
+        selectionLimit={10}
+        namePrefix="site_survey"
+        accentColor="#3b82f6"
       />
     );
   }
@@ -371,17 +538,115 @@ const FormScreen = ({
 }) => {
   const { lead, mode } = route.params;
   const isEditMode = mode === 'edit';
+  const isMounted = useRef(true);
 
-  const [template, setTemplate]                   = useState<Template | null>(null);
-  const [loading, setLoading]                     = useState(true);
-  const [formValues, setFormValues]               = useState<Record<string, string>>({});
-  const [photoFiles, setPhotoFiles]               = useState<PhotoFile[]>([]);       // EB Bills
-  const [siteSurveyPhotos, setSiteSurveyPhotos]   = useState<PhotoFile[]>([]);       // Site Survey
-  const [submitting, setSubmitting]               = useState(false);
-  const [isOnline, setIsOnline]                   = useState(true);
-  const [offlineBanner, setOfflineBanner]         = useState(false);
+  const { currentLocation, startTracking } = useLocationTracking(isMounted);
+  const typedLocation = currentLocation as LocationCoords | null;
 
-  // ── Net status ────────────────────────────────────────────────────────────
+  const [template, setTemplate]                 = useState<Template | null>(null);
+  const [loading, setLoading]                   = useState(true);
+  const [formValues, setFormValues]             = useState<Record<string, string>>({});
+  const [photoFiles, setPhotoFiles]             = useState<PhotoFile[]>([]);
+  const [siteSurveyPhotos, setSiteSurveyPhotos] = useState<PhotoFile[]>([]);
+  const [submitting, setSubmitting]             = useState(false);
+  const [isOnline, setIsOnline]                 = useState(true);
+  const [offlineBanner, setOfflineBanner]       = useState(false);
+
+  const [gpsCoords, setGpsCoords] = useState<GpsCoords>({ latitude: null, longitude: null, accuracy: null });
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const gpsMapLink = gpsCoords.latitude != null && gpsCoords.longitude != null
+    ? `https://www.google.com/maps?q=${gpsCoords.latitude},${gpsCoords.longitude}`
+    : '';
+
+  const fetchGpsLocation = async () => {
+    const hasPermission = await requestLocationPermissions();
+    if (!hasPermission) {
+      Alert.alert('Permission Denied', 'Location permission is required to fetch GPS.');
+      return;
+    }
+
+    setGpsLoading(true);
+
+    try {
+      startTracking();
+
+      let attempts = 0;
+      const maxAttempts = 20;
+
+      const checkLocation = setInterval(() => {
+        attempts++;
+
+        setGpsCoords((prev) => {
+          if (typedLocation?.latitude != null && typedLocation?.longitude != null) {
+            const accuracy = typedLocation.accuracy ?? null;
+
+            setFormValues((prevForm) => ({
+              ...prevForm,
+              latitude: String(typedLocation.latitude),
+              longitude: String(typedLocation.longitude),
+              gpsAccuracy: String(accuracy ?? 0),
+              googleMapLink: `https://www.google.com/maps?q=${typedLocation.latitude},${typedLocation.longitude}`,
+            }));
+
+            clearInterval(checkLocation);
+            setGpsLoading(false);
+
+            return {
+              latitude: typedLocation.latitude,
+              longitude: typedLocation.longitude,
+              accuracy,
+            };
+          }
+
+          if (attempts >= maxAttempts) {
+            clearInterval(checkLocation);
+            setGpsLoading(false);
+            Alert.alert(
+              'GPS Error',
+              'Could not get accurate GPS location.\nPlease tap "Refetch GPS" button again.'
+            );
+          }
+          return prev;
+        });
+      }, 600);
+
+    } catch (err) {
+      console.error("GPS fetch error:", err);
+      setGpsLoading(false);
+      Alert.alert('GPS Error', 'Something went wrong.');
+    }
+  };
+
+  useEffect(() => {
+    isMounted.current = true;
+    fetchGpsLocation();
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typedLocation?.latitude != null &&
+      typedLocation?.longitude != null &&
+      !gpsCoords.latitude) {
+      const accuracy = typedLocation.accuracy ?? null;
+
+      setGpsCoords({
+        latitude: typedLocation.latitude,
+        longitude: typedLocation.longitude,
+        accuracy,
+      });
+
+      setFormValues((prev) => ({
+        ...prev,
+        latitude: String(typedLocation.latitude),
+        longitude: String(typedLocation.longitude),
+        gpsAccuracy: String(accuracy ?? 0),
+        googleMapLink: `https://www.google.com/maps?q=${typedLocation.latitude},${typedLocation.longitude}`,
+      }));
+    }
+  }, [typedLocation, gpsCoords.latitude]);
+
   useEffect(() => {
     const unsub = NetInfo.addEventListener((state) => {
       const online = !!state.isConnected && !!state.isInternetReachable;
@@ -391,10 +656,8 @@ const FormScreen = ({
     return () => unsub();
   }, []);
 
-  // ── Load template ─────────────────────────────────────────────────────────
   useEffect(() => { fetchTemplate(); }, []);
 
-  // ── Restore draft / edit data ─────────────────────────────────────────────
   useEffect(() => {
     if (!template) return;
     const restoreData = async () => {
@@ -427,7 +690,6 @@ const FormScreen = ({
     restoreData();
   }, [template]);
 
-  // ── Auto-save draft ───────────────────────────────────────────────────────
   useEffect(() => {
     if (Object.keys(formValues).length === 0) return;
     saveFormDataLocally(lead.id, formValues);
@@ -458,24 +720,26 @@ const FormScreen = ({
     }
   };
 
-  // ── Submit (New) ──────────────────────────────────────────────────────────
+  // ── Submit (New Form) ──────────────────────────────────────────────────────
   const handleSubmit = async () => {
     setSubmitting(true);
 
     if (isOnline) {
       try {
         const formData = new FormData();
+        const mapped = coerceNumbers(mapToZohoFields(formValues));
+console.log('🔍 Consumer_Number type:', typeof mapped['Consumer_Number'], '| value:', mapped['Consumer_Number']);
+console.log('🔍 Site_Engineer_Contact type:', typeof mapped['Site_Engineer_Contact'], '| value:', mapped['Site_Engineer_Contact']);
+console.log('🔍 Full mapped payload:', JSON.stringify(mapped, null, 2));
 
-        const dataPayload = {
-          mobileNumber: lead.phone,
-          deal_id: lead.dealId, // ✅ FIX: was lead.id (local leadId) — must be lead.dealId (backend order id)
-          ...formValues,
-        };
-        // 🆔 deal_id console log — shows exactly what deal_id is being sent to /user/add
+const dataPayload = {
+  mobileNumber: lead.phone,
+  deal_id: lead.dealId,
+  ...mapped,  // ✅ reuse
+};
         console.log('🆔 [handleSubmit] leadId (local):', lead.id, '| deal_id (backend):', dataPayload.deal_id);
         formData.append('data', JSON.stringify(dataPayload));
 
-        // EB Bill photos
         photoFiles.forEach((file) => {
           formData.append('ebBillPhotos', {
             uri: file.uri,
@@ -484,7 +748,6 @@ const FormScreen = ({
           } as any);
         });
 
-        // Site Survey photos
         siteSurveyPhotos.forEach((file) => {
           formData.append('sitePhotos', {
             uri: file.uri,
@@ -520,14 +783,14 @@ const FormScreen = ({
       }
     } else {
       try {
+        // ✅ Zoho field mapping applied for offline too
         const offlinePayload = {
           mobileNumber: lead.phone,
-          deal_id: lead.dealId, // ✅ FIX: was lead.id — must be lead.dealId
-          ...formValues,
+          deal_id: lead.dealId,
+          ...mapToZohoFields(formValues),
           _photoFiles: photoFiles,
           _siteSurveyPhotos: siteSurveyPhotos,
         };
-        // 🆔 deal_id console log — offline path
         console.log('🆔 [handleSubmit/offline] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
         await saveFormDataLocally(lead.id, offlinePayload);
         await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', {
@@ -552,7 +815,7 @@ const FormScreen = ({
     }
   };
 
-  // ── Update (Edit) ─────────────────────────────────────────────────────────
+  // ── Update (Edit Mode) ─────────────────────────────────────────────────────
   const handleUpdate = async () => {
     setSubmitting(true);
 
@@ -560,16 +823,17 @@ const FormScreen = ({
       try {
         const formData = new FormData();
 
-        const updatePayload = {
-          mobileNumber: lead.phone,
-          deal_id: lead.dealId, // ✅ FIX: was lead.id — must be lead.dealId
-          ...formValues,
-        };
-        // 🆔 deal_id console log — shows exactly what deal_id is being sent to /user/update
+        // ✅ Zoho field mapping applied here
+        const mapped = coerceNumbers(mapToZohoFields(formValues));
+
+const updatePayload = {
+  mobileNumber: lead.phone,
+  deal_id: lead.dealId,
+  ...mapped,  // ✅ reuse
+};
         console.log('🆔 [handleUpdate] leadId (local):', lead.id, '| deal_id (backend):', updatePayload.deal_id);
         formData.append('data', JSON.stringify(updatePayload));
 
-        // EB Bill photos
         photoFiles.forEach((file) => {
           formData.append('ebBillPhotos', {
             uri: file.uri,
@@ -578,7 +842,6 @@ const FormScreen = ({
           } as any);
         });
 
-        // Site Survey photos
         siteSurveyPhotos.forEach((file) => {
           formData.append('sitePhotos', {
             uri: file.uri,
@@ -612,14 +875,14 @@ const FormScreen = ({
       }
     } else {
       try {
+        // ✅ Zoho field mapping applied for offline update too
         const offlinePayload = {
           mobileNumber: lead.phone,
-          deal_id: lead.dealId, // ✅ FIX: was lead.id — must be lead.dealId
-          ...formValues,
+          deal_id: lead.dealId,
+          ...mapToZohoFields(formValues),
           _photoFiles: photoFiles,
           _siteSurveyPhotos: siteSurveyPhotos,
         };
-        // 🆔 deal_id console log — offline path
         console.log('🆔 [handleUpdate/offline] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
         await saveFormDataLocally(lead.id, offlinePayload);
         await enqueue(`form_update_${lead.id}`, 'FORM_UPDATE', {
@@ -661,7 +924,6 @@ const FormScreen = ({
     });
   };
 
-  // ── Loading ───────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <View style={styles.center}>
@@ -689,7 +951,6 @@ const FormScreen = ({
   return (
     <View style={{ flex: 1 }}>
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginRight: 12 }}>
           <Ionicons name="arrow-back-outline" size={24} color="#fff" />
@@ -708,7 +969,6 @@ const FormScreen = ({
         )}
       </View>
 
-      {/* Offline banner */}
       {offlineBanner && (
         <View style={styles.offlineBanner}>
           <Ionicons name="cloud-offline-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
@@ -747,12 +1007,15 @@ const FormScreen = ({
                 isRequired,
                 isMulti,
                 uploadType,
+                gpsCoords,
+                gpsMapLink,
+                gpsLoading,
+                fetchGpsLocation,
               );
             })}
           </View>
         ))}
 
-        {/* Submit / Update button */}
         <TouchableOpacity
           style={[
             styles.submitBtn,
@@ -786,7 +1049,6 @@ const FormScreen = ({
 
 export default FormScreen;
 
-// ── Styles ─────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
