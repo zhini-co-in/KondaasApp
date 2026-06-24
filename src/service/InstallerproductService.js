@@ -1,133 +1,50 @@
-import { useRef, useState, useEffect } from 'react';
-import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
-import { 
-  PermissionsAndroid, 
-  Platform, 
-  Alert, 
-  Linking, 
-  DeviceEventEmitter, 
-  NativeModules, 
-  NativeEventEmitter 
-} from 'react-native';
 import API from '../api/api1';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { USER_DATA } from './localStorage';
 
-// ==================== UTILITIES ====================
-
-export const getUserPhone = async () => {
-  try {
-    const data = await AsyncStorage.getItem(USER_DATA);
-    return data ? JSON.parse(data)?.UserInfo?.phoneNo || '' : '';
-  } catch (e) {
-    return '';
-  }
-};
-
-/**
- * Parse raw QR / Barcode string into key-value object
- * Example input:
- *   "Product: Voltage Inverter\nPrice: ₹5000\nMfg Date: 12-06-2026\nContact: 98765 43210"
- */
-export const parseQRData = (raw = '') => {
-  const result = {};
-  if (!raw) return result;
-
-  raw.split('\n').forEach((line) => {
-    const idx = line.indexOf(':');
-    if (idx === -1) return;
-    const key   = line.substring(0, idx).trim();
-    const value = line.substring(idx + 1).trim();
-    if (key) result[key] = value;
-  });
-
-  return result;
-};
-
 // ==================== SAVE SCANNED PRODUCT ====================
-
-/**
- * POST scanned product data to backend
- * Endpoint: POST /logistic/products
- *
- * @param {string} rawValue   - raw string from QR / barcode
- * @param {object|null} location - { latitude, longitude } from locationRef
- * @returns {object|null}     - API response json or null on failure
- */
-const parseMfgDate = (mfgStr) => {
-  if (!mfgStr) return new Date().toISOString().split('T')[0];
-  const parts = mfgStr.split('/');
-  if (parts.length === 3) {
-    const [yy, mm, dd] = parts;
-    return `20${yy}-${mm}-${dd}`;
-  }
-  return mfgStr;
-};
-
-//--mainqrdb---//
-export const saveScannedProduct = async (rawValue, location = null) => {
+export const saveScannedProduct = async (rawValue) => {
   try {
-    const phoneNo = await getUserPhone();
-    if (!phoneNo) {
-      console.warn('⚠️ phoneNo empty');
+    if (!rawValue) {
+      console.warn('⚠️ Scanned value is empty');
       return null;
     }
 
-    // ✅ QR data — JSON format-ஆ or plain text-ஆ check பண்ணு
-    let productName      = rawValue;
-    let productPrice     = 0;
-    let manufacturedDate = new Date().toISOString().split('T')[0];
-
-    try {
-      const json = JSON.parse(rawValue);
-      // JSON format QR
-      productName      = json.productName      ?? rawValue;
-      productPrice     = parseFloat(json.productPrice ?? 0);
-      manufacturedDate = json.manufacturedDate  ?? manufacturedDate;
-    } catch {
-      // Plain text QR — parseQRData use பண்ணு
-      const parsed     = parseQRData(rawValue);
-      productName      = parsed['Product']  ?? rawValue;
-      productPrice     = parseFloat(parsed['Price']?.replace(/[^0-9.]/g, '') ?? '0');
-      manufacturedDate = parseMfgDate(parsed['Mfg Date'] ?? '');
-    }
-
     const payload = {
-      mobile:           phoneNo.toString().trim(),
-      productName,
-      productPrice,
-      manufacturedDate,
+      rawValue: rawValue.toString().trim(),
     };
 
-    console.log('📤 Sending:', JSON.stringify(payload));
+    console.log('📤 Saving Scan:', payload);
 
     const res = await API.post('/installer/products', payload);
-    console.log('✅ Saved:', res.status, res.data);
-    return res.data;
+
+    console.log('✅ Scanned Product Saved');
+    return res?.data;
 
   } catch (err) {
-    console.error('❌ saveScannedProduct error:', err?.response?.data || err.message);
+    console.error('❌ saveScannedProduct ERROR:', err?.response?.data || err.message);
     return null;
   }
 };
 
-// ==================== GET ALL PRODUCTS (optional) ====================
-
-/**
- * GET all scanned products for this user
- * Endpoint: GET /logistic/products?phoneNo=XXXXXXXXXX
- */
+// ==================== GET PRODUCTS FOR INSTALLER ====================
 export const getScannedProducts = async () => {
   try {
-    const phoneNo = await getUserPhone();
-    if (!phoneNo) return [];
+    const res = await API.get('/installer/get-products');
 
-    const res = await API.get('/installer/products', {
-      params: { phoneNo: phoneNo.toString().trim() },
-    });
+    console.log('📋 Installer products fetched:', res.data?.length || 0);
 
-    console.log('📋 Products fetched:', res.data?.length);
-    return res.data ?? [];
+    if (res.data?.success && Array.isArray(res.data.products)) {
+      return res.data.products;
+    }
+    if (Array.isArray(res.data)) {
+      return res.data;
+    }
+    if (res.data?.data && Array.isArray(res.data.data)) {
+      return res.data.data;
+    }
+
+    return [];
 
   } catch (err) {
     console.error('❌ getScannedProducts error:', err?.response?.data || err.message);
@@ -135,34 +52,73 @@ export const getScannedProducts = async () => {
   }
 };
 
+// ==================== GET DROPPED PRODUCTS (New) ====================
+export const getDroppedProducts = async () => {
+  try {
+    const res = await API.get('/installer/get-products');
 
-// export const getScannedProducts = async () => {
-//   try {
-//     const phoneNo = await getUserPhone();
-//     if (!phoneNo) {
-//       console.warn('⚠️ phoneNo empty');
-//       // Still try without phoneNo as per your URL
-//     }
+    let all = [];
+    if (res.data?.success && Array.isArray(res.data.products)) {
+      all = res.data.products;
+    } else if (Array.isArray(res.data)) {
+      all = res.data;
+    } else if (res.data?.data && Array.isArray(res.data.data)) {
+      all = res.data.data;
+    }
 
-//     const res = await API.get('/installer/get-products', {
-//       params: phoneNo ? { phoneNo: phoneNo.toString().trim() } : {}
-//     });
+    const dropped = all.filter((p) => p.status === 'dropped');
+    console.log('📦 Dropped products fetched:', dropped.length);
 
-//     console.log('📋 Products fetched:', res.data?.length || 0);
+    return dropped;
 
-//     // Handle different response formats
-//     if (res.data?.success && Array.isArray(res.data.products)) {
-//       return res.data.products;
-//     } else if (Array.isArray(res.data)) {
-//       return res.data;
-//     } else if (res.data) {
-//       return Array.isArray(res.data.data) ? res.data.data : [res.data];
-//     }
+  } catch (err) {
+    console.error('❌ getDroppedProducts error:', err?.response?.data || err.message);
+    return [];
+  }
+};
 
-//     return [];
+// ==================== GET LOGISTIC PICKED PRODUCTS ==================== 
+export const getLogisticPickedProducts = async () => {
+  try {
+    const res = await API.get('/installer/get-products');
 
-//   } catch (err) {
-//     console.error('❌ getScannedProducts error:', err?.response?.data || err.message);
-//     return [];
-//   }
-// };
+    let all = [];
+    if (res.data?.success && Array.isArray(res.data.products)) {
+      all = res.data.products;
+    } else if (Array.isArray(res.data)) {
+      all = res.data;
+    } else if (res.data?.data && Array.isArray(res.data.data)) {
+      all = res.data.data;
+    }
+
+    const picked = all.filter((p) => p.status === 'picked');
+    console.log('🚚 Logistic picked products:', picked.length);
+    return picked;
+
+  } catch (err) {
+    console.error('❌ getLogisticPickedProducts error:', err?.response?.data || err.message);
+    return [];
+  }
+};
+
+// ==================== UPDATE PRODUCT STATUS ====================
+export const updateProductStatus = async (id, status) => {
+  try {
+    if (!id || !status) {
+      console.warn('⚠️ id or status missing');
+      return null;
+    }
+
+    const payload = { id, status };
+    console.log('📤 Updating product status:', payload);
+
+    const res = await API.put('/logistic/update-products', payload);
+
+    console.log('✅ Product status updated:', res?.data);
+    return res?.data;
+
+  } catch (err) {
+    console.error('❌ updateProductStatus ERROR:', err?.response?.data || err.message);
+    return null;
+  }
+};

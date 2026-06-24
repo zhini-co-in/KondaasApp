@@ -25,6 +25,12 @@ import { NativeModules } from 'react-native';
 import { USER_DATA } from '../service/localStorage';
 import { SCREEN_NAMES } from '../constants/screenNames';
 import {
+  getScannedProducts,
+  updateProductStatus,
+  getDroppedProducts,
+  getLogisticPickedProducts,
+} from '../service/InstallerproductService';
+import {
   useInstallerTracking,
   requestLocationPermissions,
   requestIOSLocationPermission,
@@ -40,14 +46,18 @@ const InstallerScreen = ({ navigation }) => {
   const isMounted = useRef(true);
   const { currentLocation, startTracking, stopTracking } = useInstallerTracking(isMounted);
   const locationRef = useRef(null);
+  const [scanningForProduct, setScanningForProduct] = useState(null);
 
   const [isAvailable, setIsAvailable] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState('received');
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [activeTab, setActiveTab] = useState('all');
 
   const [warehouseReceived, setWarehouseReceived] = useState([]);
   const [inProgress, setInProgress] = useState([]);
+  const [droppedProducts, setDroppedProducts] = useState([]);
   const [installedProducts, setInstalledProducts] = useState([]);
+  const [trackingProducts, setTrackingProducts] = useState([]);
 
   const [showReceivedModal, setShowReceivedModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -81,19 +91,97 @@ const InstallerScreen = ({ navigation }) => {
     loadToggleState();
   }, []);
 
-  // Load saved products
+  // Load products from DB
+  // ==================== MAIN PRODUCT LOADER (All Statuses) ====================
+  const loadAllProducts = async () => {
+    try {
+      setLoadingProducts(true);
+
+      const allProductsFromDB = await getScannedProducts();
+
+      let droppedList = [];
+      let receivedList = [];
+      let inProgressList = [];
+      let completedList = [];
+
+      allProductsFromDB.forEach((item) => {
+        const raw = item.rawValue || '';
+        const parsed = {};
+        raw.split('\n').forEach((line) => {
+          const idx = line.indexOf(':');
+          if (idx === -1) return;
+          const key = line.substring(0, idx).trim();
+          const value = line.substring(idx + 1).trim();
+          if (key) parsed[key] = value;
+        });
+
+        const productObj = {
+          _id: item._id,
+          orderId: item._id,
+          product: parsed['Product'] || raw.split('\n')[0] || 'Unknown Product',
+          model: parsed['Model'] || '',
+          price: parsed['Price'] || '₹0',
+          mfgDate: item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-GB') : '',
+          status: item.status || 'received',
+          scannedAt: item.createdAt,
+          rawValue: raw,
+        };
+
+        // Status wise split
+        if (item.status === 'dropped') droppedList.push(productObj);
+        else if (item.status === 'received') receivedList.push(productObj);
+        else if (item.status === 'inprogress') inProgressList.push(productObj);
+        else if (item.status === 'installed') completedList.push(productObj);
+        else receivedList.push(productObj); // default
+      });
+
+      setDroppedProducts(droppedList);
+      setWarehouseReceived(receivedList);
+      setInProgress(inProgressList);
+      setInstalledProducts(completedList);
+
+      console.log(
+        `📊 Loaded: Dropped=${droppedList.length}, Received=${receivedList.length}, InProgress=${inProgressList.length}, Completed=${completedList.length}`,
+      );
+    } catch (e) {
+      console.error('loadAllProducts error:', e);
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
+  /////////// Load Tracking Products
+  const loadTrackingProducts = async () => {
+    try {
+      const products = await getLogisticPickedProducts();
+
+      const mapped = products.map((item) => ({
+        ...item,
+        orderId: item._id,
+        product: item.rawValue?.split('\n')[0] || 'Unknown Product',
+        model: item.model || '',
+        deliveryLocation: item.deliveryLocation,
+        scannedBy: item.scannedBy || item.scannedByName || 'Unknown Logistic',
+        scannedAt: item.deliveredAt || item.createdAt,
+      }));
+
+      setTrackingProducts(mapped);
+      console.log(`📦 Tracking Products Loaded: ${mapped.length}`);
+    } catch (e) {
+      console.error('loadTrackingProducts error:', e);
+    }
+  };
+
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const data = await AsyncStorage.getItem('DELIVERED_TO_WAREHOUSE');
-        if (data) {
-          const parsed = JSON.parse(data);
-          setWarehouseReceived(parsed.products || []);
-        }
-      } catch (e) {}
-    };
-    loadData();
+    loadAllProducts();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'tracking') {
+      loadTrackingProducts();
+    } else if (activeTab === 'dropped' || activeTab === 'all') {
+      loadAllProducts();
+    }
+  }, [activeTab]);
 
   const saveToStorage = async (data) => {
     try {
@@ -109,7 +197,10 @@ const InstallerScreen = ({ navigation }) => {
           const gpsOn = await isGPSEnabled();
           if (!gpsOn) {
             Alert.alert('GPS Off', 'Please turn on GPS to continue.', [
-              { text: 'Open Settings', onPress: () => Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS') },
+              {
+                text: 'Open Settings',
+                onPress: () => Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS'),
+              },
               { text: 'Cancel', style: 'cancel' },
             ]);
             return;
@@ -150,6 +241,7 @@ const InstallerScreen = ({ navigation }) => {
     navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.LOGIN }] });
   };
 
+  // ==================== SCANNER LOGIC ====================
   const codeScanner = useCodeScanner({
     codeTypes: ['ean-13', 'code-128', 'qr', 'upc-a', 'code-39', 'ean-8', 'data-matrix'],
     onCodeScanned: useCallback(
@@ -165,22 +257,49 @@ const InstallerScreen = ({ navigation }) => {
 
         setIsScanning(false);
 
+        // ==================== DROPPED PRODUCT SCAN LOGIC ====================
+        if (scanningForProduct) {
+          const expectedRawValue = scanningForProduct.rawValue || scanningForProduct.product || '';
+
+          console.log('🔍 DEBUG MATCHING:', {
+            scanned: scannedCode.substring(0, 100) + '...',
+            expectedRaw: expectedRawValue.substring(0, 100) + '...',
+          });
+
+          // Match with rawValue (main fix)
+          const isMatch =
+            scannedCode === expectedRawValue ||
+            expectedRawValue.includes(scannedCode) ||
+            scannedCode.includes(expectedRawValue) ||
+            scannedCode.substring(0, 50) === expectedRawValue.substring(0, 50) ||
+            expectedRawValue.toLowerCase().includes(scannedCode.toLowerCase().substring(0, 30));
+
+          if (isMatch) {
+            console.log('✅ MATCH SUCCESS');
+            handleProductReceived(scanningForProduct);
+          } else {
+            console.log('❌ MATCH FAILED');
+            Alert.alert(
+              '❌ QR Mismatch',
+              'Scanned QR does not match this product.\n\nPlease scan the correct QR code.',
+              [{ text: 'Try Again', onPress: () => setIsScanning(true) }],
+            );
+          }
+          return;
+        }
+
+        // ==================== NORMAL SCAN ====================
         const newItem = {
           orderId: scannedCode,
           product: 'Scanned Item',
           price: '₹0',
           mfgDate: new Date().toLocaleDateString('en-GB'),
-          scannedAt: new Date().toISOString(),
         };
 
         setScannedData(newItem);
-        setWarehouseReceived((prev) => {
-          const updated = [newItem, ...prev];
-          saveToStorage(updated);
-          return updated;
-        });
+        setWarehouseReceived((prev) => [newItem, ...prev]);
       },
-      [isScanning],
+      [isScanning, scanningForProduct],
     ),
   });
 
@@ -191,16 +310,26 @@ const InstallerScreen = ({ navigation }) => {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    if (activeTab === 'tracking') {
+      await loadTrackingProducts();
+    } else {
+      await loadAllProducts();
+    }
     setRefreshing(false);
-  }, []);
+  }, [activeTab]);
 
   const openReceivedModal = (product) => {
     setSelectedProduct(product);
     setShowReceivedModal(true);
   };
 
-  const startInstallation = () => {
+  const startInstallation = async () => {
     if (!selectedProduct) return;
+
+    // Update DB status → inprogress
+    const id = selectedProduct._id || selectedProduct.id;
+    await updateProductStatus(id, 'inprogress');
+
     setInProgress((prev) => [...prev, selectedProduct]);
     const updated = warehouseReceived.filter((p) => p.orderId !== selectedProduct.orderId);
     setWarehouseReceived(updated);
@@ -209,22 +338,70 @@ const InstallerScreen = ({ navigation }) => {
     Alert.alert('Success', 'Moved to In Progress');
   };
 
-  const markProductFinished = (product) => {
+  const markProductFinished = async (product) => {
+    // Update DB status → installed
+    const id = product._id || product.id;
+    await updateProductStatus(id, 'installed');
+
     setInstalledProducts((prev) => [...prev, product]);
     setInProgress((prev) => prev.filter((p) => p.orderId !== product.orderId));
     Alert.alert('Success', 'Installation Completed');
   };
 
+  const handleProductReceived = async (product) => {
+    try {
+      const id = product._id || product.orderId;
+      await updateProductStatus(id, 'received');
+
+      setDroppedProducts((prev) => prev.filter((p) => p.orderId !== product.orderId));
+      setWarehouseReceived((prev) => [product, ...prev]);
+
+      Alert.alert('✅ Success', `${product.product} has been Received!`);
+
+      setScanningForProduct(null);
+      setCurrentView('products');
+      setActiveTab('received');
+      setIsScanning(true);
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to mark as received');
+      setIsScanning(true);
+    }
+  };
+
   const filteredProducts = () => {
     switch (activeTab) {
-      case 'received': return warehouseReceived;
-      case 'inprogress': return inProgress;
-      case 'completed': return installedProducts;
-      default: return [...warehouseReceived, ...inProgress, ...installedProducts];
+      case 'all':
+        return [
+          ...trackingProducts,
+          ...droppedProducts,
+          ...warehouseReceived,
+          ...inProgress,
+          ...installedProducts,
+        ];
+
+      case 'tracking':
+        return trackingProducts;
+
+      case 'dropped':
+        return droppedProducts;
+
+      case 'received':
+        return warehouseReceived;
+
+      case 'inprogress':
+        return inProgress;
+
+      case 'completed':
+        return installedProducts;
+
+      default:
+        return [...trackingProducts, ...droppedProducts, ...warehouseReceived, ...inProgress, ...installedProducts];
     }
   };
 
   const renderProductCard = (item) => {
+    const isDropped = droppedProducts.some((p) => p.orderId === item.orderId);
     const isReceived = warehouseReceived.some((p) => p.orderId === item.orderId);
     const isProgress = inProgress.some((p) => p.orderId === item.orderId);
     const isCompleted = installedProducts.some((p) => p.orderId === item.orderId);
@@ -233,24 +410,93 @@ const InstallerScreen = ({ navigation }) => {
       <TouchableOpacity
         key={item.orderId}
         style={styles.productCard}
-        onPress={() => isReceived && openReceivedModal(item)}
+        onPress={() => {
+          if (isDropped) {
+            setScanningForProduct(item); // ← Scanner திறக்க
+            setCurrentView('scanner'); // Scanner tab-க்கு போக
+          } else if (isReceived) {
+            openReceivedModal(item);
+          }
+        }}
       >
         <View style={{ flex: 1 }}>
           <Text style={styles.productName}>{item.product}</Text>
-          <Text style={styles.orderId}>Barcode: {item.orderId}</Text>
-          <Text style={styles.mfgDate}>Scanned: {item.mfgDate}</Text>
+          {item.model ? <Text style={styles.modelText}>Model: {item.model}</Text> : null}
+          <Text style={styles.orderId}>ID: {item.orderId}</Text>
+          <Text style={styles.mfgDate}>Date: {item.mfgDate}</Text>
         </View>
+
+        {isDropped && (
+          <View style={styles.droppedBadge}>
+            <Text style={styles.droppedText}>Dropped</Text>
+          </View>
+        )}
 
         {isReceived && <Ionicons name="chevron-forward" size={24} color="#999" />}
         {isProgress && (
           <TouchableOpacity style={styles.finishBtn} onPress={() => markProductFinished(item)}>
-            <Text style={styles.finishText}>Mark Finished</Text>
+            <Text style={styles.finishText}>Installed ?</Text>
           </TouchableOpacity>
         )}
         {isCompleted && <Ionicons name="checkmark-circle" size={28} color="#10b981" />}
       </TouchableOpacity>
     );
   };
+
+
+  // ==================== TRACKING CARD (View Only) ====================
+const renderTrackingCard = (item) => (
+  <TouchableOpacity 
+    key={item.orderId} 
+    style={[styles.productCard, { borderLeftWidth: 5, borderLeftColor: '#2563eb' }]}
+    onPress={() => openTrackingDetails(item)}   // ← Click Handler
+  >
+    <View style={{ flex: 1 }}>
+      <Text style={styles.productName}>{item.product}</Text>
+      {item.model && <Text style={styles.modelText}>Model: {item.model}</Text>}
+      <Text style={styles.orderId}>ID: {item.orderId}</Text>
+      <Text style={styles.mfgDate}>Date: {item.mfgDate}</Text>
+
+      {item.deliveryLocation && (
+        <Text style={{ fontSize: 13, color: '#22c55e', marginTop: 6 }}>
+          📍 {item.deliveryLocation.latitude?.toFixed(4)}, {item.deliveryLocation.longitude?.toFixed(4)}
+        </Text>
+      )}
+
+      {item.scannedBy && (
+        <Text style={{ fontSize: 13, color: '#1e40af', marginTop: 4 }}>
+          Scanned by: {item.scannedBy}
+        </Text>
+      )}
+    </View>
+
+    <Ionicons name="location-outline" size={28} color="#3b82f6" />
+  </TouchableOpacity>
+);
+
+//////////////PRODUCT DETAILS////
+const openTrackingDetails = (product) => {
+  if (!product.deliveryLocation) {
+    Alert.alert('No Location', 'No delivery location available for this product.');
+    return;
+  }
+
+  Alert.alert(
+    'Live Tracking',
+    `${product.product}\n\nLocation: ${product.deliveryLocation.latitude?.toFixed(5)}, ${product.deliveryLocation.longitude?.toFixed(5)}\nScanned by: ${product.scannedBy}`,
+    [
+      { text: 'OK' },
+      { 
+        text: 'View on Map', 
+        onPress: () => {
+          // Optional: Open Google Maps
+          const url = `https://www.google.com/maps?q=${product.deliveryLocation.latitude},${product.deliveryLocation.longitude}`;
+          Linking.openURL(url);
+        }
+      }
+    ]
+  );
+};
 
   // ==================== OFF STATE ====================
   if (!isAvailable) {
@@ -279,7 +525,9 @@ const InstallerScreen = ({ navigation }) => {
 
           <View style={styles.welcomeContainer}>
             <Text style={styles.welcomeText}>Welcome!</Text>
-            <Text style={styles.welcomeSub}>Turn on availability to start tracking and installations</Text>
+            <Text style={styles.welcomeSub}>
+              Turn on availability to start tracking and installations
+            </Text>
           </View>
         </SafeAreaView>
       </View>
@@ -335,7 +583,9 @@ const InstallerScreen = ({ navigation }) => {
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#F00001']} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#F00001']} />
+        }
       >
         {/* ── SCANNER TAB ── */}
         {currentView === 'scanner' && (
@@ -419,10 +669,12 @@ const InstallerScreen = ({ navigation }) => {
         {/* ── PRODUCTS TAB ── */}
         {currentView === 'products' && (
           <>
-            {/* Sub Tabs */}
+            {/* Sub Tabs - With All + Dropped */}
             <View style={styles.tabBar}>
               {[
                 { key: 'all', label: 'All' },
+                { key: 'tracking', label: 'Product Tracking' },
+                { key: 'dropped', label: 'Dropped' },
                 { key: 'received', label: 'Received' },
                 { key: 'inprogress', label: 'In Progress' },
                 { key: 'completed', label: 'Completed' },
@@ -439,13 +691,20 @@ const InstallerScreen = ({ navigation }) => {
               ))}
             </View>
 
-            {filteredProducts().length === 0 ? (
+            {loadingProducts ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="hourglass-outline" size={60} color="#ddd" />
+                <Text style={styles.emptyText}>Loading products...</Text>
+              </View>
+            ) : filteredProducts().length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Ionicons name="cube-outline" size={80} color="#ddd" />
                 <Text style={styles.emptyText}>No items yet</Text>
               </View>
             ) : (
-              filteredProducts().map(renderProductCard)
+              filteredProducts().map((item) =>
+                activeTab === 'tracking' ? renderTrackingCard(item) : renderProductCard(item),
+              )
             )}
           </>
         )}
@@ -464,7 +723,10 @@ const InstallerScreen = ({ navigation }) => {
               </View>
             )}
             <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowReceivedModal(false)}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setShowReceivedModal(false)}
+              >
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.acceptBtn} onPress={startInstallation}>
@@ -492,7 +754,10 @@ const InstallerScreen = ({ navigation }) => {
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowLogoutPopup(false)}>
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.acceptBtn, { backgroundColor: '#F00001' }]} onPress={handleLogout}>
+              <TouchableOpacity
+                style={[styles.acceptBtn, { backgroundColor: '#F00001' }]}
+                onPress={handleLogout}
+              >
                 <Text style={styles.acceptText}>Logout</Text>
               </TouchableOpacity>
             </View>
@@ -508,25 +773,64 @@ const styles = StyleSheet.create({
 
   // Header
   header: { backgroundColor: '#F00001' },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, paddingTop: 50 },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    paddingTop: 50,
+  },
   title: { fontSize: 20, fontWeight: '700', color: '#fff' },
   logoutIconBtn: { padding: 4 },
   userSection: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.25)', justifyContent: 'center', alignItems: 'center' },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   userName: { color: '#fff', fontWeight: '600' },
 
   // Off screen
-  pageTitle: { fontSize: 18, color: '#1a1a1a', fontWeight: '600', paddingHorizontal: 16, paddingVertical: 12 },
-  profileRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', padding: 16, borderBottomWidth: 1, borderColor: '#eee' },
+  pageTitle: {
+    fontSize: 18,
+    color: '#1a1a1a',
+    fontWeight: '600',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  profileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderColor: '#eee',
+  },
   profileLeft: { flexDirection: 'row', alignItems: 'center' },
-  avatarCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center' },
+  avatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   profileName: { fontSize: 16, fontWeight: '700' },
   welcomeContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 },
   welcomeText: { fontSize: 24, fontWeight: '700', color: '#333', marginBottom: 8 },
   welcomeSub: { fontSize: 15, color: '#F00001', textAlign: 'center' },
 
   // Top view tabs (Scanner | Products)
-  topTabRow: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e8e8e8' },
+  topTabRow: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderColor: '#e8e8e8',
+  },
   topTabBtn: { flex: 1, paddingVertical: 10, alignItems: 'center' },
   topTabBtnActive: { borderBottomWidth: 2, borderColor: '#F00001' },
   topTabText: { fontSize: 13, color: '#888', fontWeight: '500' },
@@ -544,7 +848,12 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     position: 'relative',
   },
-  cameraPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2a2a2a' },
+  cameraPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#2a2a2a',
+  },
   scanFrameContainer: {
     position: 'absolute',
     top: '50%',
@@ -605,11 +914,24 @@ const styles = StyleSheet.create({
 
   // Rescan button
   rescanBtn: { marginBottom: 14, borderRadius: 10, overflow: 'hidden' },
-  rescanGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, gap: 8 },
+  rescanGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    gap: 8,
+  },
   rescanText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
   // Sub tabs (All / Received / In Progress / Completed)
-  tabBar: { flexDirection: 'row', backgroundColor: '#fff', padding: 4, borderRadius: 12, elevation: 3, marginBottom: 12 },
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    padding: 4,
+    borderRadius: 12,
+    elevation: 3,
+    marginBottom: 12,
+  },
   tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
   activeTab: { backgroundColor: '#F00001' },
   tabText: { fontWeight: '600', color: '#666', fontSize: 12 },
@@ -627,9 +949,15 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   productName: { fontSize: 16, fontWeight: '700' },
+  modelText: { fontSize: 13, color: '#6366f1', marginVertical: 1 },
   orderId: { fontSize: 14, color: '#3b82f6', marginVertical: 2 },
   mfgDate: { fontSize: 13, color: '#64748b' },
-  finishBtn: { backgroundColor: '#10b981', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  finishBtn: {
+    backgroundColor: '#10b981',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
   finishText: { color: '#fff', fontWeight: '600' },
 
   // Empty state
@@ -637,14 +965,32 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 16, color: '#888', marginTop: 16 },
 
   // Received Modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   modalContent: { backgroundColor: '#fff', width: '90%', borderRadius: 16, padding: 20 },
   modalTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 20 },
   modalProductInfo: { backgroundColor: '#f0fdf4', padding: 16, borderRadius: 12, marginBottom: 20 },
   modalProductName: { fontSize: 18, fontWeight: '700' },
   modalButtons: { flexDirection: 'row', gap: 12 },
-  cancelBtn: { flex: 1, padding: 14, borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center' },
-  acceptBtn: { flex: 1, padding: 14, borderRadius: 10, backgroundColor: '#10b981', alignItems: 'center' },
+  cancelBtn: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    alignItems: 'center',
+  },
+  acceptBtn: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 10,
+    backgroundColor: '#10b981',
+    alignItems: 'center',
+  },
   cancelText: { color: '#64748b', fontWeight: '600' },
   acceptText: { color: '#fff', fontWeight: '600' },
 });

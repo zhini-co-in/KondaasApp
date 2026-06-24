@@ -15,7 +15,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { storeData, getStorageData, USER_DATA } from "../service/localStorage";
 import { SCREEN_NAMES } from "../constants/screenNames";
 
-const BASE_URL = "http://192.168.0.6:8080";
+const BASE_URL = "https://crucial-purifier-canopener.ngrok-free.dev";
 
 // ─────────────────────────────────────────────────────────────
 const safeApiCall = async (url, body, authToken = null, deviceId = null) => {
