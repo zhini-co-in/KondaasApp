@@ -16,7 +16,7 @@ import { USER_DATA } from "../service/localStorage";
 import LinearGradient from "react-native-linear-gradient";
 import { SCREEN_NAMES } from "../constants/screenNames";
 
-const BASE_URL = "https://board.trisentrix.com";
+const BASE_URL = "https://crucial-purifier-canopener.ngrok-free.dev";
 
 const ReferAndEarnScreen = ({ navigation }) => {
   const [referrals, setReferrals] = useState([]);

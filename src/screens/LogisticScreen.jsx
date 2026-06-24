@@ -318,6 +318,55 @@ useEffect(() => {
     }, 1200);
   };
 
+ const markAsDelivered = async () => {
+  setIsCompleted(true);
+
+  setTrackingSteps((prev) =>
+    prev.map((step) =>
+      step.id === 3
+        ? {
+            ...step,
+            sub: `Delivered at ${currentLocation ? 
+              `${currentLocation.latitude.toFixed(4)}, ${currentLocation.longitude.toFixed(4)}` : 'Warehouse'}`,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            done: true,
+          }
+        : step
+    )
+  );
+
+  // === NEW: Save delivered products for Installer ===
+  if (scannedProducts.length > 0) {
+    try {
+      const deliveredData = {
+        products: scannedProducts,
+        deliveredAt: new Date().toISOString(),
+        location: currentLocation,
+        status: 'RECEIVED_AT_WAREHOUSE'
+      };
+
+      await AsyncStorage.setItem('DELIVERED_TO_WAREHOUSE', JSON.stringify(deliveredData));
+      
+      console.log('✅ Products delivered to warehouse saved successfully');
+    } catch (e) {
+      console.error('Failed to save delivered products', e);
+      Alert.alert('Error', 'Failed to save delivery data');
+    }
+  }
+
+  // Clear logistic side after delivery
+  setTimeout(() => {
+    setScannedProducts([]);
+    setScannedData(null);
+    setIsCompleted(false);
+    setTrackingSteps([
+      { id: 1, label: 'Product Scanned', sub: '', time: '', done: false },
+      { id: 2, label: 'Picked from Warehouse', sub: '', time: '', done: false },
+      { id: 3, label: 'Delivered to Warehouse', sub: '', time: '', done: false },
+    ]);
+  }, 800);
+};
+
   const handleRescan = () => {
     setScannedData(null);
     setIsScanning(true);
@@ -561,6 +610,8 @@ useEffect(() => {
                   <TouchableOpacity style={styles.deliverBtn} onPress={markAsDelivered}>
                     <Ionicons name="truck-check" size={18} color="#fff" />
                     <Text style={styles.deliverBtnText}>Yes, Delivered</Text>
+                    <Text style={styles.deliverBtnText}>Yes,Delivered </Text>
+
                   </TouchableOpacity>
                 )}
               </View>
@@ -682,4 +733,11 @@ const styles = StyleSheet.create({
   logoutBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 13, gap: 10 },
   logoutText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   scannedItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderColor: '#f1f5f9' },
+  scannedItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderColor: '#f1f5f9',
+  },
 });
