@@ -6,7 +6,8 @@ import DeviceInfo from "react-native-device-info";
 import { USER_DATA, getSessionInfo } from "../service/localStorage";
 
 
-const BASE_URL = "https://crucial-purifier-canopener.ngrok-free.dev";
+//const BASE_URL = "https://crucial-purifier-canopener.ngrok-free.dev";
+const BASE_URL = "https://board.trisentrix.com";
 
 // ─────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────
@@ -41,8 +42,8 @@ API1.interceptors.request.use(async (config) => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// INTERNAL HELPER — எல்லா solarman fetch call-க்கும் ஒரே headers
-// x-auth-token + x-device-id இரண்டும் எல்லா call-லயும் போகும்
+// INTERNAL HELPER
+// x-auth-token
 // ─────────────────────────────────────────────────────────────
 const solarmanFetch = async (endpoint, body, authToken, deviceId) => {
   const res = await fetch(`${BASE_URL}${endpoint}`, {
