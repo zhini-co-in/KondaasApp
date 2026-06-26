@@ -16,6 +16,7 @@ import { enqueue } from '../service/syncQueue';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { USER_DATA } from '../service/localStorage';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
+import SignatureScreen from 'react-native-signature-canvas';
 
 interface FieldProperty {
   title?: string; description?: string; type?: string;
@@ -49,119 +50,6 @@ interface LocationCoords {
   accuracy: number | null;
   [key: string]: any;
 }
-
-// ── Zoho Field Mapping ─────────────────────────────────────────────────────────
-const zohoFieldMap: Record<string, string> = {
-  clientName:                       'Consumer_Name',
-  clientContact:                    'Phone',
-  engineerName:                     'engineerName',          // ✅ no confirmed Zoho field — kept distinct (was clashing with engineerContact)
-  engineerContact:                  'Site_Engineer_Contact',
-  siteAddress:                      'Street_Address',
-  ksebConnectionUnderContactPerson: 'KSEB_Connection_Under_Contact_Person',
-  latitude:                         'Latitude',
-  longitude:                        'Longitude',
-  gpsAccuracy:                      'gpsAccuracy',
-  googleMapLink:                    'Google_Map_Location',
-  orderType:                        'Order_Type',
-  telecallerName:                   'telecallerName',
-  projectType:                      'Project_Type',
-  consumerNumber:                   'Consumer_Number',
-  consumerName:                     'Consumer_Name',
-  connectionStatus:                 'Connection_Type',
-  tariffType:                       'Tariff',
-  connectionPhase:                  'connectionPhase',       // ✅ no confirmed Zoho field — kept distinct (was clashing with connectionStatus)
-  connectedLoad:                    'Connected_Load',
-  balanceTransformerCapacity:       'Balance_Transformer_Capacity',
-  inverterType:                     'inverterType',          // ✅ no confirmed Zoho field — kept distinct (was clashing with inverterConnectionType)
-  inverterConnectionType:           'Inverter_Connection_Type',
-  inverterCapacity:                 'Inverter_Capacity',
-  panelType:                        'Solar_Panel_Model',
-  numberOfPanels:                   'No_of_Panels',
-  spaceNorthSouth:                  'North_to_South_Space_Available_in_meters',
-  spaceEastWest:                    'West_to_East_Space_Available_meters',
-  structureType:                    'Structure_Type',
-  roofType:                         'Roof_Type',
-  roofCondition:                    'Roof_Surface_Physical_Condition',
-  buildingHeight:                   'Building_Height_Profile',
-  shadowPossibility:                'Shadow_Possibility',
-  roofAccess:                       'Roof_Access_Available',
-  ladderRequirement:                'Ladder',
-  walkwayRequirement:               'Walkway',
-  slidingDoorRequirement:           'Sliding_Door',
-  cableRequirement:                 'Cable_Requirements',
-  customerDocsProvided:             'customerDocsProvided',  // ✅ no confirmed Zoho field — kept distinct (was clashing with documentsCollectedStatus)
-  ksebNameChange:                   'Name_Change_In_EB_Bill',
-  bankNameChange:                   'Name_Change_in_Bank',
-  gridLoadChange:                   'Connected_Load_Revise',
-  paymentMode:                      'Mode_of_Payment',
-  advanceCollectionStatus:          'Advance_payment_Received',
-  documentsCollectedStatus:         'Document_collected',
-  collectedSitePhotosStatus:        'Site_Survey',
-  photoNorthSouth:                  'photoNorthSouth',
-  photoSouthNorth:                  'photoSouthNorth',
-  photoEastWest:                    'photoEastWest',
-  photoWestEast:                    'photoWestEast',
-  photoPanelMounting:               'photoPanelMounting',
-  photoGeoTagged:                   'photoGeoTagged',
-  videoRoof:                        'videoRoof',
-  videoSurround:                    'videoSurround',
-  photoBuildingView:                'photoBuildingView',
-  photoMeter:                       'photoMeter',
-  photoEarthing:                    'photoEarthing',
-  photoInverterDb:                  'photoInverterDb',
-  productName:                      'Product_Name',
-  totalPlantCost:                   'Total_Plant_Cost',
-  governmentSubsidy:                'Subsidy_Amount',
-  netCostAfterSubsidy:              'Plant_Cost_After_Subsidy',
-  additionalKsebCharges:            'Additional_EB_Charges',
-  additionalStructureCost:          'Additional_Structure_Cost',
-  remarks:                          'Site_Survey_Remarks',
-  siteEngineerSignature:            'Site_Engineer_Signature',
-  customerConfirmationSignature:    'Customer_Confirmation',
-};
-
-const mapToZohoFields = (values: Record<string, string>): Record<string, string> => {
-  const mapped: Record<string, string> = {};
-  Object.entries(values).forEach(([key, value]) => {
-    const zohoKey = zohoFieldMap[key] ?? key;
-    mapped[zohoKey] = value;
-  });
-  return mapped;
-};
-const numberFields = new Set([
-  'Consumer_Number',
-  'Connected_Load',
-  'Balance_Transformer_Capacity',
-  'Inverter_Capacity',
-  'No_of_Panels',
-  'North_to_South_Space_Available_in_meters',
-  'West_to_East_Space_Available_meters',
-  'Total_Plant_Cost',
-  'Subsidy_Amount',
-  'Plant_Cost_After_Subsidy',
-  'Additional_EB_Charges',
-  'Additional_Structure_Cost',
-  'gpsAccuracy',
-]);
-
-const coerceNumbers = (mapped: Record<string, string>): Record<string, any> => {
-  const result: Record<string, any> = {};
-  Object.entries(mapped).forEach(([key, val]) => {
-    if (numberFields.has(key) && val !== '' && val != null) {
-      // Consumer_Number must be strict integer
-      if (key === 'Consumer_Number') {
-  const parsed = Math.trunc(Number(val));
-  result[key] = isNaN(parsed) ? 0 : parsed;
-} else {
-        const num = Number(val);
-        result[key] = isNaN(num) ? val : num;
-      }
-    } else {
-      result[key] = val;
-    }
-  });
-  return result;
-};
 
 // ── Dropdown ──────────────────────────────────────────────────────────────────
 const DropdownPicker = ({
@@ -397,6 +285,144 @@ const PhotoUploadField = ({
   );
 };
 
+// ── Signature Field (Draw or Upload) ───────────────────────────────────────────
+const SignatureField = ({
+  label, value, onChange, required,
+}: {
+  label: string; value: string; onChange: (val: string) => void; required?: boolean;
+}) => {
+  const [drawVisible, setDrawVisible] = useState(false);
+  const sigRef = useRef<any>(null);
+
+  const handleOK = (signature: string) => {
+    // signature already arrives as "data:image/png;base64,...."
+    onChange(signature);
+    setDrawVisible(false);
+  };
+
+  const handleUpload = () => {
+    launchImageLibrary(
+      { mediaType: 'photo', quality: 0.7, selectionLimit: 1, includeBase64: true },
+      (response) => {
+        if (response.didCancel || response.errorCode) return;
+        const asset = response.assets?.[0];
+        if (!asset?.base64) return;
+        const mime = asset.type ?? 'image/jpeg';
+        onChange(`data:${mime};base64,${asset.base64}`);
+      }
+    );
+  };
+
+  const handleClear = () => onChange('');
+
+  return (
+    <View style={styles.fieldContainer}>
+      <Text style={styles.label}>
+        {label} {required && <Text style={{ color: '#ED1C25' }}>*</Text>}
+      </Text>
+
+      {value ? (
+        <View style={{ alignItems: 'center' }}>
+          <Image
+            source={{ uri: value }}
+            style={styles.signaturePreview}
+            resizeMode="contain"
+          />
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+            <TouchableOpacity
+              style={[styles.sigSmallBtn, { borderColor: '#3b82f6' }]}
+              onPress={() => setDrawVisible(true)}
+            >
+              <Ionicons name="create-outline" size={16} color="#3b82f6" />
+              <Text style={[styles.sigSmallBtnText, { color: '#3b82f6' }]}>Re-sign</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sigSmallBtn, { borderColor: '#22c55e' }]}
+              onPress={handleUpload}
+            >
+              <Ionicons name="cloud-upload-outline" size={16} color="#22c55e" />
+              <Text style={[styles.sigSmallBtnText, { color: '#22c55e' }]}>Replace</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sigSmallBtn, { borderColor: '#ED1C25' }]}
+              onPress={handleClear}
+            >
+              <Ionicons name="trash-outline" size={16} color="#ED1C25" />
+              <Text style={[styles.sigSmallBtnText, { color: '#ED1C25' }]}>Remove</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <TouchableOpacity
+            style={[styles.sigActionBtn, { borderColor: '#3b82f6' }]}
+            onPress={() => setDrawVisible(true)}
+          >
+            <Ionicons name="create-outline" size={20} color="#3b82f6" />
+            <Text style={[styles.sigActionBtnText, { color: '#3b82f6' }]}>Draw Signature</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.sigActionBtn, { borderColor: '#22c55e' }]}
+            onPress={handleUpload}
+          >
+            <Ionicons name="cloud-upload-outline" size={20} color="#22c55e" />
+            <Text style={[styles.sigActionBtnText, { color: '#22c55e' }]}>Upload Image</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <Modal visible={drawVisible} animationType="slide" onRequestClose={() => setDrawVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: '#fff' }}>
+          <View style={styles.sigModalHeader}>
+            <Text style={styles.sigModalTitle}>{label}</Text>
+            <TouchableOpacity onPress={() => setDrawVisible(false)}>
+              <Ionicons name="close" size={26} color="#333" />
+            </TouchableOpacity>
+          </View>
+
+          <SignatureScreen
+            ref={sigRef}
+            onOK={handleOK}
+            autoClear={false}
+            descriptionText=""
+            webStyle={`
+              .m-signature-pad--footer { display: none; margin: 0; }
+              .m-signature-pad { box-shadow: none; border: 1px solid #ddd; margin: 0; }
+              body,html { height: 100%; background-color: #fff; }
+            `}
+          />
+
+          <View style={styles.sigModalFooter}>
+            <TouchableOpacity
+              style={styles.sigFooterBtn}
+              onPress={() => sigRef.current?.clearSignature()}
+            >
+              <Text style={styles.sigFooterBtnText}>Clear</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sigFooterBtn, { backgroundColor: '#ED1C25' }]}
+              onPress={() => sigRef.current?.readSignature()}
+            >
+              <Text style={[styles.sigFooterBtnText, { color: '#fff' }]}>Save Signature</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+};
+const sanitizePayload = (data: Record<string, string>): Record<string, any> => {
+  const cleaned: Record<string, any> = {};
+  Object.entries(data).forEach(([key, val]) => {
+    if (val === '-' || val === '' || val === null || val === undefined) {
+      cleaned[key] = null;
+    } else {
+      cleaned[key] = val;
+    }
+  });
+  return cleaned;
+};
+
 // ── Field Renderer ─────────────────────────────────────────────────────────────
 const renderField = (
   fieldKey: string,
@@ -418,7 +444,7 @@ const renderField = (
   const label = field.title ?? fieldKey;
   const value = formValues[fieldKey] ?? '';
 
-  if (fieldKey === 'latitude') {
+  if (fieldKey === 'Latitude') {
     return (
       <GpsLocationField
         key="gps-location-group"
@@ -431,8 +457,20 @@ const renderField = (
       />
     );
   }
-  if (fieldKey === 'longitude' || fieldKey === 'gpsAccuracy' || fieldKey === 'googleMapLink') {
+  if (fieldKey === 'Longitude' || fieldKey === 'GPS_Accuracy' || fieldKey === 'Google_Map_Location') {
     return null;
+  }
+
+  if (fieldKey === 'Site_Engineer_Signature' || fieldKey === 'Customer_Confirmation_Signature') {
+    return (
+      <SignatureField
+        key={fieldKey}
+        label={label}
+        value={value}
+        onChange={(val) => setFormValues((prev) => ({ ...prev, [fieldKey]: val }))}
+        required={required}
+      />
+    );
   }
 
   if (fieldKey === 'ebBillUpload' || uploadType === 'ebBill') {
@@ -543,6 +581,14 @@ const FormScreen = ({
   const { currentLocation, startTracking } = useLocationTracking(isMounted);
   const typedLocation = currentLocation as LocationCoords | null;
 
+  // Keep a ref in sync with the latest location so the setInterval callback
+  // inside fetchGpsLocation always reads the live value instead of a stale
+  // snapshot captured when fetchGpsLocation was first called.
+  const locationRef = useRef<LocationCoords | null>(null);
+  useEffect(() => {
+    locationRef.current = typedLocation;
+  }, [typedLocation]);
+
   const [template, setTemplate]                 = useState<Template | null>(null);
   const [loading, setLoading]                   = useState(true);
   const [formValues, setFormValues]             = useState<Record<string, string>>({});
@@ -554,6 +600,7 @@ const FormScreen = ({
 
   const [gpsCoords, setGpsCoords] = useState<GpsCoords>({ latitude: null, longitude: null, accuracy: null });
   const [gpsLoading, setGpsLoading] = useState(false);
+  const [originalValues, setOriginalValues] = useState<Record<string, string>>({});
   const gpsMapLink = gpsCoords.latitude != null && gpsCoords.longitude != null
     ? `https://www.google.com/maps?q=${gpsCoords.latitude},${gpsCoords.longitude}`
     : '';
@@ -577,23 +624,25 @@ const FormScreen = ({
         attempts++;
 
         setGpsCoords((prev) => {
-          if (typedLocation?.latitude != null && typedLocation?.longitude != null) {
-            const accuracy = typedLocation.accuracy ?? null;
+          const liveLocation = locationRef.current;
+
+          if (liveLocation?.latitude != null && liveLocation?.longitude != null) {
+            const accuracy = liveLocation.accuracy ?? null;
 
             setFormValues((prevForm) => ({
               ...prevForm,
-              latitude: String(typedLocation.latitude),
-              longitude: String(typedLocation.longitude),
-              gpsAccuracy: String(accuracy ?? 0),
-              googleMapLink: `https://www.google.com/maps?q=${typedLocation.latitude},${typedLocation.longitude}`,
+              Latitude: String(liveLocation.latitude),
+              Longitude: String(liveLocation.longitude),
+              GPS_Accuracy: String(accuracy ?? 0),
+              Google_Map_Location: `https://www.google.com/maps?q=${liveLocation.latitude},${liveLocation.longitude}`,
             }));
 
             clearInterval(checkLocation);
             setGpsLoading(false);
 
             return {
-              latitude: typedLocation.latitude,
-              longitude: typedLocation.longitude,
+              latitude: liveLocation.latitude,
+              longitude: liveLocation.longitude,
               accuracy,
             };
           }
@@ -639,10 +688,10 @@ const FormScreen = ({
 
       setFormValues((prev) => ({
         ...prev,
-        latitude: String(typedLocation.latitude),
-        longitude: String(typedLocation.longitude),
-        gpsAccuracy: String(accuracy ?? 0),
-        googleMapLink: `https://www.google.com/maps?q=${typedLocation.latitude},${typedLocation.longitude}`,
+        Latitude: String(typedLocation.latitude),
+        Longitude: String(typedLocation.longitude),
+        GPS_Accuracy: String(accuracy ?? 0),
+        Google_Map_Location: `https://www.google.com/maps?q=${typedLocation.latitude},${typedLocation.longitude}`,
       }));
     }
   }, [typedLocation, gpsCoords.latitude]);
@@ -658,7 +707,7 @@ const FormScreen = ({
 
   useEffect(() => { fetchTemplate(); }, []);
 
-  useEffect(() => {
+useEffect(() => {
     if (!template) return;
     const restoreData = async () => {
       if (isEditMode) {
@@ -672,15 +721,29 @@ const FormScreen = ({
               if (val && typeof val === 'object' && !Array.isArray(val)) {
                 flatten(val, fullKey);
               } else {
-                flattened[fullKey] = val != null ? String(val) : '';
+                const strVal = val != null ? String(val) : '';
+flattened[fullKey] = strVal === '-' ? '' : strVal;
               }
             });
           };
           flatten(existing);
-          setFormValues(flattened);
+console.log('🔎 Flattened existing data:', JSON.stringify(flattened, null, 2));
+
+// dash value scan
+Object.entries(flattened).forEach(([k, v]) => {
+  if (v === '-' || (typeof v === 'string' && v.startsWith('-') && !/^-?\d/.test(v.slice(1)))) {
+    console.log('⚠️ Suspicious dash value found:', k, '=', JSON.stringify(v));
+  }
+});
+
+setFormValues(flattened);
+setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
         } catch (err) {
           const draft = await getSavedFormData(lead.id);
-          if (draft) setFormValues(draft);
+          if (draft) {
+            setFormValues(draft);
+            setOriginalValues(draft); // ✅ ADD THIS LINE — offline draft baseline
+          }
         }
       } else {
         const draft = await getSavedFormData(lead.id);
@@ -727,16 +790,16 @@ const FormScreen = ({
     if (isOnline) {
       try {
         const formData = new FormData();
-        const mapped = coerceNumbers(mapToZohoFields(formValues));
-console.log('🔍 Consumer_Number type:', typeof mapped['Consumer_Number'], '| value:', mapped['Consumer_Number']);
-console.log('🔍 Site_Engineer_Contact type:', typeof mapped['Site_Engineer_Contact'], '| value:', mapped['Site_Engineer_Contact']);
-console.log('🔍 Full mapped payload:', JSON.stringify(mapped, null, 2));
 
-const dataPayload = {
-  mobileNumber: lead.phone,
-  deal_id: lead.dealId,
-  ...mapped,  // ✅ reuse
-};
+        // Zoho field mapping removed — raw form field names are sent as-is.
+        // The backend now owns all field-name handling / type coercion for Zoho.
+        console.log('🔍 Full form payload:', JSON.stringify(formValues, null, 2));
+
+        const dataPayload = {
+          mobileNumber: lead.phone,
+          deal_id: lead.dealId,
+          ...formValues,
+        };
         console.log('🆔 [handleSubmit] leadId (local):', lead.id, '| deal_id (backend):', dataPayload.deal_id);
         formData.append('data', JSON.stringify(dataPayload));
 
@@ -783,11 +846,11 @@ const dataPayload = {
       }
     } else {
       try {
-        // ✅ Zoho field mapping applied for offline too
+        // Zoho field mapping removed — raw form field names are saved/queued as-is.
         const offlinePayload = {
           mobileNumber: lead.phone,
           deal_id: lead.dealId,
-          ...mapToZohoFields(formValues),
+          ...formValues,
           _photoFiles: photoFiles,
           _siteSurveyPhotos: siteSurveyPhotos,
         };
@@ -816,23 +879,38 @@ const dataPayload = {
   };
 
   // ── Update (Edit Mode) ─────────────────────────────────────────────────────
+  // ── Update (Edit Mode) ─────────────────────────────────────────────────────
   const handleUpdate = async () => {
     setSubmitting(true);
+
+    // ✅ ADD THESE 6 LINES — calculate only the fields that actually changed
+    const changedFields: Record<string, string> = {};
+Object.entries(formValues).forEach(([key, val]) => {
+  if (originalValues[key] !== val) {
+    // Skip unchanged base64/signature fields
+    if (
+      (key === 'Site_Engineer_Signature' || key === 'Customer_Confirmation_Signature') &&
+      val === originalValues[key]
+    ) return;
+    changedFields[key] = val;
+  }
+});
+console.log('✏️ Changed fields (diagnostic only):', JSON.stringify(changedFields, null, 2));
 
     if (isOnline) {
       try {
         const formData = new FormData();
 
-        // ✅ Zoho field mapping applied here
-        const mapped = coerceNumbers(mapToZohoFields(formValues));
-
-const updatePayload = {
+        // Zoho field mapping removed — raw form field names are sent as-is.
+        const updatePayload = {
+  id: lead.dealId,
   mobileNumber: lead.phone,
   deal_id: lead.dealId,
-  ...mapped,  // ✅ reuse
+  ...sanitizePayload(changedFields),   // ✅ CHANGED — was ...formValues, now only the diff
 };
-        console.log('🆔 [handleUpdate] leadId (local):', lead.id, '| deal_id (backend):', updatePayload.deal_id);
-        formData.append('data', JSON.stringify(updatePayload));
+console.log('🆔 [handleUpdate] leadId (local):', lead.id, '| deal_id (backend):', updatePayload.deal_id);
+console.log('📦 updatePayload JSON:', JSON.stringify(updatePayload));
+formData.append('data', JSON.stringify(updatePayload));
 
         photoFiles.forEach((file) => {
           formData.append('ebBillPhotos', {
@@ -854,9 +932,10 @@ const updatePayload = {
           `📤 Updating form with ${photoFiles.length} EB bill(s) and ${siteSurveyPhotos.length} site survey photo(s)...`
         );
 
-        const res = await API.put('https://board.trisentrix.com/user/update', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        // ✅ Use BASE_URL instead of hardcoded URL
+        const res = await API.put('/user/update', formData, {
+  headers: { 'Content-Type': 'multipart/form-data' },
+});
 
         Alert.alert('✔ Updated', 'Form updated successfully!', [
           { text: 'OK', onPress: () => navigation.goBack() },
@@ -865,33 +944,35 @@ const updatePayload = {
         setPhotoFiles([]);
         setSiteSurveyPhotos([]);
       } catch (err: any) {
-        console.error('Update error:', err);
-        Alert.alert(
-          'Error',
-          err?.response?.data?.error || err?.message || 'Update failed. Please try again.',
-        );
-      } finally {
+  console.error('Update error:', err);
+  console.error('Update error response:', JSON.stringify(err?.response?.data));  // ← ADD THIS
+  Alert.alert(
+    'Error',
+    err?.response?.data?.error || err?.message || 'Update failed.',
+  );
+} finally {
         setSubmitting(false);
       }
     } else {
       try {
-        // ✅ Zoho field mapping applied for offline update too
+        // Zoho field mapping removed — raw form field names are saved/queued as-is.
         const offlinePayload = {
           mobileNumber: lead.phone,
           deal_id: lead.dealId,
-          ...mapToZohoFields(formValues),
+          ...formValues,
           _photoFiles: photoFiles,
           _siteSurveyPhotos: siteSurveyPhotos,
         };
         console.log('🆔 [handleUpdate/offline] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
         await saveFormDataLocally(lead.id, offlinePayload);
+        // ✅ Use BASE_URL instead of hardcoded URL
         await enqueue(`form_update_${lead.id}`, 'FORM_UPDATE', {
-          formData: offlinePayload,
-          photoFiles: photoFiles,
-          siteSurveyPhotos: siteSurveyPhotos,
-          mobile: lead.phone,
-          url: 'https://board.trisentrix.com/user/update',
-        });
+  formData: offlinePayload,
+  photoFiles: photoFiles,
+  siteSurveyPhotos: siteSurveyPhotos,
+  mobile: lead.phone,
+  url: '/user/update',
+});
         Alert.alert(
           '✔ Saved Offline',
           'Update saved locally with photos. Will be synced when online.',
@@ -1122,4 +1203,35 @@ const styles = StyleSheet.create({
   submitBtnOffline: { backgroundColor: '#f97316' },
   submitBtnEdit: { backgroundColor: '#3b82f6' },
   submitBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  signaturePreview: {
+    width: '100%', height: 130, borderRadius: 8,
+    borderWidth: 1, borderColor: '#ddd', backgroundColor: '#fff',
+  },
+  sigActionBtn: {
+    flex: 1, borderWidth: 1.5, borderStyle: 'dashed', borderRadius: 8,
+    paddingVertical: 14, alignItems: 'center',
+    flexDirection: 'row', justifyContent: 'center', gap: 6,
+    backgroundColor: '#fff',
+  },
+  sigActionBtnText: { fontWeight: '700', fontSize: 13 },
+  sigSmallBtn: {
+    borderWidth: 1.5, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#fff',
+  },
+  sigSmallBtnText: { fontWeight: '700', fontSize: 12 },
+  sigModalHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingTop: 50, paddingBottom: 14,
+    borderBottomWidth: 1, borderBottomColor: '#eee',
+  },
+  sigModalTitle: { fontSize: 16, fontWeight: 'bold', color: '#333' },
+  sigModalFooter: {
+    flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 14,
+    borderTopWidth: 1, borderTopColor: '#eee',
+  },
+  sigFooterBtn: {
+    flex: 1, borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
+    paddingVertical: 13, alignItems: 'center', backgroundColor: '#fff',
+  },
+  sigFooterBtnText: { fontWeight: '700', fontSize: 14, color: '#333' },
 });

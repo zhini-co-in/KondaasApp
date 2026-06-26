@@ -23,58 +23,47 @@ export async function createNotificationChannel() {
   });
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Show Notification
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function showLeadNotification(data) {
   if (!data) return;
 
-  // âœ… weekly_summary à®µà®¨à¯à®¤à®¾ skip à®ªà®£à¯à®£à¯
+  //
   if (data.type === 'weekly_summary') {
     console.log('[notificationService] Weekly summary â€” skipping lead UI');
     return;
   }
 
-  // âœ… leadId à®‡à®²à¯à®²à®©à¯à®©à®¾ valid lead à®‡à®²à¯à®²à¯ˆ
+  //
   if (!data.leadId && !data.customerMobile) {
     console.log('[notificationService] No leadId/mobile â€” skipping');
     return;
   }
 
-  await notifee.displayNotification({
-    id: data.leadId || String(Date.now()),
-    title: 'ðŸ”” New Lead Nearby!',
-    body: `ðŸ‘¤ ${data.customerName || 'Customer'}  âš¡ ${data.kilovolt || 'N/A'} kV`,
-    data: {
-      leadId:         data.leadId         || '',
-      customerMobile: data.customerMobile || '',
-      customerName:   data.customerName   || '',
-      address:        data.address        || '',
-      kilovolt:       data.kilovolt       || '',
+  // Inside his frontend showLeadNotification(data) function:
+await notifee.displayNotification({
+  id: data.deal_id || String(Date.now()), // 👈 Changed from data.leadId
+  title: '🔔 New Lead Nearby!',
+  body: `👤 ${data.customer_name || 'Customer'}  ⚡ ${data.kilovolt || 'N/A'} kV`,
+  data: {
+    leadId:         data.deal_id          || '', // 👈 Maps backend keys
+    customerMobile: data.customer_mobile  || '', 
+    customerName:   data.customer_name    || '',
+    address:        data.customer_address || '',
+    kilovolt:       data.kilovolt         || '',
+  },
+  android: {
+    channelId: 'custom_sound_channel_v2',
+    // ... everything else stays exactly the same
+    style: {
+      type: AndroidStyle.BIGTEXT,
+      text:
+        `👤 Name      : ${data.customer_name || 'Unknown'}\n` +
+        `📍 Address   : ${data.customer_address || 'N/A'}\n` +
+        `⚡ Kilovolts : ${data.kilovolt || 'N/A'} kV\n`,
     },
-    android: {
-      channelId:     'custom_sound_channel_v2',
-      importance:    AndroidImportance.HIGH,
-      pressAction:   { id: 'default' },
-      showTimestamp: true,
-      actions: [
-        { title: 'âœ… Accept', pressAction: { id: 'accept' } },
-        { title: 'âŒ Reject', pressAction: { id: 'reject' } },
-      ],
-      style: {
-        type: AndroidStyle.BIGTEXT,
-        text:
-          `ðŸ‘¤ Name      : ${data.customerName || 'Unknown'}\n` +
-          `ðŸ“ Address   : ${data.address      || 'N/A'}\n`    +
-          `âš¡ Kilovolts : ${data.kilovolt      || 'N/A'} kV\n`,
-      },
-    },
-  });
+  },
+});
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Helper â€” Surveyor number
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function getSurveyorNumber() {
   try {
     const raw    = await AsyncStorage.getItem(USER_DATA);
@@ -86,9 +75,6 @@ async function getSurveyorNumber() {
   }
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Accept handler
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function handleNotificationAccept(notifData) {
   const mobile = notifData?.customerMobile;
   if (!mobile) return;
@@ -119,9 +105,6 @@ async function handleNotificationAccept(notifData) {
   }
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Reject handler
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function handleNotificationReject(mobile) {
   if (!mobile) return;
 
@@ -136,9 +119,6 @@ async function handleNotificationReject(mobile) {
   }
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Register handlers
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function registerNotificationHandlers() {
 
   // Background
@@ -162,7 +142,7 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
   await notifee.cancelNotification(detail.notification.id);
 });
 
-// Foreground â€” same guard
+// 
 notifee.onForegroundEvent(async ({ type, detail }) => {
   if (type !== EventType.ACTION_PRESS) return;
 
@@ -170,7 +150,7 @@ notifee.onForegroundEvent(async ({ type, detail }) => {
   const actionId  = detail?.pressAction?.id;
   if (!notifData) return;
 
-  // âœ… same check
+  // 
   if (notifData.type === 'weekly_summary') {
     await notifee.cancelNotification(detail.notification.id);
     return;

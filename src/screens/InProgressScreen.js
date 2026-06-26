@@ -14,6 +14,7 @@ import { USER_DATA } from '../service/localStorage';
 import { updateAcceptedLeadStatus } from '../service/Localleadsstorage';
 import { enqueue } from '../service/syncQueue';
 import LeadCard from '../components/LeadCard';
+import { BASE_URL } from '../api/api1';
 
 const { width } = Dimensions.get('window');
 

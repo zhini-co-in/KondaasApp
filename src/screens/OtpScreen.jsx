@@ -315,34 +315,23 @@ const handleChange = (text, index) => {
 
           console.log("✅ Fresh email from DB:", freshEmail ? "FOUND" : "MISSING");
 
-          if (freshEmail) {
-            if (!accessToken && freshEmail && freshPassword) {
-              const tokenResult = await safeApiCall(
-                `${BASE_URL}/solarman/token`,
-                { email: freshEmail, password: freshPassword, phoneNo: cleanPhone },
-                workingToken,
-                deviceId
-              );
-              accessToken = tokenResult.data?.access_token || null;
-              console.log(accessToken ? "✅ accessToken obtained" : "⚠️ No accessToken");
-            }
+          // ✅ FIX: Always update with fresh data, even if email is empty!
+          const updatedPayload = {
+            ...finalPayload,
+            UserInfo: {
+              ...finalPayload.UserInfo,
+              email:    freshEmail || email,
+              password: freshPassword || password,
+              role:     freshRole,  // ← USE freshRole!
+            },
+            accessToken,
+            authToken: workingToken,
+          };
 
-            const updatedPayload = {
-              ...finalPayload,
-              UserInfo: {
-                ...finalPayload.UserInfo,
-                email:    freshEmail,
-                password: freshPassword,
-                role:     freshRole,
-              },
-              accessToken,
-              authToken: workingToken,
-            };
+          await AsyncStorage.setItem(USER_DATA, JSON.stringify(updatedPayload));
+          console.log("💾 Updated storage with fresh data from DB");
 
-            await AsyncStorage.setItem(USER_DATA, JSON.stringify(updatedPayload));
-            console.log("💾 Updated storage with email");
-
-            // புதுசு
+          // ✅ Navigate with freshRole (not old role!)
 if (freshRole === "admin") {
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.ADMIN_SCREEN }] });
 } else if (freshRole === "logistic") {
@@ -351,11 +340,12 @@ if (freshRole === "admin") {
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }] });
 } else if (freshRole === "installer") {
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.INSTALLER_SCREEN }] });
-} else {
+} else if (freshEmail?.trim()) {
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.MAIN }] });
+} else {
+  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }] });
 }
-            return;
-          }
+          return;
         }
       }
 
@@ -373,15 +363,23 @@ if (freshRole === "admin") {
 
       // ─── Step 9: Navigate ───
       // புதுசு
+// ─── Step 9: Navigate ───
+      // ✅ FIXED: Role-based check first, regardless of email/password
+// ─── Step 9: Navigate ───
+      // ✅ FIXED: Role-based check first, regardless of email/password
 if (role === "admin") {
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.ADMIN_SCREEN }] });
 } else if (role === "logistic") {
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.LOGISTIC_SCREEN }] });
 } else if (role === "surveyor") {
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }] });
+} else if (role === "installer") {
+  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.INSTALLER_SCREEN }] });
 } else if (email?.trim()) {
+  // Regular user role with email
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.MAIN }] });
 } else {
+  // Regular user role without email → PRODUCTS_HOME only
   navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }] });
 }
 

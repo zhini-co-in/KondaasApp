@@ -62,6 +62,7 @@ const SurveyerScreen = () => {
 
   // acceptedLeadsRef – setState inside setState crash தடுக்க
   const acceptedLeadsRef = useRef([]);
+  const isCapturingPhoto = useRef(false);
 
   // acceptedLeads set பண்ணும்போது ref-ஐயும் sync பண்ண
   const setAcceptedLeadsSafe = useCallback((updater) => {
@@ -121,29 +122,31 @@ const SurveyerScreen = () => {
   }, []);
 
   // useFocusEffect – setState inside setState CRASH FIX + auto refresh on screen focus
-  useFocusEffect(
-    useCallback(() => {
-      // Auto refresh data when screen comes into focus
+useFocusEffect(
+  useCallback(() => {
+    // ✅ Photo எடுக்கும்போது refresh skip பண்ணு
+    if (!isCapturingPhoto.current) {
       fetchAndMergeLeads();
+    }
 
-      const completedIds = route.params?.completedIds;
-      if (!completedIds || completedIds.length === 0) return;
-      navigation.setParams({ completedIds: null });
+    const completedIds = route.params?.completedIds;
+    if (!completedIds || completedIds.length === 0) return;
+    navigation.setParams({ completedIds: null });
 
-      const toMove = acceptedLeadsRef.current.filter((l) =>
-        completedIds.includes(l.id)
-      );
-
-      setAcceptedLeadsSafe((prev) => prev.filter((l) => !completedIds.includes(l.id)));
-
-      if (toMove.length > 0) {
-        setCompletedLeads((c) => [
-          ...c.filter((cl) => !toMove.some((m) => m.id === cl.id)),
-          ...toMove.map((l) => ({ ...l, status: 'completed' })),
-        ]);
-      }
-    }, [route.params?.completedIds])
-  );
+    const toMove = acceptedLeadsRef.current.filter((l) =>
+      completedIds.includes(l.id)
+    );
+    setAcceptedLeadsSafe((prev) =>
+      prev.filter((l) => !completedIds.includes(l.id))
+    );
+    if (toMove.length > 0) {
+      setCompletedLeads((c) => [
+        ...c.filter((cl) => !toMove.some((m) => m.id === cl.id)),
+        ...toMove.map((l) => ({ ...l, status: 'completed' })),
+      ]);
+    }
+  }, [route.params?.completedIds])
+);
 
   // ── Restore state ─────────────────────────────────────────────────────────
   const restoreState = async () => {
@@ -380,12 +383,15 @@ const confirmReject = async () => {
   }
 };
 
-  // ── Toggle ────────────────────────────────────────────────────────────────
-  const handleToggle = async () => {
-    if (!isOn) {
-      const uploadSuccess = await takeAndUploadPhoto();
-      if (!uploadSuccess) return;
 
+// handleToggle-ல:
+const handleToggle = async () => {
+  if (!isOn) {
+    isCapturingPhoto.current = true;        // ← flag set
+    const uploadSuccess = await takeAndUploadPhoto();
+    isCapturingPhoto.current = false;       // ← flag clear
+
+    if (!uploadSuccess) return;
       if (Platform.OS === 'android') {
         const gpsOn = await isGPSEnabled();
         if (!gpsOn) {
@@ -461,21 +467,31 @@ const takeAndUploadPhoto = async () => {
       return false;
     }
 
-    const response = await new Promise((resolve) => {
-      launchCamera(
-        { mediaType: 'photo', cameraType: 'back', quality: 0.8, saveToPhotos: true },
-        resolve
-      );
+    // ✅ FIX 1: Camera init-க்கு சிறிய delay கொடு
+    await new Promise((res) => setTimeout(res, 300));
+
+    // ✅ FIX 2: Promise wrap வேண்டாம் — directly await பண்ணு
+    const response = await launchCamera({
+      mediaType: 'photo',
+  cameraType: 'back',
+  quality: 0.3,        // ← 0.8 → 0.3 குறைக்கணும்
+  saveToPhotos: true,
+  maxWidth: 800,       // ← இதை add பண்ணுங்க
+  maxHeight: 800, 
     });
 
     if (response.didCancel) return false;
+
     if (response.errorCode) {
       Alert.alert('Camera Error', response.errorMessage || 'Failed to open camera');
       return false;
     }
 
     const photo = response.assets?.[0];
-    if (!photo?.uri) return false;
+    if (!photo?.uri) {
+      Alert.alert('Error', 'No photo captured. Please try again.');
+      return false;
+    }
 
     const phoneNo = await getSurveyorNumber();
     if (!phoneNo) {
@@ -487,8 +503,7 @@ const takeAndUploadPhoto = async () => {
     const match    = /\.(\w+)$/.exec(filename);
     const type     = match ? `image/${match[1]}` : 'image/jpeg';
 
-    // 🕒 backend-ku required "HH-MM-SS" format-la time generate pannunga
-    const now = new Date();
+    const now  = new Date();
     const time = [
       String(now.getHours()).padStart(2, '0'),
       String(now.getMinutes()).padStart(2, '0'),
@@ -498,10 +513,12 @@ const takeAndUploadPhoto = async () => {
     const formData = new FormData();
     formData.append('photo',   { uri: photo.uri, name: filename, type });
     formData.append('phoneNo', phoneNo);
-    formData.append('time',    time);   // 👈 add panniten
+    formData.append('time',    time);
 
+    // ✅ FIX 3: timeout கொடு — network slow-ஆ இருந்தா hang ஆகாம
     const res = await API.post('/notification/daily-photo', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 30000,
     });
 
     if (res.data?.success) {
@@ -510,7 +527,12 @@ const takeAndUploadPhoto = async () => {
     } else {
       throw new Error(res.data?.message || 'Upload failed');
     }
+
   } catch (err) {
+    // ✅ FIX 4: user cancel-ஐ error-ஆ காட்டாதே
+    if (err?.message?.includes('cancelled') || err?.code === 'E_PICKER_CANCELLED') {
+      return false;
+    }
     Alert.alert(
       'Upload Failed',
       err?.response?.data?.message || err?.message || 'Could not upload photo. Please try again.'

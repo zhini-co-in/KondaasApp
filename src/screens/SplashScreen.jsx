@@ -99,13 +99,13 @@ if (role === "admin") {
     routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }],
   });
 } else if (email && email.trim() !== "" && password && password.trim() !== "") {
-  console.log("Normal user → Navigating to Main");
+  // Regular user role with email and password
   navigation.reset({
     index: 0,
     routes: [{ name: SCREEN_NAMES.MAIN }],
   });
 } else {
-  console.log("No login → Navigating to ProductsHome");
+  // Regular user role without email/password → PRODUCTS_HOME only
   navigation.reset({
     index: 0,
     routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }],
