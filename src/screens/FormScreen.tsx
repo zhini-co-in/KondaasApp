@@ -999,6 +999,7 @@ formData.append('data', JSON.stringify(updatePayload));
           params: {
             lead: { ...lead, manualSiteEnabled: true },
             completedLeadId: null,
+            formSubmittedLeadId: lead.id,
           },
         },
       ],

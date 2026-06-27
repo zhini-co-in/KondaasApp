@@ -26,42 +26,62 @@ export async function createNotificationChannel() {
 export async function showLeadNotification(data) {
   if (!data) return;
 
-  //
+  // Skip weekly summaries
   if (data.type === 'weekly_summary') {
-    console.log('[notificationService] Weekly summary â€” skipping lead UI');
+    console.log('[notificationService] Weekly summary – skipping lead UI');
     return;
   }
 
-  //
-  if (!data.leadId && !data.customerMobile) {
-    console.log('[notificationService] No leadId/mobile â€” skipping');
+  // Validate required fields
+  if (!data.leadId && !data.customerMobile && !data.deal_id) {
+    console.log('[notificationService] No leadId/mobile – skipping');
     return;
   }
 
-  // Inside his frontend showLeadNotification(data) function:
-await notifee.displayNotification({
-  id: data.deal_id || String(Date.now()), // 👈 Changed from data.leadId
-  title: '🔔 New Lead Nearby!',
-  body: `👤 ${data.customer_name || 'Customer'}  ⚡ ${data.kilovolt || 'N/A'} kV`,
-  data: {
-    leadId:         data.deal_id          || '', // 👈 Maps backend keys
-    customerMobile: data.customer_mobile  || '', 
-    customerName:   data.customer_name    || '',
-    address:        data.customer_address || '',
-    kilovolt:       data.kilovolt         || '',
-  },
-  android: {
-    channelId: 'custom_sound_channel_v2',
-    // ... everything else stays exactly the same
-    style: {
-      type: AndroidStyle.BIGTEXT,
-      text:
-        `👤 Name      : ${data.customer_name || 'Unknown'}\n` +
-        `📍 Address   : ${data.customer_address || 'N/A'}\n` +
-        `⚡ Kilovolts : ${data.kilovolt || 'N/A'} kV\n`,
+  // ✅ ACTION BUTTONS - Accept & Reject
+  const actions = [
+    {
+      title: '✅ Accept',
+      id: 'accept',
+      foreground: true,
+      authenticationRequired: false,
     },
-  },
-});
+    {
+      title: '❌ Reject',
+      id: 'reject',
+      foreground: true,
+      authenticationRequired: false,
+    },
+  ];
+
+  await notifee.displayNotification({
+    id: data.deal_id || String(Date.now()),
+    title: '🔔 New Lead Nearby!',
+    body: `👤 ${data.customer_name || 'Customer'}  ⚡ ${data.kilovolt || 'N/A'} kV`,
+    data: {
+      leadId:         data.deal_id          || '', 
+      customerMobile: data.customer_mobile  || '', 
+      customerName:   data.customer_name    || '',
+      address:        data.customer_address || '',
+      kilovolt:       data.kilovolt         || '',
+      type:           data.type             || 'ASSIGNMENT',
+    },
+    android: {
+      channelId: 'custom_sound_channel_v2',
+      actions: actions, // ✅ ADD BUTTONS HERE
+      style: {
+        type: AndroidStyle.BIGTEXT,
+        text:
+          `👤 Name      : ${data.customer_name || 'Unknown'}\n` +
+          `📍 Address   : ${data.customer_address || 'N/A'}\n` +
+          `⚡ Kilovolts : ${data.kilovolt || 'N/A'} kV\n`,
+      },
+      pressAction: {
+        id: 'default',
+        launchActivity: 'default',
+      },
+    },
+  });
 }
 
 async function getSurveyorNumber() {
@@ -99,7 +119,7 @@ async function handleNotificationAccept(notifData) {
     await API.post('/order/accept', { mobile, surveyorNumber });
     await API.put('/order/updatestatus', { mobile, status: 'accepted' });
 
-    console.log('âœ… Accept done:', mobile);
+    console.log('✅ Accept done:', mobile);
   } catch (e) {
     console.error('[notificationService] Accept error:', e?.message);
   }
@@ -113,7 +133,7 @@ async function handleNotificationReject(mobile) {
       mobile,
       reason: 'Rejected via notification',
     });
-    console.log('âŒ Reject done:', mobile);
+    console.log('❌ Reject done:', mobile);
   } catch (e) {
     console.error('[notificationService] Reject error:', e?.message);
   }
@@ -121,44 +141,61 @@ async function handleNotificationReject(mobile) {
 
 export function registerNotificationHandlers() {
 
-  // Background
-// Background
-notifee.onBackgroundEvent(async ({ type, detail }) => {
-  if (type !== EventType.ACTION_PRESS) return;
+  // Background handler
+  notifee.onBackgroundEvent(async ({ type, detail }) => {
+    if (type !== EventType.ACTION_PRESS) return;
 
-  const notifData = detail?.notification?.data;
-  const actionId  = detail?.pressAction?.id;
-  if (!notifData) return;
+    const notifData = detail?.notification?.data;
+    const actionId  = detail?.pressAction?.id;
+    if (!notifData) return;
 
-  // âœ… weekly_summary notification-à®•à¯à®•à¯ accept/reject à®µà¯‡à®£à¯à®Ÿà®¾à®®à¯
-  if (notifData.type === 'weekly_summary') {
+    // Skip weekly summary notifications
+    if (notifData.type === 'weekly_summary') {
+      await notifee.cancelNotification(detail.notification.id);
+      return;
+    }
+
+    // Handle accept action
+    if (actionId === 'accept') {
+      console.log('[notificationService] Accept action triggered (background)');
+      await handleNotificationAccept(notifData);
+    }
+    
+    // Handle reject action
+    if (actionId === 'reject') {
+      console.log('[notificationService] Reject action triggered (background)');
+      await handleNotificationReject(notifData?.customerMobile);
+    }
+
     await notifee.cancelNotification(detail.notification.id);
-    return;
-  }
+  });
 
-  if (actionId === 'accept') await handleNotificationAccept(notifData);
-  if (actionId === 'reject') await handleNotificationReject(notifData?.customerMobile);
+  // Foreground handler
+  notifee.onForegroundEvent(async ({ type, detail }) => {
+    if (type !== EventType.ACTION_PRESS) return;
 
-  await notifee.cancelNotification(detail.notification.id);
-});
+    const notifData = detail?.notification?.data;
+    const actionId  = detail?.pressAction?.id;
+    if (!notifData) return;
 
-// 
-notifee.onForegroundEvent(async ({ type, detail }) => {
-  if (type !== EventType.ACTION_PRESS) return;
+    // Skip weekly summary notifications
+    if (notifData.type === 'weekly_summary') {
+      await notifee.cancelNotification(detail.notification.id);
+      return;
+    }
 
-  const notifData = detail?.notification?.data;
-  const actionId  = detail?.pressAction?.id;
-  if (!notifData) return;
+    // Handle accept action
+    if (actionId === 'accept') {
+      console.log('[notificationService] Accept action triggered (foreground)');
+      await handleNotificationAccept(notifData);
+    }
+    
+    // Handle reject action
+    if (actionId === 'reject') {
+      console.log('[notificationService] Reject action triggered (foreground)');
+      await handleNotificationReject(notifData?.customerMobile);
+    }
 
-  // 
-  if (notifData.type === 'weekly_summary') {
     await notifee.cancelNotification(detail.notification.id);
-    return;
-  }
-
-  if (actionId === 'accept') await handleNotificationAccept(notifData);
-  if (actionId === 'reject') await handleNotificationReject(notifData?.customerMobile);
-
-  await notifee.cancelNotification(detail.notification.id);
-});
+  });
 }

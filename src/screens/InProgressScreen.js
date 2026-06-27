@@ -35,6 +35,7 @@ const InProgressScreen = () => {
   const [completedModalVisible, setCompletedModalVisible] = useState(false);
   const [completedTargetLead, setCompletedTargetLead]   = useState(null);
   const [isOnline, setIsOnline]                         = useState(true);
+  const [formSubmittedIds, setFormSubmittedIds] = useState(new Set());
 
   const { currentLocation, setCurrentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
 
@@ -91,6 +92,14 @@ const InProgressScreen = () => {
       stopHighFrequencyTracking();
     }, [route.params?.completedLeadId])
   );
+  useFocusEffect(
+  React.useCallback(() => {
+    const submittedId = route.params?.formSubmittedLeadId;
+    if (!submittedId) return;
+    navigation.setParams({ formSubmittedLeadId: null });
+    setFormSubmittedIds((prev) => new Set([...prev, submittedId]));
+  }, [route.params?.formSubmittedLeadId])
+);
 
   // ── Helper: get surveyor number ───────────────────────────────────────────
   const getSurveyorNumber = async () => {
@@ -299,6 +308,7 @@ await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
               onEdit={handleEdit}
               onMarkCompleted={handleMarkCompleted}
               navigation={navigation}
+              formSubmitted={formSubmittedIds.has(item.id)} 
             />
           ))}
         </View>

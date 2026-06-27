@@ -37,6 +37,7 @@ const LeadCard = ({
   onEdit,
   onMarkCompleted,
   navigation,
+  formSubmitted,
 }) => {
   const hasLatLong = item.latitude && item.longitude &&
     item.latitude !== '' && item.longitude !== '';
@@ -113,28 +114,32 @@ const LeadCard = ({
         if (item.status === 'completed') return <CompletedPill />;
 
         if (item.manualSiteEnabled || (hasLatLong && withinRange)) {
-          return (
-            <View style={{ alignItems: 'center', gap: 5 }}>
-              <TouchableOpacity style={styles.smallSiteBtn} onPress={() => onSiteObservation?.(item)}>
-                <Text style={styles.smallSiteBtnText}>Site{'\n'}Observation</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.commonBtn, { backgroundColor: '#3b82f6' }]}
-                onPress={() => onEdit?.(item)}
-              >
-                <Ionicons name="create-outline" size={13} color="#fff" style={{ marginRight: 3 }} />
-                <Text style={styles.commonBtnText}>Edit</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.commonBtn, { backgroundColor: '#22c55e' }]}
-                onPress={() => onMarkCompleted?.(item)}
-              >
-                <Ionicons name="checkmark-done-outline" size={13} color="#fff" style={{ marginRight: 3 }} />
-                <Text style={styles.commonBtnText}>Completed</Text>
-              </TouchableOpacity>
-            </View>
-          );
-        }
+  return (
+    <View style={{ alignItems: 'center', gap: 5 }}>
+      <TouchableOpacity style={styles.smallSiteBtn} onPress={() => onSiteObservation?.(item)}>
+        <Text style={styles.smallSiteBtnText}>Site{'\n'}Observation</Text>
+      </TouchableOpacity>
+      {formSubmitted && (
+        <TouchableOpacity
+          style={[styles.commonBtn, { backgroundColor: '#3b82f6' }]}
+          onPress={() => onEdit?.(item)}
+        >
+          <Ionicons name="create-outline" size={13} color="#fff" style={{ marginRight: 3 }} />
+          <Text style={styles.commonBtnText}>Edit</Text>
+        </TouchableOpacity>
+      )}
+      {formSubmitted && (
+        <TouchableOpacity
+          style={[styles.commonBtn, { backgroundColor: '#22c55e' }]}
+          onPress={() => onMarkCompleted?.(item)}
+        >
+          <Ionicons name="checkmark-done-outline" size={13} color="#fff" style={{ marginRight: 3 }} />
+          <Text style={styles.commonBtnText}>Completed</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
 
         return (
           <View style={styles.reachBtnWrapper}>
