@@ -36,5 +36,6 @@ export const SCREEN_NAMES = {
 LOGISTIC_SCREEN: 'LogisticScreen',
 INSTALLER_SCREEN: 'InstallerScreen',
 CREATE_LEAD: 'CreateLead',
+LEAD_FULL_DETAILS: 'LeadFullDetailsScreen',
 };
 

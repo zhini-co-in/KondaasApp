@@ -32,6 +32,7 @@ import CreateLeadScreen from '../screens/CreateLeadScreen';
 import InstallerScreen from '../screens/InstallerScreen';
 import FilterScreen from '../screens/FilterScreen';
 import EmployeeFilterScreen from '../screens/EmployeeFilterScreen';
+import Leadfulldetailsscreen from '../screens/Leadfulldetailsscreen';
 const Stack = createNativeStackNavigator();
 
 export default function RootStack() {
@@ -72,6 +73,7 @@ export default function RootStack() {
 <Stack.Screen name="AdminDashboard"  component={AdminScreen} options={{ headerShown: false }} />
 <Stack.Screen name="FilterScreen"    component={FilterScreen} options={{ headerShown: false }} />
 <Stack.Screen name="EmployeeFilter"  component={EmployeeFilterScreen} options={{ headerShown: false }} />
+<Stack.Screen name="LeadFullDetailsScreen" component={Leadfulldetailsscreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

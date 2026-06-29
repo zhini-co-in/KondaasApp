@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   StatusBar, Alert, ScrollView, ActivityIndicator, RefreshControl,
-  Modal, KeyboardAvoidingView, Platform, FlatList, Linking,
+  Modal, KeyboardAvoidingView, Platform, FlatList, Linking, Animated,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -521,8 +521,8 @@ const EditModal = ({ visible, item, onClose, onSave }) => {
 };
 
 // ─── Cards ─────────────────────────────────────────────────────────────────
-const CompletedCard = ({ item, onEdit, onDelete, onAssign }) => (
-  <View style={styles.card}>
+const CompletedCard = ({ item, onEdit, onDelete, onAssign, onViewFull }) => (
+  <TouchableOpacity style={styles.card} onPress={() => onViewFull && onViewFull(item)} activeOpacity={0.85}>
     <LinearGradient colors={['#639922', '#97C459']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cardStripe} />
     <View style={styles.cardInner}>
       <View style={styles.topRow}>
@@ -549,7 +549,7 @@ const CompletedCard = ({ item, onEdit, onDelete, onAssign }) => (
       </View>
       <IconActionsRow onAssign={() => onAssign(item)} onEdit={() => onEdit(item)} onDelete={() => onDelete(item)} />
     </View>
-  </View>
+  </TouchableOpacity>
 );
 
 const RejectedCard = ({ item, onEdit, onDelete, onAssign, onViewLocation }) => (
@@ -655,6 +655,13 @@ const AdminScreen = ({ navigation, route }) => {
   const [contactsVisible, setContactsVisible] = useState(false);
   const [assignTarget, setAssignTarget]     = useState(null);
   const [assignRole, setAssignRole]         = useState('surveyor');
+  const [drawerVisible, setDrawerVisible]   = useState(false);
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+  const [employeeDropdownOpen, setEmployeeDropdownOpen] = useState(false);
+  const [completedFullData, setCompletedFullData]   = useState([]);
+  const [completedFullLoading, setCompletedFullLoading] = useState(false);
+  const [completedPage, setCompletedPage]           = useState(1);
+  const [completedTotalPages, setCompletedTotalPages] = useState(1);
 
   // Receive filter back from FilterScreen / EmployeeFilterScreen
   useFocusEffect(
@@ -712,6 +719,47 @@ const AdminScreen = ({ navigation, route }) => {
   };
 
   useEffect(() => { fetchLeads(); }, []);
+
+  // ── Completed (full data from /admin/products) ─────────────────────────────
+  const normalizeFullForm = (raw, idx) => ({
+    id:             raw._id || String(idx),
+    zohoId:         raw.deal_id || raw._id || null,
+    name:           raw.customerName || raw.name || raw.deal_name || '—',
+    phone:          raw.customerMobile || raw.mobile || raw.phone || '—',
+    city:           raw.city || raw.City || '—',
+    referredBy:     raw.referredBy || raw.referred_by || 'N/A',
+    surveyorNumber: raw.surveyorNumber || raw.assignedTo || raw.surveyor || '—',
+    comment:        raw.comment || raw.completionReason || raw.reason || '—',
+    loanType:       raw.loanType || raw.loan_type || raw.kilovolt || null,
+    amount:         raw.amount || null,
+    date:           fmtDate(raw.createdAt || raw.assignedAt || raw.date),
+    status:         'completed',
+    assignedBy:     raw.assignedBy || raw.assigned_by || '',
+    logisticAssignee:  raw.logisticAssignee || '',
+    installerAssignee: raw.installerAssignee || '',
+    deal_id:        raw.deal_id || null,
+    raw, // keep the full untouched record for the full-details screen
+  });
+
+  const fetchCompletedFull = async (pageNum = 1) => {
+  setCompletedFullLoading(true);
+  try {
+    const res = await API.get('/admin/products', { params: { page: pageNum, limit: 100 } }); // limit increase pannunga
+    const list = Array.isArray(res.data?.data) ? res.data.data : [];
+    const fullMap = {};
+    list.forEach(item => { fullMap[item.deal_id || item._id] = item; });
+
+    // existing completedLeads ah enrich pannunga, replace pannama
+    setAllLeads(prev => prev.map(l => {
+      if (l.status !== 'completed') return l;
+      const fullItem = fullMap[l.zohoId] || fullMap[l.mongoId];
+      return fullItem ? { ...l, raw: fullItem } : l;
+    }));
+  } catch (e) {
+    console.log('[fetchCompletedFull] error:', e?.message);
+  }
+  setCompletedFullLoading(false);
+};
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -858,7 +906,7 @@ const AdminScreen = ({ navigation, route }) => {
   };
 
   const statusFiltered =
-    activeFilter === 'completed'  ? completedLeads  :
+    activeFilter === 'completed'  ? (completedFullData.length ? completedFullData : completedLeads) :
     activeFilter === 'rejected'   ? rejectedLeads   :
     activeFilter === 'inprogress' ? inprogressLeads :
     activeFilter === 'other'      ? otherLeads      : allLeads;
@@ -882,9 +930,13 @@ const AdminScreen = ({ navigation, route }) => {
   const todayLabel  = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   const presetLabel = { today: 'Today', yesterday: 'Yesterday', last7: 'Last 7 days', last30: 'Last 30 days', thisMonth: 'This month' }[datePreset] || '';
 
+  const handleViewFull = item => {
+    navigation.navigate('LeadFullDetailsScreen', { lead: item.raw || item });
+  };
+
   const renderCard = item => {
     if (item.status === 'completed')
-      return <CompletedCard  key={item.id} item={item} onEdit={handleEdit} onDelete={handleDelete} onAssign={handleAssignCompleted} />;
+      return <CompletedCard  key={item.id} item={item} onEdit={handleEdit} onDelete={handleDelete} onAssign={handleAssignCompleted} onViewFull={handleViewFull} />;
     if (item.status === 'rejected')
       return <RejectedCard   key={item.id} item={item} onEdit={handleEdit} onDelete={handleDelete} onAssign={handleAssign} onViewLocation={handleViewLocation} />;
     if (['inprogress', 'in progress', 'in_progress', 'accepted'].includes(item.status))
@@ -906,9 +958,10 @@ const AdminScreen = ({ navigation, route }) => {
 
       {/* ── HEADER ── */}
       <View style={styles.header}>
-        {/* Logo row */}
         <View style={styles.headerRow}>
-          <View style={styles.logoArea}>
+
+          {/* LEFT — Logo */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <View style={styles.logoBadge}>
               <Text style={styles.logoText}>A</Text>
             </View>
@@ -917,9 +970,12 @@ const AdminScreen = ({ navigation, route }) => {
               <Text style={styles.brandSub}>{todayLabel}</Text>
             </View>
           </View>
+
+          {/* RIGHT — Logout */}
           <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
             <Ionicons name="log-out-outline" size={20} color="#fff" />
           </TouchableOpacity>
+
         </View>
 
         {/* Stats */}
@@ -944,10 +1000,10 @@ const AdminScreen = ({ navigation, route }) => {
         <View style={styles.headerFilterRow}>
           <TouchableOpacity
             style={[styles.headerFilterBtn, isFilterActive && styles.headerFilterBtnActive]}
-            onPress={() => navigation.navigate('FilterScreen', { counts, activeFilter, employeeList, employeeFilter })}
+            onPress={() => setDrawerVisible(true)}
             activeOpacity={0.8}
           >
-            <Ionicons name="options-outline" size={19} color={isFilterActive ? '#C8000A' : '#fff'} />
+            <Ionicons name="menu-outline" size={19} color={isFilterActive ? '#C8000A' : '#fff'} />
             {filterBadgeCount > 0 && (
               <View style={[styles.filterBadge, isFilterActive && styles.filterBadgeActive]}>
                 <Text style={[styles.filterBadgeText, isFilterActive && styles.filterBadgeTextActive]}>
@@ -1056,14 +1112,14 @@ const AdminScreen = ({ navigation, route }) => {
         contentContainerStyle={{ padding: 14, paddingBottom: 100, gap: 8 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchLeads(true)} colors={['#C8000A']} />}
       >
-        {loading && <ActivityIndicator size="large" color="#C8000A" style={{ marginTop: 40 }} />}
-        {!loading && filteredLeads.length === 0 && (
+        {(loading || (activeFilter === 'completed' && completedFullLoading)) && <ActivityIndicator size="large" color="#C8000A" style={{ marginTop: 40 }} />}
+        {!loading && !(activeFilter === 'completed' && completedFullLoading) && filteredLeads.length === 0 && (
           <View style={{ alignItems: 'center', paddingTop: 60 }}>
             <Ionicons name="document-outline" size={44} color="#ddd" />
             <Text style={{ color: '#bbb', fontSize: 13, marginTop: 10 }}>No leads found.</Text>
           </View>
         )}
-        {!loading && filteredLeads.map(renderCard)}
+        {!loading && !(activeFilter === 'completed' && completedFullLoading) && filteredLeads.map(renderCard)}
       </ScrollView>
 
       {/* ── FAB: plus icon only, bottom right ── */}
@@ -1074,6 +1130,101 @@ const AdminScreen = ({ navigation, route }) => {
       >
         <Ionicons name="add" size={30} color="#fff" />
       </TouchableOpacity>
+      {/* Overlay */}
+<Modal visible={drawerVisible} transparent animationType="none" onRequestClose={() => setDrawerVisible(false)}>
+  <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }} activeOpacity={1} onPress={() => setDrawerVisible(false)} />
+  
+  {/* Drawer slides from left */}
+  <Animated.View style={{
+    position: 'absolute', top: 0, left: 0, bottom: 0, width: 260,
+    backgroundColor: '#fff',
+  }}>
+    {/* Red header */}
+    <View style={{ backgroundColor: '#C8000A', paddingTop: 52, paddingHorizontal: 18, paddingBottom: 16 }}>
+      <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800' }}>Filter</Text>
+    </View>
+
+    {/* Filter options */}
+    <ScrollView>
+      {/* All Leads — dropdown header */}
+      <TouchableOpacity
+        onPress={() => { setActiveFilter('all'); setStatusDropdownOpen(v => !v); }}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14,
+          borderBottomWidth: 0.5, borderColor: '#F5F5F5',
+          backgroundColor: activeFilter === 'all' ? '#FEF3F3' : '#fff' }}>
+        {activeFilter === 'all' && <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, backgroundColor: '#C8000A' }} />}
+        <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3F3F3', alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="list-outline" size={17} color="#888" />
+        </View>
+        <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: activeFilter === 'all' ? '#C8000A' : '#1a1a1a' }}>All Leads</Text>
+        <Text style={{ fontSize: 12, fontWeight: '700', backgroundColor: activeFilter === 'all' ? '#FCEBEB' : '#F5F5F5', color: activeFilter === 'all' ? '#A32D2D' : '#666', paddingHorizontal: 9, paddingVertical: 3, borderRadius: 10, marginRight: 4 }}>{counts.all}</Text>
+        <Ionicons name={statusDropdownOpen ? 'chevron-up' : 'chevron-down'} size={16} color="#aaa" />
+      </TouchableOpacity>
+
+      {statusDropdownOpen && [
+  { key: 'completed', label: 'Completed', count: counts.completed, bg: '#EAF3DE', color: '#639922' },
+  { key: 'rejected', label: 'Rejected', count: counts.rejected, bg: '#FCEBEB', color: '#E24B4A' },
+  { key: 'inprogress', label: 'In Progress', count: counts.inprogress, bg: '#FEF3C7', color: '#F59E0B' },
+  { key: 'other', label: 'New / Unassigned', count: counts.other, bg: '#E6F1FB', color: '#378ADD' },
+].map(opt => (
+  <TouchableOpacity
+    key={opt.key}
+    onPress={() => {
+      setActiveFilter(opt.key);
+      setDrawerVisible(false);
+      if (opt.key === 'completed') fetchCompletedFull(1);   // 👈 idha add pannunga
+    }}
+    style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingLeft: 30, paddingRight: 14,
+      borderBottomWidth: 0.5, borderColor: '#F5F5F5',
+      backgroundColor: activeFilter === opt.key ? '#FEF3F3' : '#FAFAFA' }}>
+          {activeFilter === opt.key && <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, backgroundColor: '#C8000A' }} />}
+          <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: opt.bg, alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="list-outline" size={14} color={opt.color} />
+          </View>
+          <Text style={{ flex: 1, fontSize: 13, fontWeight: '600', color: activeFilter === opt.key ? '#C8000A' : '#333' }}>{opt.label}</Text>
+          <Text style={{ fontSize: 11, fontWeight: '700', backgroundColor: activeFilter === opt.key ? '#FCEBEB' : '#F0F0F0', color: activeFilter === opt.key ? '#A32D2D' : '#666', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 9 }}>{opt.count}</Text>
+        </TouchableOpacity>
+      ))}
+
+      {/* Employee — dropdown header */}
+      <TouchableOpacity
+        onPress={() => setEmployeeDropdownOpen(v => !v)}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14,
+          borderBottomWidth: 0.5, borderColor: '#F5F5F5',
+          backgroundColor: '#fff', marginTop: 6 }}>
+        <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3E8FF', alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="people-outline" size={17} color="#7C3AED" />
+        </View>
+        <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: '#1a1a1a' }}>Employee</Text>
+        <Ionicons name={employeeDropdownOpen ? 'chevron-up' : 'chevron-down'} size={16} color="#aaa" />
+      </TouchableOpacity>
+
+      {employeeDropdownOpen && (
+        <>
+          <TouchableOpacity
+            onPress={() => { setDrawerVisible(false); navigation.navigate('CreateEmployeeScreen'); }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingLeft: 30, paddingRight: 14,
+              borderBottomWidth: 0.5, borderColor: '#F5F5F5', backgroundColor: '#FAFAFA' }}>
+            <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#F3E8FF', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="person-add-outline" size={14} color="#7C3AED" />
+            </View>
+            <Text style={{ flex: 1, fontSize: 13, fontWeight: '600', color: '#333' }}>Create New Employee</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => { setDrawerVisible(false); navigation.navigate('EmployeeListScreen'); }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingLeft: 30, paddingRight: 14,
+              borderBottomWidth: 0.5, borderColor: '#F5F5F5', backgroundColor: '#FAFAFA' }}>
+            <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#F3E8FF', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="person-outline" size={14} color="#7C3AED" />
+            </View>
+            <Text style={{ flex: 1, fontSize: 13, fontWeight: '600', color: '#333' }}>Check Existing Employee Details</Text>
+          </TouchableOpacity>
+        </>
+      )}
+    </ScrollView>
+  </Animated.View>
+</Modal>
     </View>
   );
 };
