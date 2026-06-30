@@ -634,6 +634,47 @@ const OtherCard = ({ item, onEdit, onDelete, onAssign, onViewLocation }) => (
   </View>
 );
 
+// ─── FilterFieldRow — generic dropdown row for Surveyor / Assigned By ─────
+const FilterFieldRow = ({ id, label, icon, color, bgColor, fieldKey, completedLeads, rejectedLeads, activeFilter, openId, onToggle, onSelect }) => {
+  const isOpen = openId === id;
+  const completedCount = completedLeads.filter(i => i[fieldKey] && i[fieldKey] !== '—').length;
+  const rejectedCount  = rejectedLeads.filter(i => i[fieldKey] && i[fieldKey] !== '—').length;
+
+  return (
+    <>
+      <TouchableOpacity
+        onPress={() => onToggle(id)}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14,
+          borderBottomWidth: 0.5, borderColor: '#F5F5F5', backgroundColor: '#fff', marginTop: 6 }}>
+        <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: bgColor, alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name={icon} size={17} color={color} />
+        </View>
+        <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: '#1a1a1a' }}>{label}</Text>
+        <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={16} color="#aaa" />
+      </TouchableOpacity>
+
+      {isOpen && [
+        { key: `${id}__completed`, label: 'Completed', count: completedCount, bg: '#EAF3DE', clr: '#639922' },
+        { key: `${id}__rejected`,  label: 'Rejected',  count: rejectedCount,  bg: '#FCEBEB', clr: '#E24B4A' },
+      ].map(opt => (
+        <TouchableOpacity
+          key={opt.key}
+          onPress={() => onSelect(opt.key)}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingLeft: 30, paddingRight: 14,
+            borderBottomWidth: 0.5, borderColor: '#F5F5F5',
+            backgroundColor: activeFilter === opt.key ? '#FEF3F3' : '#FAFAFA' }}>
+          {activeFilter === opt.key && <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, backgroundColor: '#C8000A' }} />}
+          <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: opt.bg, alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name={icon} size={14} color={opt.clr} />
+          </View>
+          <Text style={{ flex: 1, fontSize: 13, fontWeight: '600', color: activeFilter === opt.key ? '#C8000A' : '#333' }}>{opt.label}</Text>
+          <Text style={{ fontSize: 11, fontWeight: '700', backgroundColor: activeFilter === opt.key ? '#FCEBEB' : '#F0F0F0', color: activeFilter === opt.key ? '#A32D2D' : '#666', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 9 }}>{opt.count}</Text>
+        </TouchableOpacity>
+      ))}
+    </>
+  );
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // AdminScreen
 // ─────────────────────────────────────────────────────────────────────────────
@@ -658,6 +699,7 @@ const AdminScreen = ({ navigation, route }) => {
   const [drawerVisible, setDrawerVisible]   = useState(false);
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [employeeDropdownOpen, setEmployeeDropdownOpen] = useState(false);
+  const [openFieldDropdown, setOpenFieldDropdown] = useState(null);
   const [completedFullData, setCompletedFullData]   = useState([]);
   const [completedFullLoading, setCompletedFullLoading] = useState(false);
   const [completedPage, setCompletedPage]           = useState(1);
@@ -718,7 +760,9 @@ const AdminScreen = ({ navigation, route }) => {
     if (isRefresh) setRefreshing(false); else setLoading(false);
   };
 
-  useEffect(() => { fetchLeads(); }, []);
+  useEffect(() => {
+  fetchLeads();
+}, []);
 
   // ── Completed (full data from /admin/products) ─────────────────────────────
   const normalizeFullForm = (raw, idx) => ({
@@ -741,18 +785,40 @@ const AdminScreen = ({ navigation, route }) => {
     raw, // keep the full untouched record for the full-details screen
   });
 
-  const fetchCompletedFull = async (pageNum = 1) => {
+const fetchCompletedFull = async (pageNum = 1) => {
   setCompletedFullLoading(true);
   try {
-    const res = await API.get('/admin/products', { params: { page: pageNum, limit: 100 } }); // limit increase pannunga
-    const list = Array.isArray(res.data?.data) ? res.data.data : [];
     const fullMap = {};
-    list.forEach(item => { fullMap[item.deal_id || item._id] = item; });
+    let currentPage = 1;
+    let totalPages = 1;
 
-    // existing completedLeads ah enrich pannunga, replace pannama
+    // எல்லா pages-ஐயும் loop பண்ணி fetch பண்றோம், lead எந்த page-ல இருந்தாலும் கிடைக்கும்
+    do {
+      const res = await API.get('/admin/products', { params: { page: currentPage, limit: 100 } });
+      const list = Array.isArray(res.data?.data) ? res.data.data : [];
+
+      list.forEach(item => {
+        const key1 = String(item.deal_id || '').trim();
+        const key2 = String(item._id || '').trim();
+        if (key1) fullMap[key1] = item;
+        if (key2) fullMap[key2] = item;
+      });
+
+      // backend response-ல totalPages / total field இருந்தா அதை use பண்ணுங்க
+      totalPages =
+        res.data?.totalPages ||
+        res.data?.pagination?.totalPages ||
+        (res.data?.total ? Math.ceil(res.data.total / 100) : 1);
+
+      currentPage += 1;
+    } while (currentPage <= totalPages && currentPage <= 50); // safety cap 50 pages
+
     setAllLeads(prev => prev.map(l => {
       if (l.status !== 'completed') return l;
-      const fullItem = fullMap[l.zohoId] || fullMap[l.mongoId];
+      const fullItem =
+        fullMap[String(l.zohoId || '').trim()] ||
+        fullMap[String(l.mongoId || '').trim()] ||
+        fullMap[String(l.deal_id || '').trim()];
       return fullItem ? { ...l, raw: fullItem } : l;
     }));
   } catch (e) {
@@ -786,37 +852,122 @@ const AdminScreen = ({ navigation, route }) => {
   };
 
   const handleAssign = item => { setAssignRole('surveyor'); setAssignTarget(item); setContactsVisible(true); };
+  const fetchFullFormForItem = async (item) => {
+    const dealId = String(item.zohoId || item.deal_id || item.mongoId || '').trim();
+    let found = null;
+    let currentPage = 1;
+    let totalPages = 1;
+    try {
+      do {
+        const res = await API.get('/admin/products', { params: { page: currentPage, limit: 100 } });
+        const list = Array.isArray(res.data?.data) ? res.data.data : [];
+        found = list.find(f => String(f.deal_id || '').trim() === dealId || String(f._id || '').trim() === dealId);
+        if (!found && item.phone && item.phone !== '—') {
+          const cleanPhone = String(item.phone).replace(/\D/g, '').slice(-10);
+          found = list.find(f => {
+            const fPhone = String(f.Mobile || f.mobileNumber || '').replace(/\D/g, '').slice(-10);
+            return fPhone && fPhone === cleanPhone;
+          });
+        }
+        totalPages = res.data?.pagination?.totalPages || 1;
+        currentPage += 1;
+      } while (!found && currentPage <= totalPages);
+    } catch (e) {
+      console.log('[fetchFullFormForItem] error:', e?.message);
+    }
+    return found;
+  };
+
   const handleAssignCompleted = item => {
     Alert.alert('Assign', 'Who do you want to assign this lead to?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Logistic',  onPress: () => { setAssignRole('logistic');  setAssignTarget(item); setContactsVisible(true); } },
+      { text: 'Logistic', onPress: async () => {
+          const fullForm = await fetchFullFormForItem(item);
+          const target = fullForm ? { ...item, raw: fullForm } : item;
+          if (!fullForm) {
+            console.log('[handleAssignCompleted] full form not found for', item.zohoId || item.mongoId);
+          }
+          setAssignRole('logistic'); setAssignTarget(target); setContactsVisible(true);
+        }
+      },
       { text: 'Installer', onPress: () => { setAssignRole('installer'); setAssignTarget(item); setContactsVisible(true); } },
     ]);
   };
 
-  const handleContactSelected = async ({ name, phone }) => {
+const handleContactSelected = async ({ name, phone }) => {
     if (!assignTarget) return;
     const role = assignRole;
     if (role === 'logistic')       setAllLeads(prev => prev.map(l => l.id === assignTarget.id ? { ...l, logisticAssignee: phone } : l));
     else if (role === 'installer') setAllLeads(prev => prev.map(l => l.id === assignTarget.id ? { ...l, installerAssignee: phone } : l));
     else                           setAllLeads(prev => prev.map(l => l.id === assignTarget.id ? { ...l, assignedBy: phone } : l));
+
     try {
-      await API.post('/order/assign', {
-        id: assignTarget.zohoId, name: assignTarget.name, mobile: assignTarget.phone,
-        whatsappNo: assignTarget.whatsappNo || null, email: assignTarget.email || null,
-        city: assignTarget.city, address: assignTarget.address || null,
-        latitude: assignTarget.latitude || null, longitude: assignTarget.longitude || null,
-        comment: assignTarget.comment, role, surveyorNumber: phone,
-      });
+      if (role === 'logistic') {
+        const raw = assignTarget.raw || {};
+
+        const productsInfo = [];
+        if (raw.Product_Name) productsInfo.push(raw.Product_Name);
+        if (raw.No_of_Panels) productsInfo.push(`${raw.No_of_Panels} X Solar Panel(s)`);
+        if (raw.Solar_Panel_Model) productsInfo.push(raw.Solar_Panel_Model);
+        if (raw.Inverter_Type) productsInfo.push(`1 X ${raw.Inverter_Type}`);
+        if (raw.Inverter_Capacity) productsInfo.push(`Inverter Capacity: ${raw.Inverter_Capacity}KW`);
+        if (raw.Solar_Panel_Mounting_Structure_Type) productsInfo.push(raw.Solar_Panel_Mounting_Structure_Type);
+
+        const address =
+          raw.Street_Address ||
+          raw.address ||
+          raw.Address ||
+          assignTarget.address ||
+          null;
+
+        const dealId = raw.deal_id || assignTarget.zohoId || assignTarget.deal_id;
+
+        if (!dealId) {
+          Alert.alert('Error', 'Deal ID kidaikala, assign panna mudiyala.');
+          throw new Error('missing deal_id');
+        }
+
+        if (!address) {
+          console.log('[assign-logistic] WARNING: address not found in form data for dealId:', dealId);
+        }
+        if (productsInfo.length === 0) {
+          console.log('[assign-logistic] WARNING: no product fields found for dealId:', dealId);
+        }
+
+        await API.post('/admin/assign-logistic', {
+          deal_id: dealId,
+          products_info: productsInfo,
+          mobile: phone,
+          address,
+        });
+      } else {
+        await API.post('/order/assign', {
+          id: assignTarget.zohoId,
+          name: assignTarget.name,
+          mobile: assignTarget.phone,
+          whatsappNo: assignTarget.whatsappNo || null,
+          email: assignTarget.email || null,
+          city: assignTarget.city,
+          address: assignTarget.address || assignTarget.raw?.address || null,
+          latitude: assignTarget.latitude || null,
+          longitude: assignTarget.longitude || null,
+          comment: assignTarget.comment,
+          role,
+          surveyorNumber: phone,
+        });
+      }
       Alert.alert('Success', `Lead assigned to ${phone}${role !== 'surveyor' ? ` (${role})` : ''}`);
     } catch (e) {
-      Alert.alert('Error', 'Could not assign: ' + (e?.message || 'Unknown error'));
+      const backendMsg = e?.response?.data?.error || e?.response?.data?.message || e?.message || 'Unknown error';
+      Alert.alert('Error', 'Could not assign: ' + backendMsg);
+      console.log('[assign-logistics] error:', e?.response?.data || e?.message);
+
       if (role === 'logistic')       setAllLeads(prev => prev.map(l => l.id === assignTarget.id ? { ...l, logisticAssignee: assignTarget.logisticAssignee } : l));
       else if (role === 'installer') setAllLeads(prev => prev.map(l => l.id === assignTarget.id ? { ...l, installerAssignee: assignTarget.installerAssignee } : l));
       else                           setAllLeads(prev => prev.map(l => l.id === assignTarget.id ? { ...l, assignedBy: assignTarget.assignedBy } : l));
     }
     setAssignTarget(null); setAssignRole('surveyor');
-  };
+};
 
   const handleViewLocation = async (item) => {
     const phone = item.assignedBy || item.surveyorNumber;
@@ -905,11 +1056,24 @@ const AdminScreen = ({ navigation, route }) => {
     other: otherLeads.length,
   };
 
-  const statusFiltered =
-    activeFilter === 'completed'  ? (completedFullData.length ? completedFullData : completedLeads) :
-    activeFilter === 'rejected'   ? rejectedLeads   :
-    activeFilter === 'inprogress' ? inprogressLeads :
-    activeFilter === 'other'      ? otherLeads      : allLeads;
+  const statusFiltered = (() => {
+    if (activeFilter === 'completed')  return completedFullData.length ? completedFullData : completedLeads;
+    if (activeFilter === 'rejected')   return rejectedLeads;
+    if (activeFilter === 'inprogress') return inprogressLeads;
+    if (activeFilter === 'other')      return otherLeads;
+
+    const fieldMap = {
+      logistic:  'logisticAssignee',
+      installer: 'installerAssignee',
+    };
+    const [field, sub] = activeFilter.split('__');
+    if (field && fieldMap[field]) {
+      const key = fieldMap[field];
+      const base = sub === 'completed' ? completedLeads : sub === 'rejected' ? rejectedLeads : allLeads;
+      return base.filter(i => i[key] && i[key] !== '—');
+    }
+    return allLeads;
+  })();
 
   const modeFiltered = (filterMode === 'employee' && employeeFilter)
     ? allLeads.filter(i => [i.surveyorNumber, i.assignedBy, i.logisticAssignee, i.installerAssignee].includes(employeeFilter))
@@ -930,9 +1094,46 @@ const AdminScreen = ({ navigation, route }) => {
   const todayLabel  = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   const presetLabel = { today: 'Today', yesterday: 'Yesterday', last7: 'Last 7 days', last30: 'Last 30 days', thisMonth: 'This month' }[datePreset] || '';
 
-  const handleViewFull = item => {
+const handleViewFull = async (item) => {
+  navigation.navigate('LeadFullDetailsScreen', { lead: item.raw || item, loading: true });
+  try {
+    const dealId = String(item.zohoId || item.deal_id || item.mongoId || '').trim();
+    let found = null;
+    let currentPage = 1;
+    let totalPages = 1;
+
+ do {
+  const res = await API.get('/admin/products', { params: { page: currentPage, limit: 100 } });
+  const list = Array.isArray(res.data?.data) ? res.data.data : [];
+
+  found = list.find(
+    f => String(f.deal_id || '').trim() === dealId ||
+         String(f._id || '').trim() === dealId
+  );
+
+  // 👇 phone number fallback - deal_id/mongoId match fail aana idhu work pannum
+  if (!found && item.phone && item.phone !== '—') {
+    const cleanPhone = String(item.phone).replace(/\D/g, '').slice(-10);
+    found = list.find(f => {
+      const fPhone = String(f.Mobile || f.mobileNumber || '').replace(/\D/g, '').slice(-10);
+      return fPhone && fPhone === cleanPhone;
+    });
+  }
+
+  totalPages = res.data?.pagination?.totalPages || 1;
+  currentPage += 1;
+} while (!found && currentPage <= totalPages);
+
+    if (!found) {
+      console.log('[handleViewFull] NO MATCH FOUND for dealId:', dealId);
+    }
+
+    navigation.navigate('LeadFullDetailsScreen', { lead: found || item.raw || item });
+  } catch (e) {
+    console.log('[handleViewFull] error:', e?.message);
     navigation.navigate('LeadFullDetailsScreen', { lead: item.raw || item });
-  };
+  }
+};
 
   const renderCard = item => {
     if (item.status === 'completed')
@@ -979,8 +1180,6 @@ const AdminScreen = ({ navigation, route }) => {
         </View>
 
         {/* Stats */}
-        {/* Stats */}
-{/* Stats */}
 <View style={styles.statsRow}>
   {[
     { num: allLeads.length,        label: 'Total',    bg: '#ffffff',  text: '#C8000A' },
@@ -1096,7 +1295,7 @@ const AdminScreen = ({ navigation, route }) => {
         <View style={styles.resultBar}>
           <Text style={styles.resultTxt}>
             {filteredLeads.length} lead{filteredLeads.length !== 1 ? 's' : ''}
-            {activeFilter !== 'all' ? `  ·  ${activeFilter}` : ''}
+            {activeFilter !== 'all' ? `  ·  ${activeFilter.replace('__', ' ')}` : ''}
             {employeeFilter ? `  ·  ${employeeFilter}` : ''}
             {customApplied ? `  ·  ${fromDate} – ${toDate}` : presetLabel ? `  ·  ${presetLabel}` : ''}
             {searchQuery.trim() ? `  ·  "${searchQuery}"` : ''}
@@ -1222,6 +1421,38 @@ const AdminScreen = ({ navigation, route }) => {
           </TouchableOpacity>
         </>
       )}
+
+      {/* Logistic — dropdown header */}
+      <FilterFieldRow
+        id="logistic"
+        label="Logistic"
+        icon="cube-outline"
+        color="#7C3AED"
+        bgColor="#F3E8FF"
+        fieldKey="logisticAssignee"
+        completedLeads={completedLeads}
+        rejectedLeads={rejectedLeads}
+        activeFilter={activeFilter}
+        openId={openFieldDropdown}
+        onToggle={id => setOpenFieldDropdown(openFieldDropdown === id ? null : id)}
+        onSelect={key => { setActiveFilter(key); setDrawerVisible(false); }}
+      />
+
+      {/* Installer — dropdown header */}
+      <FilterFieldRow
+        id="installer"
+        label="Installer"
+        icon="construct-outline"
+        color="#D97706"
+        bgColor="#FEF3C7"
+        fieldKey="installerAssignee"
+        completedLeads={completedLeads}
+        rejectedLeads={rejectedLeads}
+        activeFilter={activeFilter}
+        openId={openFieldDropdown}
+        onToggle={id => setOpenFieldDropdown(openFieldDropdown === id ? null : id)}
+        onSelect={key => { setActiveFilter(key); setDrawerVisible(false); }}
+      />
     </ScrollView>
   </Animated.View>
 </Modal>
