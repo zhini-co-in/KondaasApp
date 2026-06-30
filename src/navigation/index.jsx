@@ -33,6 +33,9 @@ import InstallerScreen from '../screens/InstallerScreen';
 import FilterScreen from '../screens/FilterScreen';
 import EmployeeFilterScreen from '../screens/EmployeeFilterScreen';
 import Leadfulldetailsscreen from '../screens/Leadfulldetailsscreen';
+import LogisticStatusScreen from '../screens/LogisticStatusScreen';
+import InstallerStatusScreen from '../screens/InstallerStatusScreen';
+
 const Stack = createNativeStackNavigator();
 
 export default function RootStack() {
@@ -74,6 +77,8 @@ export default function RootStack() {
 <Stack.Screen name="FilterScreen"    component={FilterScreen} options={{ headerShown: false }} />
 <Stack.Screen name="EmployeeFilter"  component={EmployeeFilterScreen} options={{ headerShown: false }} />
 <Stack.Screen name="LeadFullDetailsScreen" component={Leadfulldetailsscreen} options={{ headerShown: false }} />
+<Stack.Screen name="LogisticStatusScreen" component={LogisticStatusScreen} />
+<Stack.Screen name="InstallerStatusScreen" component={InstallerStatusScreen} />
     </Stack.Navigator>
   );
 }

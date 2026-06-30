@@ -890,7 +890,15 @@ const fetchCompletedFull = async (pageNum = 1) => {
           setAssignRole('logistic'); setAssignTarget(target); setContactsVisible(true);
         }
       },
-      { text: 'Installer', onPress: () => { setAssignRole('installer'); setAssignTarget(item); setContactsVisible(true); } },
+      { text: 'Installer', onPress: async () => {
+    const fullForm = await fetchFullFormForItem(item);
+    const target = fullForm ? { ...item, raw: fullForm } : item;
+    if (!fullForm) {
+      console.log('[handleAssignCompleted] full form not found for', item.zohoId || item.mongoId);
+    }
+    setAssignRole('installer'); setAssignTarget(target); setContactsVisible(true);
+  }
+},
     ]);
   };
 
@@ -902,61 +910,73 @@ const handleContactSelected = async ({ name, phone }) => {
     else                           setAllLeads(prev => prev.map(l => l.id === assignTarget.id ? { ...l, assignedBy: phone } : l));
 
     try {
-      if (role === 'logistic') {
-        const raw = assignTarget.raw || {};
+  if (role === 'logistic') {
+    const raw = assignTarget.raw || {};
 
-        const productsInfo = [];
-        if (raw.Product_Name) productsInfo.push(raw.Product_Name);
-        if (raw.No_of_Panels) productsInfo.push(`${raw.No_of_Panels} X Solar Panel(s)`);
-        if (raw.Solar_Panel_Model) productsInfo.push(raw.Solar_Panel_Model);
-        if (raw.Inverter_Type) productsInfo.push(`1 X ${raw.Inverter_Type}`);
-        if (raw.Inverter_Capacity) productsInfo.push(`Inverter Capacity: ${raw.Inverter_Capacity}KW`);
-        if (raw.Solar_Panel_Mounting_Structure_Type) productsInfo.push(raw.Solar_Panel_Mounting_Structure_Type);
+    const productsInfo = [];
+    if (raw.Product_Name) productsInfo.push(raw.Product_Name);
+    if (raw.No_of_Panels) productsInfo.push(`${raw.No_of_Panels} X Solar Panel(s)`);
+    if (raw.Solar_Panel_Model) productsInfo.push(raw.Solar_Panel_Model);
+    if (raw.Inverter_Type) productsInfo.push(`1 X ${raw.Inverter_Type}`);
+    if (raw.Inverter_Capacity) productsInfo.push(`Inverter Capacity: ${raw.Inverter_Capacity}KW`);
+    if (raw.Solar_Panel_Mounting_Structure_Type) productsInfo.push(raw.Solar_Panel_Mounting_Structure_Type);
 
-        const address =
-          raw.Street_Address ||
-          raw.address ||
-          raw.Address ||
-          assignTarget.address ||
-          null;
+    const address = raw.Street_Address || raw.address || raw.Address || assignTarget.address || null;
+    const dealId = raw.deal_id || assignTarget.zohoId || assignTarget.deal_id;
 
-        const dealId = raw.deal_id || assignTarget.zohoId || assignTarget.deal_id;
+    if (!dealId) {
+      Alert.alert('Error', 'Deal ID kidaikala, assign panna mudiyala.');
+      throw new Error('missing deal_id');
+    }
 
-        if (!dealId) {
-          Alert.alert('Error', 'Deal ID kidaikala, assign panna mudiyala.');
-          throw new Error('missing deal_id');
-        }
+    await API.post('/admin/assign-logistic', {
+      deal_id: dealId,
+      products_info: productsInfo,
+      mobile: phone,
+      address,
+    });
+  } else if (role === 'installer') {
+    const raw = assignTarget.raw || {};
 
-        if (!address) {
-          console.log('[assign-logistic] WARNING: address not found in form data for dealId:', dealId);
-        }
-        if (productsInfo.length === 0) {
-          console.log('[assign-logistic] WARNING: no product fields found for dealId:', dealId);
-        }
+    const productsInfo = [];
+    if (raw.Product_Name) productsInfo.push(raw.Product_Name);
+    if (raw.No_of_Panels) productsInfo.push(`${raw.No_of_Panels} X Solar Panel(s)`);
+    if (raw.Solar_Panel_Model) productsInfo.push(raw.Solar_Panel_Model);
+    if (raw.Inverter_Type) productsInfo.push(`1 X ${raw.Inverter_Type}`);
+    if (raw.Inverter_Capacity) productsInfo.push(`Inverter Capacity: ${raw.Inverter_Capacity}KW`);
+    if (raw.Solar_Panel_Mounting_Structure_Type) productsInfo.push(raw.Solar_Panel_Mounting_Structure_Type);
 
-        await API.post('/admin/assign-logistic', {
-          deal_id: dealId,
-          products_info: productsInfo,
-          mobile: phone,
-          address,
-        });
-      } else {
-        await API.post('/order/assign', {
-          id: assignTarget.zohoId,
-          name: assignTarget.name,
-          mobile: assignTarget.phone,
-          whatsappNo: assignTarget.whatsappNo || null,
-          email: assignTarget.email || null,
-          city: assignTarget.city,
-          address: assignTarget.address || assignTarget.raw?.address || null,
-          latitude: assignTarget.latitude || null,
-          longitude: assignTarget.longitude || null,
-          comment: assignTarget.comment,
-          role,
-          surveyorNumber: phone,
-        });
-      }
-      Alert.alert('Success', `Lead assigned to ${phone}${role !== 'surveyor' ? ` (${role})` : ''}`);
+    const address = raw.Street_Address || raw.address || raw.Address || assignTarget.address || null;
+    const dealId = raw.deal_id || assignTarget.zohoId || assignTarget.deal_id;
+
+    if (!dealId) {
+      Alert.alert('Error', 'Deal ID kidaikala, assign panna mudiyala.');
+      throw new Error('missing deal_id');
+    }
+
+    await API.post('/admin/assign-installer', {
+      deal_id: dealId,
+      products_info: productsInfo,
+      mobile: phone,
+      address,
+    });
+  } else {
+    await API.post('/order/assign', {
+      id: assignTarget.zohoId,
+      name: assignTarget.name,
+      mobile: assignTarget.phone,
+      whatsappNo: assignTarget.whatsappNo || null,
+      email: assignTarget.email || null,
+      city: assignTarget.city,
+      address: assignTarget.address || assignTarget.raw?.address || null,
+      latitude: assignTarget.latitude || null,
+      longitude: assignTarget.longitude || null,
+      comment: assignTarget.comment,
+      role,
+      surveyorNumber: phone,
+     });
+  }
+  Alert.alert('Success', `Lead assigned to ${phone}${role !== 'surveyor' ? ` (${role})` : ''}`);
     } catch (e) {
       const backendMsg = e?.response?.data?.error || e?.response?.data?.message || e?.message || 'Unknown error';
       Alert.alert('Error', 'Could not assign: ' + backendMsg);
@@ -1424,35 +1444,50 @@ const handleViewFull = async (item) => {
 
       {/* Logistic — dropdown header */}
       <FilterFieldRow
-        id="logistic"
-        label="Logistic"
-        icon="cube-outline"
-        color="#7C3AED"
-        bgColor="#F3E8FF"
-        fieldKey="logisticAssignee"
-        completedLeads={completedLeads}
-        rejectedLeads={rejectedLeads}
-        activeFilter={activeFilter}
-        openId={openFieldDropdown}
-        onToggle={id => setOpenFieldDropdown(openFieldDropdown === id ? null : id)}
-        onSelect={key => { setActiveFilter(key); setDrawerVisible(false); }}
-      />
+  id="logistic"
+  label="Logistic"
+  icon="cube-outline"
+  color="#7C3AED"
+  bgColor="#F3E8FF"
+  fieldKey="logisticAssignee"
+  completedLeads={completedLeads}
+  rejectedLeads={rejectedLeads}
+  activeFilter={activeFilter}
+  openId={openFieldDropdown}
+  onToggle={id => setOpenFieldDropdown(openFieldDropdown === id ? null : id)}
+  onSelect={key => {
+    setDrawerVisible(false);
+    const status = key.endsWith('__completed') ? 'completed' : 'rejected';
+    navigation.navigate('LogisticStatusScreen', { status });
+  }
+  }
+  onSelect={key => {
+  setDrawerVisible(false);
+  const status = key.endsWith('__completed') ? 'completed' : 'rejected';
+  navigation.navigate('InstallerStatusScreen', { status });
+}}
+/>
 
       {/* Installer — dropdown header */}
-      <FilterFieldRow
-        id="installer"
-        label="Installer"
-        icon="construct-outline"
-        color="#D97706"
-        bgColor="#FEF3C7"
-        fieldKey="installerAssignee"
-        completedLeads={completedLeads}
-        rejectedLeads={rejectedLeads}
-        activeFilter={activeFilter}
-        openId={openFieldDropdown}
-        onToggle={id => setOpenFieldDropdown(openFieldDropdown === id ? null : id)}
-        onSelect={key => { setActiveFilter(key); setDrawerVisible(false); }}
-      />
+      {/* Installer — dropdown header */}
+<FilterFieldRow
+  id="installer"
+  label="Installer"
+  icon="construct-outline"
+  color="#D97706"
+  bgColor="#FEF3C7"
+  fieldKey="installerAssignee"
+  completedLeads={completedLeads}
+  rejectedLeads={rejectedLeads}
+  activeFilter={activeFilter}
+  openId={openFieldDropdown}
+  onToggle={id => setOpenFieldDropdown(openFieldDropdown === id ? null : id)}
+  onSelect={key => {
+    setDrawerVisible(false);
+    const status = key.endsWith('__completed') ? 'completed' : 'rejected';
+    navigation.navigate('InstallerStatusScreen', { status });
+  }}
+/>
     </ScrollView>
   </Animated.View>
 </Modal>
