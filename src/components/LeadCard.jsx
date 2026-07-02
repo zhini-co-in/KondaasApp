@@ -1,7 +1,7 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, Linking, Alert } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { getDistance } from '../service/locationService';
+import { getDistance, getRoadDistanceKm } from '../service/locationService';
 import API from '../api/api1';
 import { StyleSheet } from 'react-native'; // or inline styles
 
@@ -42,6 +42,9 @@ const LeadCard = ({
   const hasLatLong = item.latitude && item.longitude &&
     item.latitude !== '' && item.longitude !== '';
 
+  // Straight-line (Haversine) distance in METERS — proximity check (300m
+  // "Reached" auto-trigger) க்கு இதே use ஆகும். இது fast + offline-safe,
+  // அதனால தொடாம வெச்சிருக்கோம்.
   const distToLead = currentLocation && hasLatLong
     ? Math.round(getDistance(
         currentLocation.latitude, currentLocation.longitude,
@@ -51,6 +54,42 @@ const LeadCard = ({
 
   const withinRange = distToLead !== null && distToLead <= 300;
   const notifiedRef = useRef(false);
+
+  // 👇 புதுசா சேர்த்தது: Road distance (OSRM) — "Distance" box la DISPLAY
+  // பண்ண மட்டும் use ஆகும். withinRange logic இதை touch பண்ணல.
+  const [roadDistanceKm, setRoadDistanceKm] = useState(null);
+  const [distanceLoading, setDistanceLoading] = useState(false);
+  const lastFetchRef = useRef({ time: 0, straightKm: null });
+
+  useEffect(() => {
+    if (cardType !== 'inprogress') return;
+    if (!currentLocation || !hasLatLong || item.status === 'completed') return;
+    if (distToLead === null) return;
+
+    const straightKm = distToLead / 1000;
+    const now = Date.now();
+    const movedEnough =
+      lastFetchRef.current.straightKm === null ||
+      Math.abs(straightKm - lastFetchRef.current.straightKm) > 0.5; // 500m change
+    const timeGapOk = now - lastFetchRef.current.time > 30000; // 30s throttle
+
+    // முதல் தடவை (straightKm null) கண்டிப்பா fetch ஆகணும்.
+    if (lastFetchRef.current.straightKm !== null && !movedEnough) return;
+
+    lastFetchRef.current = { time: now, straightKm };
+    setDistanceLoading(true);
+
+    getRoadDistanceKm(
+      currentLocation.latitude, currentLocation.longitude,
+      parseFloat(item.latitude), parseFloat(item.longitude)
+    ).then((km) => {
+      setDistanceLoading(false);
+      if (km !== null) setRoadDistanceKm(km);
+      // km null ஆனா (network fail) — roadDistanceKm பழைய value/null ஆவே இருக்கும்,
+      // display JSX தானா Haversine (distToLead) ku fallback ஆகும்.
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [distToLead, cardType, item.status]);
 
   // 300m auto-notify — only for inprogress
   useEffect(() => {
@@ -159,12 +198,16 @@ const LeadCard = ({
             </TouchableOpacity>
             {hasLatLong && distToLead !== null && (
               <View style={styles.distanceBox}>
-                <Text style={styles.distanceLabel}>Distance</Text>
-                <Text style={styles.reachDistance}>
-                  {distToLead >= 1000
-                    ? (distToLead / 1000).toFixed(1) + ' km'
-                    : distToLead + ' m'}
+                <Text style={styles.distanceLabel}>
+                  Distance {distanceLoading ? '⏳' : ''}
                 </Text>
+                <Text style={styles.reachDistance}>
+  {roadDistanceKm !== null
+    ? roadDistanceKm.toFixed(1) + ' km'
+    : (distToLead >= 1000
+        ? '~' + (distToLead / 1000).toFixed(1) + ' km'
+        : '~' + distToLead + ' m')}
+</Text>
               </View>
             )}
           </View>
@@ -191,7 +234,10 @@ const LeadCard = ({
             Referred by — <Text style={{ fontWeight: 'bold' }}>{item.referredBy || 'N/A'}</Text>
           </Text>
         </View>
-        <Text style={styles.date}>{item.date} • {item.time}</Text>
+        {/* 👇 FIX: formatDate() helper-ஐ use பண்ணி readable-ஆ காட்டு.
+            முன்பு "{item.date} • {item.time}" raw ISO string-ஐயும், backend-ல
+            இல்லாத "time" field-ஐயும் (எப்போதும் undefined) நேரடியா காட்டியது. */}
+        <Text style={styles.date}>{formatDate(item.date)}</Text>
       </View>
 
       {/* User row */}

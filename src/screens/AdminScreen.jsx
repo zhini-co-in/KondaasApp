@@ -1431,7 +1431,7 @@ const handleViewFull = async (item) => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => { setDrawerVisible(false); navigation.navigate('EmployeeListScreen'); }}
+            onPress={() => { setDrawerVisible(false); navigation.navigate('EmployeeListScreen', { employeeList }); }}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingLeft: 30, paddingRight: 14,
               borderBottomWidth: 0.5, borderColor: '#F5F5F5', backgroundColor: '#FAFAFA' }}>
             <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#F3E8FF', alignItems: 'center', justifyContent: 'center' }}>

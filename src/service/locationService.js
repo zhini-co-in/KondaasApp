@@ -17,6 +17,27 @@ export const getDistance = (lat1, lon1, lat2, lon2) => {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 1000;
 };
 
+// 👇 புதுசா சேர்த்தது: Road distance (OSRM) — DISPLAY purpose மட்டும் இதை use பண்ணணும்.
+// Proximity check (300m auto "Reached" trigger) க்கு இதை use பண்ணக்கூடாது —
+// அதுக்கு மேலே இருக்குற getDistance (Haversine) தான் fast + offline-safe + accurate போதும்.
+// Return: km (number) success ஆனா, network/route fail ஆனா null.
+export const getRoadDistanceKm = async (originLat, originLon, destLat, destLon) => {
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${originLon},${originLat};${destLon},${destLat}?overview=false`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.code === 'Ok' && data.routes?.length > 0) {
+      return data.routes[0].distance / 1000; // meters -> km
+    }
+    console.log('⚠️ OSRM no route found');
+    return null;
+  } catch (e) {
+    console.log('❌ OSRM error:', e.message);
+    return null;
+  }
+};
+
 export const getUserPhone = async () => {
   try {
     const data = await AsyncStorage.getItem(USER_DATA);
@@ -129,72 +150,51 @@ export const useLocationTracking = (isMounted) => {
     isTrackingRef.current = true;
     console.log('🟢 Starting location tracking');
 
-    if (Platform.OS === 'android') {
-      if (listenerRef.current) {
-        listenerRef.current.remove();
-        listenerRef.current = null;
-      }
+    // ── Common: get the right native module for the platform ──
+    const { LocationService } = NativeModules;
 
-      listenerRef.current = DeviceEventEmitter.addListener(
-        'nativeLocationUpdate',
-        async (data) => {
-          console.log('🔔 Native service triggered:', data);
-          if (data?.latitude && data?.longitude) {
-            if (isMounted.current) {
-              setCurrentLocation({
-                latitude: data.latitude,
-                longitude: data.longitude,
-              });
-            }
-            await sendLocation(data.latitude, data.longitude, data.timestamp);
-          }
-        }
-      );
+    console.log(`📱 [${Platform.OS}] LocationService exists?`, !!LocationService);
 
-} else if (Platform.OS === 'ios') {
-  if (watchIdRef.current !== null) return;
-
-  const { LocationService } = NativeModules;
-
-  // ✅ Debug
-  console.log('📱 LocationService exists?', !!LocationService);
-  console.log('📱 LocationService value:', LocationService);
-
-  if (!LocationService) {
-    console.log('❌ LocationService not found!');
-    return;
-  }
-
-  const emitter = new NativeEventEmitter(LocationService);
-
-  if (listenerRef.current) {
-    listenerRef.current.remove();
-    listenerRef.current = null;
-  }
-
-  listenerRef.current = emitter.addListener(
-    'nativeLocationUpdate',
-    async (data) => {
-      console.log('🔔 iOS Native location received:', data);
-      if (data?.latitude && data?.longitude) {
-        if (isMounted.current) {
-          setCurrentLocation({
-            latitude: data.latitude,
-            longitude: data.longitude,
-          });
-        }
-        await sendLocation(data.latitude, data.longitude, data.timestamp);
-      }
+    if (!LocationService) {
+      console.log(`❌ [${Platform.OS}] LocationService native module not found!`);
+      isTrackingRef.current = false;
+      return;
     }
-  );
-  console.log('✅ Listener added successfully');
 
- setTimeout(() => {
-    LocationService.startTracking();
-    console.log('✅ iOS startTracking called');
-    watchIdRef.current = 1;
-  }, 500);
-}
+    // ── Common: set up the event emitter for the platform ──
+    const emitter =
+      Platform.OS === 'android'
+        ? DeviceEventEmitter
+        : new NativeEventEmitter(LocationService);
+
+    if (listenerRef.current) {
+      listenerRef.current.remove();
+      listenerRef.current = null;
+    }
+
+    listenerRef.current = emitter.addListener(
+      'nativeLocationUpdate',
+      async (data) => {
+        console.log(`🔔 [${Platform.OS}] Native location received:`, data);
+        if (data?.latitude && data?.longitude) {
+          if (isMounted.current) {
+            setCurrentLocation({
+              latitude: data.latitude,
+              longitude: data.longitude,
+            });
+          }
+          await sendLocation(data.latitude, data.longitude, data.timestamp);
+        }
+      }
+    );
+    console.log(`✅ [${Platform.OS}] Listener added successfully`);
+
+    // ── Common: explicitly start native tracking on BOTH platforms ──
+    setTimeout(() => {
+      LocationService.startTracking();
+      console.log(`✅ [${Platform.OS}] startTracking called`);
+      watchIdRef.current = 1;
+    }, 500);
   };
 
   const stopTracking = () => {
@@ -206,16 +206,9 @@ export const useLocationTracking = (isMounted) => {
       listenerRef.current = null;
     }
 
-  if (Platform.OS === 'ios' && watchIdRef.current !== null) {
-  const { LocationService } = NativeModules;
-  if (LocationService) {
-    LocationService.stopTracking(); // ✅ stopService இல்ல!
-  }
-  watchIdRef.current = null;
-}
-
-    if (Platform.OS === 'android' && watchIdRef.current !== null) {
-      global.navigator?.geolocation?.clearWatch(watchIdRef.current);
+    const { LocationService } = NativeModules;
+    if (watchIdRef.current !== null && LocationService) {
+      LocationService.stopTracking();
       watchIdRef.current = null;
     }
   };

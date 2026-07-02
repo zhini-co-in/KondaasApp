@@ -30,6 +30,19 @@ import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { PermissionsAndroid } from 'react-native';
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Scheduled Site-Survey due-check helper
+// ─────────────────────────────────────────────────────────────────────────────
+// Backend "siteSurveyDateTime" field (Zoho -> Site_Survey_Req_Date_Time) வந்தா
+// அந்த date/time-ஐ இப்போதைய நேரத்தோட ஒப்பிட்டு "due" ஆனா true return பண்றது.
+// LeadCard-ல இதை prop-ஆ பாஸ் பண்ணி, true-னா border color red பண்ணலாம்.
+const isSurveyDue = (scheduledAt) => {
+  if (!scheduledAt) return false;
+  const scheduledTime = new Date(scheduledAt).getTime();
+  if (Number.isNaN(scheduledTime)) return false;
+  return Date.now() >= scheduledTime;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SurveyerScreen
 // ─────────────────────────────────────────────────────────────────────────────
 const SurveyerScreen = () => {
@@ -195,7 +208,9 @@ useFocusEffect(
         phone:      item.mobile,
         city:       item.city,
         comment:    item.comment,
-        referredBy: item.referredBy,
+        // 👇 FIX: backend field name எதுவா இருந்தாலும் (referredBy /
+        // referred_by / Referred_By) catch பண்ணும் மாதிரி fallback
+        referredBy: item.referredBy || item.referred_by || item.Referred_By || null,
         date:       item.assignedAt,
         time:       item.time,
         latitude:   item.latitude,
@@ -204,6 +219,12 @@ useFocusEffect(
         email:      item.email,
         address:    item.address,
         status:     item.siteSurveyStatus ?? 'notassigned',
+        // 👇 புதுசா சேர்த்தது: backend-ல siteSurveyDateTime field save ஆனா
+        // (Zoho payload-ல Site_Survey_Req_Date_Time) இங்க கிடைக்கும்.
+        // NOTE: backend zohoWorkflowAssignment-ல fullDealPayload object-ல
+        // "siteSurveyDateTime: Site_Survey_Req_Date_Time" சேர்க்கணும்,
+        // இல்லனா இந்த field எப்பவும் null-ஆ தான் வரும்.
+        scheduledAt: item.siteSurveyDateTime || null,
       }));
 
       if (!isMounted.current) return;
@@ -474,9 +495,9 @@ const takeAndUploadPhoto = async () => {
     const response = await launchCamera({
       mediaType: 'photo',
   cameraType: 'back',
-  quality: 0.3,        // ← 0.8 → 0.3 குறைக்கணும்
+  quality: 0.3,        
   saveToPhotos: true,
-  maxWidth: 800,       // ← இதை add பண்ணுங்க
+  maxWidth: 800,       
   maxHeight: 800, 
     });
 
@@ -522,7 +543,7 @@ const takeAndUploadPhoto = async () => {
     });
 
     if (res.data?.success) {
-      Alert.alert('Success ✅', 'Photo uploaded successfully!');
+      Alert.alert;
       return true;
     } else {
       throw new Error(res.data?.message || 'Upload failed');
@@ -764,6 +785,8 @@ const takeAndUploadPhoto = async () => {
                         currentLocation={locationRef.current}
                         onAccept={handleAccept}
                         onReject={handleReject}
+                        // 👇 புதுசா சேர்த்தது: scheduled நேரம் வந்திருந்தா/கடந்திருந்தா true
+                        isDue={isSurveyDue(item.scheduledAt)}
                       />
                     ))
                 }
@@ -816,6 +839,8 @@ const takeAndUploadPhoto = async () => {
               <LeadCard
                 key={item.id} item={item} currentLocation={locationRef.current}
                 cardType="unaccepted" onAccept={handleAccept} onReject={handleReject}
+                // 👇 புதுசா சேர்த்தது
+                isDue={isSurveyDue(item.scheduledAt)}
               />
             ))}
 
@@ -868,6 +893,8 @@ const takeAndUploadPhoto = async () => {
                         cardType="accepted"
                         currentLocation={locationRef.current}
                         onStart={handleStart}
+                        // 👇 புதுசா சேர்த்தது
+                        isDue={isSurveyDue(item.scheduledAt)}
                       />
                     ))}
                     {completedLeads.length > 0 && (

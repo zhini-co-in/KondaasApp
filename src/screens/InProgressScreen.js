@@ -18,6 +18,9 @@ import { BASE_URL } from '../api/api1';
 
 const { width } = Dimensions.get('window');
 
+// 👇 புதுசா சேர்த்தது: form submit ஆன lead id-களை permanent-ஆ track பண்ண
+const FORM_SUBMITTED_KEY = 'form_submitted_lead_ids';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // InProgressScreen
 // ─────────────────────────────────────────────────────────────────────────────
@@ -68,6 +71,35 @@ const InProgressScreen = () => {
     };
   }, []);
 
+  // 👇 புதுசா சேர்த்தது: mount ஆகும்போது persisted formSubmittedIds-ஐ load பண்ணு
+  // இது இல்லாம, screen unmount/remount ஆகும்போது (அல்லது app restart) formSubmittedIds
+  // Set காலியாகிடும், அதனால submit பண்ண lead-க்கும் "Site Observation" button
+  // மறுபடியும் enable-ஆ தெரியும்.
+  useEffect(() => {
+    const loadPersistedFormSubmittedIds = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(FORM_SUBMITTED_KEY);
+        const ids = raw ? JSON.parse(raw) : [];
+        if (isMounted.current && ids.length > 0) {
+          setFormSubmittedIds((prev) => new Set([...prev, ...ids]));
+        }
+      } catch (e) {}
+    };
+    loadPersistedFormSubmittedIds();
+  }, []);
+
+  // 👇 புதுசா சேர்த்தது: submit ஆன leadId-ஐ AsyncStorage-ல permanent-ஆ save பண்ணும் helper
+  const persistFormSubmittedId = async (id) => {
+    try {
+      const raw = await AsyncStorage.getItem(FORM_SUBMITTED_KEY);
+      const ids = raw ? JSON.parse(raw) : [];
+      if (!ids.includes(id)) {
+        ids.push(id);
+        await AsyncStorage.setItem(FORM_SUBMITTED_KEY, JSON.stringify(ids));
+      }
+    } catch (e) {}
+  };
+
   // route.params.lead மாறும்போது state sync பண்ணு
   useEffect(() => {
     const updatedLead = route.params?.lead;
@@ -92,12 +124,18 @@ const InProgressScreen = () => {
       stopHighFrequencyTracking();
     }, [route.params?.completedLeadId])
   );
+  useEffect(() => {
+  if (lead) console.log('🔍 LEAD OBJECT:', JSON.stringify(lead, null, 2));
+}, []);
   useFocusEffect(
   React.useCallback(() => {
     const submittedId = route.params?.formSubmittedLeadId;
     if (!submittedId) return;
     navigation.setParams({ formSubmittedLeadId: null });
     setFormSubmittedIds((prev) => new Set([...prev, submittedId]));
+    // 👇 புதுசா சேர்த்தது: permanent-ஆ persist பண்ணு, அப்போ தான் அடுத்த
+    // தடவை screen வரும்போதும் button disable-ஆ இருக்கும்.
+    persistFormSubmittedId(submittedId);
   }, [route.params?.formSubmittedLeadId])
 );
 
@@ -231,13 +269,16 @@ await API.post('/notification/trigger', {
 
       // 2d. Notification trigger
       // 2d. Notification trigger
+      // 2d. Notification trigger
       try {
         await API.post('/notification/trigger', {
           customerMobile: item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
+          state: item.state || item.State || item.customerState || item.address?.state || undefined,
         });
       } catch (err) {
         await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
           customerMobile: item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
+          state: item.state || item.State || item.customerState || item.address?.state || undefined,
         });
       }
     } else {
@@ -260,8 +301,9 @@ await API.post('/notification/trigger', {
       // Offline branch — also add name
 // AFTER
 await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
-  customerMobile: item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
-});
+        customerMobile: item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
+        state: item.state || item.State || item.customerState || item.address?.state || undefined,
+      });
     }
   };
 

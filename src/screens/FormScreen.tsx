@@ -17,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { USER_DATA } from '../service/localStorage';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import SignatureScreen from 'react-native-signature-canvas';
+import ImageResizer from 'react-native-image-resizer';
 
 interface FieldProperty {
   title?: string; description?: string; type?: string;
@@ -166,6 +167,17 @@ const GpsLocationField = ({
 };
 
 // ── Photo Upload Field ─────────────────────────────────────────────────────────
+async function compressImage(uri: string): Promise<string> {
+  try {
+    const resized = await ImageResizer.createResizedImage(
+      uri, 1280, 1280, 'JPEG', 70, 0
+    );
+    return resized.uri;
+  } catch (err) {
+    console.warn('⚠️ Image compress failed, using original:', err);
+    return uri;
+  }
+}
 const PhotoUploadField = ({
   label, photoFiles, onChange, required,
   selectionLimit, namePrefix, accentColor,
@@ -178,23 +190,30 @@ const PhotoUploadField = ({
     onChange([...photoFiles, ...newFiles]);
   };
 
-  const mapAssets = (assets: any[]): PhotoFile[] =>
-    assets
-      .map((asset) => ({
-        uri: asset.uri ?? '',
-        name: asset.fileName ?? asset.uri?.split('/').pop() ?? `${namePrefix}_${Date.now()}.jpg`,
-        type: asset.type ?? 'image/jpeg',
-      }))
-      .filter((f) => f.uri);
+  const mapAssets = async (assets: any[]): Promise<PhotoFile[]> => {
+    const valid = assets.filter((asset) => asset.uri);
+    const results = await Promise.all(
+      valid.map(async (asset) => {
+        const compressedUri = await compressImage(asset.uri);
+        return {
+          uri: compressedUri,
+          name: asset.fileName ?? asset.uri?.split('/').pop() ?? `${namePrefix}_${Date.now()}.jpg`,
+          type: 'image/jpeg',
+        };
+      })
+    );
+    return results;
+  };
 
   const handleTakePhoto = () => {
     launchCamera(
       { mediaType: 'photo', quality: 0.8, saveToPhotos: true },
-      (response) => {
+      async (response) => {
         if (response.didCancel || response.errorCode) return;
         const assets = response.assets ?? [];
         if (assets.length === 0) return;
-        appendFiles(mapAssets(assets));
+        const compressed = await mapAssets(assets);
+        appendFiles(compressed);
       }
     );
   };
@@ -203,11 +222,12 @@ const PhotoUploadField = ({
     const remaining = Math.max(selectionLimit - photoFiles.length, 1);
     launchImageLibrary(
       { mediaType: 'photo', selectionLimit: remaining, quality: 0.8 },
-      (response) => {
+      async (response) => {
         if (response.didCancel || response.errorCode) return;
         const assets = response.assets ?? [];
         if (assets.length === 0) return;
-        appendFiles(mapAssets(assets));
+        const compressed = await mapAssets(assets);
+        appendFiles(compressed);
       }
     );
   };
@@ -618,7 +638,7 @@ const FormScreen = ({
       startTracking();
 
       let attempts = 0;
-      const maxAttempts = 20;
+      const maxAttempts = 200;
 
       const checkLocation = setInterval(() => {
         attempts++;
@@ -648,13 +668,26 @@ const FormScreen = ({
           }
 
           if (attempts >= maxAttempts) {
-            clearInterval(checkLocation);
-            setGpsLoading(false);
-            Alert.alert(
-              'GPS Error',
-              'Could not get accurate GPS location.\nPlease tap "Refetch GPS" button again.'
-            );
-          }
+  clearInterval(checkLocation);
+  setGpsLoading(false);
+
+  // fallback to last cached location instead of hard error
+  AsyncStorage.getItem('last_known_location').then((cached) => {
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      setFormValues((prevForm) => ({
+        ...prevForm,
+        Latitude: String(parsed.latitude),
+        Longitude: String(parsed.longitude),
+        Google_Map_Location: `https://www.google.com/maps?q=${parsed.latitude},${parsed.longitude}`,
+      }));
+      setGpsCoords({ latitude: parsed.latitude, longitude: parsed.longitude, accuracy: null });
+      Alert.alert
+    } else {
+      Alert.alert('GPS Error', 'Could not get accurate GPS location.\nPlease tap "Refetch GPS" button again.');
+    }
+  });
+}
           return prev;
         });
       }, 600);
@@ -825,6 +858,11 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
 
         const res = await API.post('/user/add', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 90000,
+          onUploadProgress: (progressEvent) => {
+            const percent = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
+            console.log(`📤 Upload progress: ${percent}%`);
+          },
         });
 
         if (res.status === 201 || res.data?.message) {
@@ -934,8 +972,13 @@ formData.append('data', JSON.stringify(updatePayload));
 
         // ✅ Use BASE_URL instead of hardcoded URL
         const res = await API.put('/user/update', formData, {
-  headers: { 'Content-Type': 'multipart/form-data' },
-});
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 90000,
+          onUploadProgress: (progressEvent) => {
+            const percent = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
+            console.log(`📤 Update upload progress: ${percent}%`);
+          },
+        });
 
         Alert.alert('✔ Updated', 'Form updated successfully!', [
           { text: 'OK', onPress: () => navigation.goBack() },
