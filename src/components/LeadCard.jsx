@@ -155,9 +155,12 @@ const LeadCard = ({
         if (item.manualSiteEnabled || (hasLatLong && withinRange)) {
   return (
     <View style={{ alignItems: 'center', gap: 5 }}>
-      <TouchableOpacity style={styles.smallSiteBtn} onPress={() => onSiteObservation?.(item)}>
-        <Text style={styles.smallSiteBtnText}>Site{'\n'}Observation</Text>
-      </TouchableOpacity>
+      {/* 👇 formSubmitted ஆனா Site Observation button hide */}
+      {!formSubmitted && (
+        <TouchableOpacity style={styles.smallSiteBtn} onPress={() => onSiteObservation?.(item)}>
+          <Text style={styles.smallSiteBtnText}>Site{'\n'}Observation</Text>
+        </TouchableOpacity>
+      )}
       {formSubmitted && (
         <TouchableOpacity
           style={[styles.commonBtn, { backgroundColor: '#3b82f6' }]}
