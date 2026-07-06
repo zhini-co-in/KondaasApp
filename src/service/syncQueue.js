@@ -8,6 +8,8 @@ const QUEUE_KEY = 'sync:queue';
 // ─────────────────────────────────────────────────────────────────
 // TYPES
 // action: 'STATUS_UPDATE' | 'FORM_SUBMIT' | 'LEAD_EDIT' | 'LEAD_REJECT'
+//       | 'ACCEPT_LEAD' | 'INPROGRESS_LEAD' | 'COMPLETED_LEAD'
+//       | 'NOTIFICATION' | 'JOB_COORDINATES' | 'FLOWTRIX_SYNC' | 'ORDER_COMPLETE'
 // payload: depends on action
 // ─────────────────────────────────────────────────────────────────
 
@@ -124,7 +126,7 @@ const _executeAction = async (item) => {
       await API.put('/order/update', payload);
       break;
 
- // Lead accept (with surveyor number)
+    // Lead accept (with surveyor number)
     case 'ACCEPT_LEAD':
       await API.post('/order/accept', {
         mobile: payload.mobile,
@@ -140,7 +142,7 @@ const _executeAction = async (item) => {
       });
       break;
 
-      // Lead inprogress (with surveyor number)
+    // Lead inprogress (with surveyor number)
     case 'INPROGRESS_LEAD':
       await API.post('/order/inprogress', {
         mobile: payload.mobile,
@@ -148,7 +150,7 @@ const _executeAction = async (item) => {
       });
       break;
 
-       // Lead completed (with surveyor number)
+    // Lead completed (with surveyor number)
     case 'COMPLETED_LEAD':
       await API.post('/order/complete', {
         mobile: payload.mobile,
@@ -159,6 +161,31 @@ const _executeAction = async (item) => {
     // Notification trigger
     case 'NOTIFICATION':
       await API.post('/notification/trigger', payload);
+      break;
+
+    // 👇 புதுசா சேர்த்தது: Start → Reached exact lat/long pair
+    // (Google Maps distance backend-ல calc பண்ண dealId-யோட save ஆகும்)
+    case 'JOB_COORDINATES':
+      await API.post('/location/distance', {
+        dealId:   payload.dealId,
+        startLat: payload.startLat,
+        startLng: payload.startLng,
+        endLat:   payload.endLat,
+        endLng:   payload.endLng,
+      });
+      break;
+
+    // 👇 புதுசா சேர்த்தது: Flowtrix status sync (accepted / inprogress / completed)
+    // InProgressScreen.js-ல confirmMarkCompleted() offline branch-ல இதை
+    // enqueue பண்றோம், ஆனா முன்பு இங்க handle பண்ணல — அதனால silently
+    // "Unknown action" ஆகி sync ஆகாம போச்சு. இப்போ fix ஆச்சு.
+    case 'FLOWTRIX_SYNC':
+      await API.post('/order/sync-status', payload);
+      break;
+
+    // 👇 புதுசா சேர்த்தது: Order completion tracking (admin_complete collection)
+    case 'ORDER_COMPLETE':
+      await API.post('/order/complete', payload);
       break;
 
     default:

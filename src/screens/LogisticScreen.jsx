@@ -37,7 +37,7 @@ import {
   startHighFrequencyTracking,
   stopHighFrequencyTracking,
 } from '../service/logisticService';
-import { saveScannedProduct, confirmDeliveryToWarehouse, getScannedProducts } from '../service/logisticProductService';
+import { saveScannedProduct, confirmDeliveryToWarehouse, getNewAssignedCards, updateLogisticsStatus } from '../service/logisticProductService';
 
 const LogisticScreen = ({ navigation }) => {
   const isMounted = useRef(true);
@@ -52,8 +52,12 @@ const LogisticScreen = ({ navigation }) => {
   const [scannedData, setScannedData] = useState(null);
   const [isScanning, setIsScanning] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedDeal, setSelectedDeal] = useState(null);
+  const [showDealModal, setShowDealModal] = useState(false);
 
   const [scannedProducts, setScannedProducts] = useState([]);
+  const [newAssignedCards, setNewAssignedCards] = useState([]);
+  const [scanningForProduct, setScanningForProduct] = useState(null);
   const [isCompleted, setIsCompleted] = useState(false);
   const [cameraPermissionGranted, setCameraPermissionGranted] = useState(false);
 
@@ -73,6 +77,7 @@ const LogisticScreen = ({ navigation }) => {
   useEffect(() => {
     isMounted.current = true;
     restoreState();
+    loadNewAssignedCards();
     setTimeout(() => {
       checkCameraPermission();
     }, 800);
@@ -117,58 +122,69 @@ const LogisticScreen = ({ navigation }) => {
     }
   };
 
+
   // ✅ புதுசா add பண்ணு
-useEffect(() => {
-  const loadExistingPickedProducts = async () => {
+// useEffect(() => {
+//   const loadExistingPickedProducts = async () => {
+//     try {
+//       const res = await getScannedProducts();
+//       const picked = res.filter((p) => p.status === 'picked');
+
+//       if (picked.length > 0) {
+//         const mapped = picked.map((item) => ({
+//           _id: item._id,
+//           rawCode: item.rawValue || '',
+//           displayText: item.rawValue?.split('\n')[0] || 'Unknown Product',
+//         }));
+
+//         setScannedProducts(mapped);
+//         console.log('📦 Restored picked products:', mapped.length);
+
+//         setTrackingSteps([
+//           {
+//             id: 1,
+//             label: 'Product Scanned',
+//             sub: `${mapped.length} Product${mapped.length > 1 ? 's' : ''} Scanned`,
+//             time: '',
+//             done: true,
+//           },
+//           {
+//             id: 2,
+//             label: 'Picked from Warehouse',
+//             sub: 'Restored from previous session',
+//             time: '',
+//             done: true,
+//           },
+//           {
+//             id: 3,
+//             label: 'Delivered to Drop Warehouse',
+//             sub: 'Waiting to reach drop location...',
+//             time: '',
+//             done: false,
+//           },
+//         ]);
+//       }
+//     } catch (e) {
+//       console.error('loadExistingPickedProducts error:', e);
+//     }
+//   };
+
+//   loadExistingPickedProducts();
+// }, []);
+
+ const loadNewAssignedCards = async () => {
     try {
-      const res = await getScannedProducts();
-      const picked = res.filter((p) => p.status === 'picked');
-
-      if (picked.length > 0) {
-        const mapped = picked.map((item) => ({
-          _id: item._id,
-          rawCode: item.rawValue || '',
-          displayText: item.rawValue?.split('\n')[0] || 'Unknown Product',
-        }));
-
-        setScannedProducts(mapped);
-        console.log('📦 Restored picked products:', mapped.length);
-
-        setTrackingSteps([
-          {
-            id: 1,
-            label: 'Product Scanned',
-            sub: `${mapped.length} Product${mapped.length > 1 ? 's' : ''} Scanned`,
-            time: '',
-            done: true,
-          },
-          {
-            id: 2,
-            label: 'Picked from Warehouse',
-            sub: 'Restored from previous session',
-            time: '',
-            done: true,
-          },
-          {
-            id: 3,
-            label: 'Delivered to Drop Warehouse',
-            sub: 'Waiting to reach drop location...',
-            time: '',
-            done: false,
-          },
-        ]);
-      }
+      const cards = await getNewAssignedCards();
+      setNewAssignedCards(cards);
     } catch (e) {
-      console.error('loadExistingPickedProducts error:', e);
+      console.error('loadNewAssignedCards error:', e);
     }
   };
-
-  loadExistingPickedProducts();
-}, []);
 
 ///////////////refresh//////////////////
   const onRefresh = useCallback(() => {
     setRefreshing(true);
+    loadNewAssignedCards();
     setTimeout(() => setRefreshing(false), 1200);
   }, []);
 
@@ -210,31 +226,28 @@ useEffect(() => {
     }
   };
 
-  // ==================== SCANNER LOGIC ====================
   const codeScanner = useCodeScanner({
     codeTypes: ['qr', 'ean-13', 'ean-8', 'code-128', 'code-39', 'data-matrix', 'aztec'],
     onCodeScanned: useCallback(
       (codes) => {
         if (codes.length === 0 || !isScanning) return;
+
         const now = Date.now();
         if (now - lastScanTime.current < 600) return;
         lastScanTime.current = now;
+
         const value = codes[0].value?.trim();
         if (!value) return;
+
         setIsScanning(false);
+
+        // Simple scan - no match check
         const scannedItem = { rawCode: value, displayText: value };
         setScannedProducts((prev) => [...prev, scannedItem]);
         setScannedData(scannedItem);
 
-        // Save to backend and update _id
-        saveScannedProduct(value, locationRef.current).then((saved) => {
-          if (saved?._id || saved?.id) {
-            const id = saved._id || saved.id;
-            setScannedProducts((prev) =>
-              prev.map((p) => p.rawCode === value && !p._id ? { ...p, _id: id } : p)
-            );
-          }
-        });
+        saveScannedProduct(value, locationRef.current);
+
         updateToPickedFromWarehouse();
       },
       [isScanning]
@@ -323,6 +336,58 @@ useEffect(() => {
     setScannedData(null);
     setIsScanning(true);
   };
+
+    const showFullDealDetails = (card) => {
+    setSelectedDeal(card);
+    setShowDealModal(true);
+  };
+
+   // Accept → Status change + Start Scan button show
+const acceptAssignedCard = async (card, index) => {
+    const success = await updateLogisticsStatus(card.deal_id, 'accepted');
+
+    if (success) {
+      setNewAssignedCards((prev) =>
+        prev.map((item, i) => (i === index ? { ...item, status: 'accepted' } : item))
+      );
+      Alert.alert('Accepted', 'Status updated. Click "Start Scan"');
+    } else {
+      Alert.alert('Error', 'Failed to update status');
+    }
+  };
+
+   const startScanFlow = (card, index) => {
+    // Just change status to inprogress (no actual scan)
+    setNewAssignedCards((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, status: 'inprogress' } : item))
+    );
+    Alert.alert('In Progress', 'Deal is now in progress. Mark as Completed when done.');
+  };
+
+    const markAsCompleted = async (card, index) => {
+    const success = await updateLogisticsStatus(card.deal_id, 'completed');
+
+    if (success) {
+      setNewAssignedCards((prev) => prev.filter((_, i) => i !== index));
+      Alert.alert('✅ Completed', 'Deal marked as completed');
+    } else {
+      Alert.alert('Error', 'Failed to mark as completed');
+    }
+  };
+
+  // Reject Card
+const rejectAssignedCard = async (card, index) => {
+    const success = await updateLogisticsStatus(card.deal_id, 'rejected');
+
+    if (success) {
+      setNewAssignedCards((prev) => prev.filter((_, i) => i !== index));
+      Alert.alert('Rejected', 'Card removed from assignments');
+    } else {
+      Alert.alert('Error', 'Failed to reject');
+    }
+  };
+
+
 
   const handleLogout = async () => {
     stopTracking();
@@ -536,6 +601,91 @@ useEffect(() => {
                 </View>
               )}
 
+              {/* 🔥 NEW ASSIGNED BY ADMIN - SEE MORE + ACCEPT + START SCAN + COMPLETED */}
+              {newAssignedCards.length > 0 && (
+                <View style={styles.card}>
+                  <Text style={[styles.sectionLabel, { color: '#8b5cf6' }]}>
+                    🆕 NEW ASSIGNED BY ADMIN
+                  </Text>
+                  {newAssignedCards.map((card, index) => {
+                    const products = card.products_info || [];
+                    const visibleProducts = products.slice(0, 3);
+                    const isAccepted = card.status === 'accepted';
+
+                    return (
+                      <View key={index} style={[styles.scannedItem, { flexDirection: 'column', alignItems: 'flex-start', paddingBottom: 16 }]}>
+                        <View style={{ flexDirection: 'row', width: '100%' }}>
+                          <MaterialCommunityIcons name="card-account-details" size={24} color="#8b5cf6" />
+                          <View style={{ marginLeft: 12, flex: 1 }}>
+                            <Text style={{ fontWeight: '600' }}>
+                              {products[1] || card.deal_id || 'New Assigned Deal'}
+                            </Text>
+                            <Text style={{ fontSize: 12, color: '#64748b' }}>
+                              {card.address || 'Chennai'} • {new Date(card.assignedAt).toLocaleDateString()}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Products Preview */}
+                        <View style={{ marginLeft: 36, marginTop: 6 }}>
+                          {visibleProducts.map((prod, i) => (
+                            <Text key={i} style={{ fontSize: 12, color: '#666' }}>• {prod}</Text>
+                          ))}
+                          {products.length > 3 && (
+                            <Text style={{ fontSize: 12, color: '#3b82f6' }}>+{products.length - 3} more...</Text>
+                          )}
+                        </View>
+
+                        {/* See More Button */}
+                        <TouchableOpacity 
+                          onPress={() => showFullDealDetails(card)}
+                          style={{ marginLeft: 36, marginTop: 8 }}
+                        >
+                          <Text style={{ color: '#3b82f6', fontWeight: '600' }}>See More</Text>
+                        </TouchableOpacity>
+
+                        {/* Buttons */}
+                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 12, marginLeft: 36 }}>
+                          {!isAccepted ? (
+                            <>
+                              <TouchableOpacity 
+                                style={{ backgroundColor: '#ef4444', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 }}
+                                onPress={() => rejectAssignedCard(card, index)}
+                              >
+                                <Text style={{ color: '#fff', fontWeight: '600' }}>Reject</Text>
+                              </TouchableOpacity>
+
+                              <TouchableOpacity 
+                                style={{ backgroundColor: '#10b981', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 }}
+                                onPress={() => acceptAssignedCard(card, index)}
+                              >
+                                <Text style={{ color: '#fff', fontWeight: '600' }}>Accept</Text>
+                              </TouchableOpacity>
+                            </>
+                          ) : (
+                            <>
+                              <TouchableOpacity 
+                                style={{ backgroundColor: '#3b82f6', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, flex: 1 }}
+                                onPress={() => startScanFlow(card)}
+                              >
+                                <Text style={{ color: '#fff', fontWeight: '600' }}>Start Scan</Text>
+                              </TouchableOpacity>
+
+                              <TouchableOpacity 
+                                style={{ backgroundColor: '#1e40af', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, flex: 1 }}
+                                onPress={() => markAsCompleted(card, index)}
+                              >
+                                <Text style={{ color: '#fff', fontWeight: '600' }}>Completed</Text>
+                              </TouchableOpacity>
+                            </>
+                          )}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
               <Text style={styles.sectionLabel}>LIVE TRACKING UPDATES</Text>
               <View style={styles.card}>
                 {trackingSteps.map((step, index) => (
@@ -592,6 +742,44 @@ useEffect(() => {
           </LinearGradient>
         </View>
       </SafeAreaView>
+
+      {/* FULL DEAL DETAILS MODAL */}
+      <Modal visible={showDealModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Deal Details</Text>
+            
+            {selectedDeal && (
+              <>
+                <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: 10 }}>
+                  {selectedDeal.products_info?.[1] || selectedDeal.deal_id || 'New Assigned Deal'}
+                </Text>
+                <Text>Address: {selectedDeal.address || 'Chennai'}</Text>
+                <Text>Assigned: {new Date(selectedDeal.assignedAt).toLocaleString()}</Text>
+                <Text>Status: {selectedDeal.status || 'pending'}</Text>
+
+                <Text style={{ marginTop: 20, fontWeight: '700', marginBottom: 8 }}>All Products:</Text>
+                {selectedDeal.products_info?.map((prod, i) => (
+                  <Text key={i} style={{ marginVertical: 4, fontSize: 14, paddingLeft: 8 }}>
+                    • {prod}
+                  </Text>
+                ))}
+
+                {selectedDeal.products_info?.length === 0 && (
+                  <Text style={{ color: '#666', fontStyle: 'italic' }}>No products listed</Text>
+                )}
+              </>
+            )}
+
+            <TouchableOpacity 
+              style={styles.acceptBtn} 
+              onPress={() => setShowDealModal(false)}
+            >
+              <Text style={styles.acceptText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <Modal transparent visible={showLogoutPopup} animationType="fade" onRequestClose={() => setShowLogoutPopup(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
@@ -683,4 +871,26 @@ const styles = StyleSheet.create({
   logoutBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 13, gap: 10 },
   logoutText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   scannedItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderColor: '#f1f5f9' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    width: '90%',
+    borderRadius: 16,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 15 },
+  acceptBtn: {
+    backgroundColor: '#3b82f6',
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  acceptText: { color: '#fff', fontWeight: '600' },
 });

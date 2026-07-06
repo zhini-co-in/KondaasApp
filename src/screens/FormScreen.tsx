@@ -18,16 +18,30 @@ import { USER_DATA } from '../service/localStorage';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import SignatureScreen from 'react-native-signature-canvas';
 import ImageResizer from 'react-native-image-resizer';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 interface FieldProperty {
   title?: string; description?: string; type?: string;
   enum?: string[]; properties?: Record<string, FieldProperty>; format?: string;
+  items?: { type?: string; format?: string };
 }
 interface SchemaProperties { [key: string]: FieldProperty; }
 interface Schema { properties?: SchemaProperties; required?: string[]; }
+
+// ── uischema conditional "rule" support (SHOW/HIDE) ─────────────────────────
+// Matches JSONForms-style rules: { effect: "SHOW", condition: { scope, schema: { const } } }
+interface UIRuleCondition {
+  scope: string;
+  schema: { const?: any };
+}
+interface UIRule {
+  effect: 'SHOW' | 'HIDE';
+  condition: UIRuleCondition;
+}
 interface UIElement {
   type: string; scope?: string; label?: string;
   elements?: UIElement[]; options?: { multi?: boolean; uploadType?: string };
+  rule?: UIRule;
 }
 interface UISchema { type: string; elements: UIElement[]; }
 interface Template { id: string; schema: Schema; uischema: UISchema; }
@@ -51,6 +65,78 @@ interface LocationCoords {
   accuracy: number | null;
   [key: string]: any;
 }
+
+// ── Upload helpers ──────────────────────────────────────────────────────────────
+// Multi-file array fields (EB_Bill_Copy, Site_Survey_Photos, and every new
+// "sitePhoto" / "siteVideo" field from the schema) are colour-coded by
+// uploadType so the UI stays visually distinct without hardcoding each field.
+const colorForUploadType = (uploadType?: string): string => {
+  switch (uploadType) {
+    case 'ebBill': return '#22c55e';
+    case 'siteSurvey': return '#3b82f6';
+    case 'sitePhoto': return '#f59e0b';
+    case 'siteVideo': return '#8b5cf6';
+    default: return '#64748b';
+  }
+};
+
+// Backend now loops over every multipart field name dynamically
+// (`for (const fieldName of Object.keys(body))`) and only special-cases
+// "EB_Bill_Copy" for the WorkDrive folder name. So the multipart part name
+// MUST be the exact schema field key — no renaming, or the backend can't
+// match it to the schema / pick the right folder.
+const multipartFieldName = (fieldKey: string): string => fieldKey;
+
+// ── Conditional field visibility (uischema "rule": SHOW/HIDE) ──────────────────
+// formValues stores everything as strings, so boolean/number `const` values
+// from the schema are coerced to string before comparing.
+const isFieldVisible = (
+  element: UIElement,
+  formValues: Record<string, string>,
+): boolean => {
+  if (!element.rule) return true;
+  const { effect, condition } = element.rule;
+  const fieldKey = condition.scope.split('/').pop() ?? '';
+  const rawValue = formValues[fieldKey] ?? '';
+  const expected = condition.schema.const;
+  const expectedStr = typeof expected === 'boolean' || typeof expected === 'number'
+    ? String(expected)
+    : expected;
+  const matches = rawValue === expectedStr;
+  return effect === 'SHOW' ? matches : !matches;
+};
+
+// Walks every group's elements, keeps only fields whose rule currently
+// evaluates to visible, and drops any empty-string / null / undefined values
+// so hidden or untouched optional fields (e.g. Advance_Paid_Date when
+// Advance_payment_Received is false) never reach the backend/Zoho as "".
+const buildVisiblePayload = (
+  groups: UIElement[],
+  formValues: Record<string, string>,
+): Record<string, string> => {
+  const visibleKeys = new Set<string>();
+  groups.forEach((group) => {
+    (group.elements ?? []).forEach((element) => {
+      const fieldKey = element.scope?.split('/').pop();
+      if (!fieldKey) return;
+      if (isFieldVisible(element, formValues)) visibleKeys.add(fieldKey);
+    });
+  });
+
+  const cleaned: Record<string, string> = {};
+  Object.entries(formValues).forEach(([key, val]) => {
+    // Fields with no matching uischema control (e.g. Longitude, GPS_Accuracy,
+    // Google_Map_Location which are rendered inline by the Latitude group)
+    // are always kept — only rule-driven fields get filtered.
+    const isRuleControlled = groups.some((group) =>
+      (group.elements ?? []).some((el) => el.scope?.split('/').pop() === key && el.rule)
+    );
+    if (isRuleControlled && !visibleKeys.has(key)) return; // hidden → skip
+    if (val === '' || val === null || val === undefined) return; // empty → skip
+    cleaned[key] = val;
+  });
+  return cleaned;
+};
 
 // ── Dropdown ──────────────────────────────────────────────────────────────────
 const DropdownPicker = ({
@@ -166,7 +252,112 @@ const GpsLocationField = ({
   );
 };
 
-// ── Photo Upload Field ─────────────────────────────────────────────────────────
+// ── Date / DateTime Picker Field ────────────────────────────────────────────────
+// Handles schema fields with format: "date" (date only) or format: "date-time"
+// (date + time). Stores value as an ISO string in formValues.
+// Android's native picker has no combined "datetime" mode, so on Android a
+// date-time field opens the date picker first, then the time picker.
+// iOS supports mode="datetime" directly in a single spinner.
+const DateTimeField = ({
+  label, value, onChange, required, mode,
+}: {
+  label: string; value: string; onChange: (val: string) => void;
+  required?: boolean; mode: 'date' | 'datetime';
+}) => {
+  const [showDate, setShowDate] = useState(false);
+  const [showTime, setShowTime] = useState(false);
+  const [tempDate, setTempDate] = useState<Date>(
+    value && !isNaN(new Date(value).getTime()) ? new Date(value) : new Date()
+  );
+
+  const parsedValue = value && !isNaN(new Date(value).getTime()) ? new Date(value) : null;
+
+  const displayValue = parsedValue
+    ? mode === 'datetime'
+      ? parsedValue.toLocaleString('en-IN')
+      : parsedValue.toLocaleDateString('en-IN')
+    : '';
+
+  const openPicker = () => {
+    setTempDate(parsedValue ?? new Date());
+    setShowDate(true);
+  };
+
+  const formatDateOnly = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const handleDateChange = (event: any, selected?: Date) => {
+    setShowDate(false);
+    if (event?.type === 'dismissed' || !selected) return;
+
+    if (mode === 'date') {
+      onChange(formatDateOnly(selected));           // ← Pure YYYY-MM-DD
+      return;
+    }
+
+    // datetime handling
+    if (Platform.OS === 'ios') {
+      onChange(selected.toISOString());
+      return;
+    }
+
+    setTempDate(selected);
+    setShowTime(true);
+  };
+
+  const handleTimeChange = (event: any, selected?: Date) => {
+    setShowTime(false);
+    if (event?.type === 'dismissed' || !selected) return;
+
+    const combined = new Date(tempDate);
+    combined.setHours(selected.getHours(), selected.getMinutes(), 0, 0);
+    onChange(combined.toISOString());
+  };
+
+  const clear = () => onChange('');
+
+  return (
+    <View style={styles.fieldContainer}>
+      <Text style={styles.label}>
+        {label} {required && <Text style={{ color: '#ED1C25' }}>*</Text>}
+      </Text>
+      <TouchableOpacity style={styles.dropdownBtn} onPress={openPicker}>
+        <Ionicons name="calendar-outline" size={16} color="#888" style={{ marginRight: 8 }} />
+        <Text style={{ color: parsedValue ? '#333' : '#aaa', fontSize: 14, flex: 1 }}>
+          {displayValue || (mode === 'datetime' ? 'Select date & time...' : 'Select date...')}
+        </Text>
+        {!!parsedValue && (
+          <TouchableOpacity onPress={clear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close-circle" size={18} color="#ccc" />
+          </TouchableOpacity>
+        )}
+      </TouchableOpacity>
+
+      {showDate && (
+        <DateTimePicker
+          value={tempDate}
+          mode={Platform.OS === 'ios' ? mode : 'date'}
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={handleDateChange}
+        />
+      )}
+      {showTime && Platform.OS === 'android' && (
+        <DateTimePicker
+          value={tempDate}
+          mode="time"
+          display="default"
+          onChange={handleTimeChange}
+        />
+      )}
+    </View>
+  );
+};
+
+// ── Multi-file Upload Field (photos OR videos) ─────────────────────────────────
 async function compressImage(uri: string): Promise<string> {
   try {
     const resized = await ImageResizer.createResizedImage(
@@ -178,14 +369,18 @@ async function compressImage(uri: string): Promise<string> {
     return uri;
   }
 }
+
 const PhotoUploadField = ({
   label, photoFiles, onChange, required,
-  selectionLimit, namePrefix, accentColor,
+  selectionLimit, namePrefix, accentColor, mediaType = 'photo',
 }: {
   label: string; photoFiles: PhotoFile[];
   onChange: (files: PhotoFile[]) => void; required?: boolean;
   selectionLimit: number; namePrefix: string; accentColor: string;
+  mediaType?: 'photo' | 'video';
 }) => {
+  const isVideo = mediaType === 'video';
+
   const appendFiles = (newFiles: PhotoFile[]) => {
     onChange([...photoFiles, ...newFiles]);
   };
@@ -194,26 +389,33 @@ const PhotoUploadField = ({
     const valid = assets.filter((asset) => asset.uri);
     const results = await Promise.all(
       valid.map(async (asset) => {
-        const compressedUri = await compressImage(asset.uri);
+        // Video files are sent as-is; only images go through the resizer.
+        const finalUri = isVideo ? asset.uri : await compressImage(asset.uri);
+        const ext = isVideo ? 'mp4' : 'jpg';
         return {
-          uri: compressedUri,
-          name: asset.fileName ?? asset.uri?.split('/').pop() ?? `${namePrefix}_${Date.now()}.jpg`,
-          type: 'image/jpeg',
+          uri: finalUri,
+          name: asset.fileName ?? asset.uri?.split('/').pop() ?? `${namePrefix}_${Date.now()}.${ext}`,
+          type: isVideo ? (asset.type ?? 'video/mp4') : 'image/jpeg',
         };
       })
     );
     return results;
   };
 
-  const handleTakePhoto = () => {
+  const handleCapture = () => {
     launchCamera(
-      { mediaType: 'photo', quality: 0.8, saveToPhotos: true },
+      {
+        mediaType: isVideo ? 'video' : 'photo',
+        quality: 0.8,
+        saveToPhotos: !isVideo,
+        ...(isVideo ? { videoQuality: 'medium' as const } : {}),
+      },
       async (response) => {
         if (response.didCancel || response.errorCode) return;
         const assets = response.assets ?? [];
         if (assets.length === 0) return;
-        const compressed = await mapAssets(assets);
-        appendFiles(compressed);
+        const mapped = await mapAssets(assets);
+        appendFiles(mapped);
       }
     );
   };
@@ -221,13 +423,13 @@ const PhotoUploadField = ({
   const handleUpload = () => {
     const remaining = Math.max(selectionLimit - photoFiles.length, 1);
     launchImageLibrary(
-      { mediaType: 'photo', selectionLimit: remaining, quality: 0.8 },
+      { mediaType: isVideo ? 'video' : 'photo', selectionLimit: remaining, quality: 0.8 },
       async (response) => {
         if (response.didCancel || response.errorCode) return;
         const assets = response.assets ?? [];
         if (assets.length === 0) return;
-        const compressed = await mapAssets(assets);
-        appendFiles(compressed);
+        const mapped = await mapAssets(assets);
+        appendFiles(mapped);
       }
     );
   };
@@ -251,10 +453,12 @@ const PhotoUploadField = ({
             flexDirection: 'row', justifyContent: 'center', gap: 6,
             backgroundColor: '#fff',
           }}
-          onPress={handleTakePhoto}
+          onPress={handleCapture}
         >
-          <Ionicons name="camera-outline" size={20} color={accentColor} />
-          <Text style={{ color: accentColor, fontWeight: '700', fontSize: 13 }}>Take Photo</Text>
+          <Ionicons name={isVideo ? 'videocam-outline' : 'camera-outline'} size={20} color={accentColor} />
+          <Text style={{ color: accentColor, fontWeight: '700', fontSize: 13 }}>
+            {isVideo ? 'Record Video' : 'Take Photo'}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -279,13 +483,24 @@ const PhotoUploadField = ({
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
             {photoFiles.map((file, idx) => (
               <View key={idx} style={{ marginRight: 10 }}>
-                <Image
-                  source={{ uri: file.uri }}
-                  style={{
+                {isVideo ? (
+                  <View style={{
                     width: 64, height: 64, borderRadius: 8,
                     borderWidth: 1.5, borderColor: accentColor,
-                  }}
-                />
+                    alignItems: 'center', justifyContent: 'center',
+                    backgroundColor: '#f1f1f1',
+                  }}>
+                    <Ionicons name="videocam" size={26} color={accentColor} />
+                  </View>
+                ) : (
+                  <Image
+                    source={{ uri: file.uri }}
+                    style={{
+                      width: 64, height: 64, borderRadius: 8,
+                      borderWidth: 1.5, borderColor: accentColor,
+                    }}
+                  />
+                )}
                 <TouchableOpacity
                   style={{
                     position: 'absolute', top: -6, right: -6,
@@ -300,6 +515,72 @@ const PhotoUploadField = ({
             ))}
           </ScrollView>
         </>
+      )}
+    </View>
+  );
+};
+
+// ── Single-file Data-URL Upload Field (Aadhar, PAN, screenshots, etc) ──────────
+// These schema fields are `type: "string", format: "data-url"` (not arrays),
+// so — like the signature field — the picked image is base64-encoded and
+// stored directly in formValues rather than sent as a multipart file.
+const DataUrlUploadField = ({
+  label, value, onChange, required, accentColor,
+}: {
+  label: string; value: string; onChange: (val: string) => void;
+  required?: boolean; accentColor: string;
+}) => {
+  const pick = (fromCamera: boolean) => {
+    const launcher = fromCamera ? launchCamera : launchImageLibrary;
+    launcher(
+      { mediaType: 'photo', quality: 0.7, selectionLimit: 1, includeBase64: true, saveToPhotos: fromCamera },
+      (response) => {
+        if (response.didCancel || response.errorCode) return;
+        const asset = response.assets?.[0];
+        if (!asset?.base64) return;
+        const mime = asset.type ?? 'image/jpeg';
+        onChange(`data:${mime};base64,${asset.base64}`);
+      }
+    );
+  };
+
+  return (
+    <View style={styles.fieldContainer}>
+      <Text style={styles.label}>
+        {label} {required && <Text style={{ color: '#ED1C25' }}>*</Text>}
+      </Text>
+
+      {value ? (
+        <View style={{ alignItems: 'center' }}>
+          <Image source={{ uri: value }} style={styles.signaturePreview} resizeMode="contain" />
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+            <TouchableOpacity
+              style={[styles.sigSmallBtn, { borderColor: accentColor }]}
+              onPress={() => pick(false)}
+            >
+              <Ionicons name="cloud-upload-outline" size={16} color={accentColor} />
+              <Text style={[styles.sigSmallBtnText, { color: accentColor }]}>Replace</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sigSmallBtn, { borderColor: '#ED1C25' }]}
+              onPress={() => onChange('')}
+            >
+              <Ionicons name="trash-outline" size={16} color="#ED1C25" />
+              <Text style={[styles.sigSmallBtnText, { color: '#ED1C25' }]}>Remove</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <TouchableOpacity style={[styles.sigActionBtn, { borderColor: accentColor }]} onPress={() => pick(true)}>
+            <Ionicons name="camera-outline" size={20} color={accentColor} />
+            <Text style={[styles.sigActionBtnText, { color: accentColor }]}>Take Photo</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.sigActionBtn, { borderColor: accentColor }]} onPress={() => pick(false)}>
+            <Ionicons name="cloud-upload-outline" size={20} color={accentColor} />
+            <Text style={[styles.sigActionBtnText, { color: accentColor }]}>Upload</Text>
+          </TouchableOpacity>
+        </View>
       )}
     </View>
   );
@@ -431,6 +712,7 @@ const SignatureField = ({
     </View>
   );
 };
+
 const sanitizePayload = (data: Record<string, string>): Record<string, any> => {
   const cleaned: Record<string, any> = {};
   Object.entries(data).forEach(([key, val]) => {
@@ -449,10 +731,8 @@ const renderField = (
   field: FieldProperty,
   formValues: Record<string, string>,
   setFormValues: React.Dispatch<React.SetStateAction<Record<string, string>>>,
-  photoFiles: PhotoFile[],
-  setPhotoFiles: React.Dispatch<React.SetStateAction<PhotoFile[]>>,
-  siteSurveyPhotos: PhotoFile[],
-  setSiteSurveyPhotos: React.Dispatch<React.SetStateAction<PhotoFile[]>>,
+  filesByField: Record<string, PhotoFile[]>,
+  setFilesByField: React.Dispatch<React.SetStateAction<Record<string, PhotoFile[]>>>,
   required: boolean,
   isMulti: boolean | undefined,
   uploadType: string | undefined,
@@ -493,32 +773,53 @@ const renderField = (
     );
   }
 
-  if (fieldKey === 'ebBillUpload' || uploadType === 'ebBill') {
+  // Date / DateTime fields — e.g. Site_Survey_Completed_Date_Time (date-time),
+  // Advance_Paid_Date (date). Driven off field.format, so any new date/date-time
+  // field added to the schema gets the picker automatically.
+  if (field.format === 'date-time' || field.format === 'date') {
     return (
-      <PhotoUploadField
+      <DateTimeField
         key={fieldKey}
         label={label}
-        photoFiles={photoFiles}
-        onChange={(files) => setPhotoFiles(files)}
+        value={value}
+        onChange={(val) => setFormValues((prev) => ({ ...prev, [fieldKey]: val }))}
         required={required}
-        selectionLimit={6}
-        namePrefix="eb_bill"
-        accentColor="#22c55e"
+        mode={field.format === 'date-time' ? 'datetime' : 'date'}
       />
     );
   }
 
-  if (fieldKey === 'siteSurveyPhotos' || uploadType === 'siteSurvey') {
+  // Multi-file array fields — EB_Bill_Copy, Site_Survey_Photos, and every new
+  // "sitePhoto" / "siteVideo" upload field. Driven purely off the schema
+  // (type: array, items.format: data-url) so no per-field hardcoding needed.
+  if (field.type === 'array' && field.items?.format === 'data-url') {
+    const currentFiles = filesByField[fieldKey] ?? [];
     return (
       <PhotoUploadField
         key={fieldKey}
         label={label}
-        photoFiles={siteSurveyPhotos}
-        onChange={(files) => setSiteSurveyPhotos(files)}
+        photoFiles={currentFiles}
+        onChange={(files) => setFilesByField((prev) => ({ ...prev, [fieldKey]: files }))}
         required={required}
-        selectionLimit={10}
-        namePrefix="site_survey"
-        accentColor="#3b82f6"
+        selectionLimit={uploadType === 'ebBill' ? 6 : 10}
+        namePrefix={fieldKey.toLowerCase()}
+        accentColor={colorForUploadType(uploadType)}
+        mediaType={uploadType === 'siteVideo' ? 'video' : 'photo'}
+      />
+    );
+  }
+
+  // Single-file data-url fields — Aadhar Card, PAN Card, Passport Photo,
+  // Bank Passbook Copy, Advance Payment Screenshot, etc.
+  if (field.type === 'string' && field.format === 'data-url') {
+    return (
+      <DataUrlUploadField
+        key={fieldKey}
+        label={label}
+        value={value}
+        onChange={(val) => setFormValues((prev) => ({ ...prev, [fieldKey]: val }))}
+        required={required}
+        accentColor={colorForUploadType(uploadType)}
       />
     );
   }
@@ -612,8 +913,9 @@ const FormScreen = ({
   const [template, setTemplate]                 = useState<Template | null>(null);
   const [loading, setLoading]                   = useState(true);
   const [formValues, setFormValues]             = useState<Record<string, string>>({});
-  const [photoFiles, setPhotoFiles]             = useState<PhotoFile[]>([]);
-  const [siteSurveyPhotos, setSiteSurveyPhotos] = useState<PhotoFile[]>([]);
+  // Every multi-file (array) upload field keeps its own bucket here, keyed by
+  // schema field name — e.g. filesByField.EB_Bill_Copy, filesByField.Roof_Videos.
+  const [filesByField, setFilesByField]         = useState<Record<string, PhotoFile[]>>({});
   const [submitting, setSubmitting]             = useState(false);
   const [isOnline, setIsOnline]                 = useState(true);
   const [offlineBanner, setOfflineBanner]       = useState(false);
@@ -816,6 +1118,10 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
     }
   };
 
+  // Groups from the current template's uischema (used for both rendering
+  // and for building the "visible-only" payload on submit/update).
+  const groups = template?.uischema?.elements ?? [];
+
   // ── Submit (New Form) ──────────────────────────────────────────────────────
   const handleSubmit = async () => {
     setSubmitting(true);
@@ -826,35 +1132,32 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
 
         // Zoho field mapping removed — raw form field names are sent as-is.
         // The backend now owns all field-name handling / type coercion for Zoho.
-        console.log('🔍 Full form payload:', JSON.stringify(formValues, null, 2));
-
+        // Only fields currently VISIBLE per the uischema rules are sent, and
+        // empty-string values are dropped — this is what stops things like an
+        // untouched "Advance_Paid_Date" from reaching Zoho as "".
         const dataPayload = {
           mobileNumber: lead.phone,
           deal_id: lead.dealId,
-          ...formValues,
+          ...buildVisiblePayload(groups, formValues),
         };
+        console.log('🔍 Clean visible payload:', JSON.stringify(dataPayload, null, 2));
         console.log('🆔 [handleSubmit] leadId (local):', lead.id, '| deal_id (backend):', dataPayload.deal_id);
         formData.append('data', JSON.stringify(dataPayload));
 
-        photoFiles.forEach((file) => {
-          formData.append('ebBillPhotos', {
-            uri: file.uri,
-            name: file.name,
-            type: file.type,
-          } as any);
+        // Append every array-upload field under its own multipart part name.
+        Object.entries(filesByField).forEach(([fieldKey, files]) => {
+          const partName = multipartFieldName(fieldKey);
+          files.forEach((file) => {
+            formData.append(partName, {
+              uri: file.uri,
+              name: file.name,
+              type: file.type,
+            } as any);
+          });
         });
 
-        siteSurveyPhotos.forEach((file) => {
-          formData.append('sitePhotos', {
-            uri: file.uri,
-            name: file.name,
-            type: file.type,
-          } as any);
-        });
-
-        console.log(
-          `📤 Submitting form with ${photoFiles.length} EB bill(s) and ${siteSurveyPhotos.length} site survey photo(s)...`
-        );
+        const totalFiles = Object.values(filesByField).reduce((sum, arr) => sum + arr.length, 0);
+        console.log(`📤 Submitting form with ${totalFiles} file(s) across ${Object.keys(filesByField).length} field(s)...`);
 
         const res = await API.post('/user/add', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
@@ -870,8 +1173,7 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
             { text: 'OK', onPress: _navigateBack },
           ]);
           setFormValues({});
-          setPhotoFiles([]);
-          setSiteSurveyPhotos([]);
+          setFilesByField({});
         }
       } catch (err: any) {
         console.error('Submit error:', err);
@@ -885,19 +1187,20 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
     } else {
       try {
         // Zoho field mapping removed — raw form field names are saved/queued as-is.
+        // Offline drafts keep the full formValues (including empty fields) so
+        // resuming the draft later restores exactly what was on screen; the
+        // visible-only cleanup happens at actual submit time (see syncQueue).
         const offlinePayload = {
           mobileNumber: lead.phone,
           deal_id: lead.dealId,
           ...formValues,
-          _photoFiles: photoFiles,
-          _siteSurveyPhotos: siteSurveyPhotos,
+          _filesByField: filesByField,
         };
         console.log('🆔 [handleSubmit/offline] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
         await saveFormDataLocally(lead.id, offlinePayload);
         await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', {
           formData: offlinePayload,
-          photoFiles: photoFiles,
-          siteSurveyPhotos: siteSurveyPhotos,
+          filesByField: filesByField,
           mobile: lead.phone,
         });
         Alert.alert(
@@ -906,8 +1209,7 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
           [{ text: 'OK', onPress: _navigateBack }],
         );
         setFormValues({});
-        setPhotoFiles([]);
-        setSiteSurveyPhotos([]);
+        setFilesByField({});
       } catch (e) {
         Alert.alert('Error', 'Failed to save form offline.');
       } finally {
@@ -917,11 +1219,10 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
   };
 
   // ── Update (Edit Mode) ─────────────────────────────────────────────────────
-  // ── Update (Edit Mode) ─────────────────────────────────────────────────────
   const handleUpdate = async () => {
     setSubmitting(true);
 
-    // ✅ ADD THESE 6 LINES — calculate only the fields that actually changed
+    // Only fields that actually changed from the loaded baseline are sent.
     const changedFields: Record<string, string> = {};
 Object.entries(formValues).forEach(([key, val]) => {
   if (originalValues[key] !== val) {
@@ -940,35 +1241,33 @@ console.log('✏️ Changed fields (diagnostic only):', JSON.stringify(changedFi
         const formData = new FormData();
 
         // Zoho field mapping removed — raw form field names are sent as-is.
+        // buildVisiblePayload drops any changed field that is currently
+        // hidden by a uischema rule, and drops empty-string values, so a
+        // cleared-then-hidden date/amount field never reaches Zoho as "".
         const updatePayload = {
   id: lead.dealId,
   mobileNumber: lead.phone,
   deal_id: lead.dealId,
-  ...sanitizePayload(changedFields),   // ✅ CHANGED — was ...formValues, now only the diff
+  ...buildVisiblePayload(groups, changedFields),   // ✅ CHANGED — was sanitizePayload(changedFields)
 };
 console.log('🆔 [handleUpdate] leadId (local):', lead.id, '| deal_id (backend):', updatePayload.deal_id);
 console.log('📦 updatePayload JSON:', JSON.stringify(updatePayload));
 formData.append('data', JSON.stringify(updatePayload));
 
-        photoFiles.forEach((file) => {
-          formData.append('ebBillPhotos', {
-            uri: file.uri,
-            name: file.name,
-            type: file.type,
-          } as any);
+        // Append every array-upload field under its own multipart part name.
+        Object.entries(filesByField).forEach(([fieldKey, files]) => {
+          const partName = multipartFieldName(fieldKey);
+          files.forEach((file) => {
+            formData.append(partName, {
+              uri: file.uri,
+              name: file.name,
+              type: file.type,
+            } as any);
+          });
         });
 
-        siteSurveyPhotos.forEach((file) => {
-          formData.append('sitePhotos', {
-            uri: file.uri,
-            name: file.name,
-            type: file.type,
-          } as any);
-        });
-
-        console.log(
-          `📤 Updating form with ${photoFiles.length} EB bill(s) and ${siteSurveyPhotos.length} site survey photo(s)...`
-        );
+        const totalFiles = Object.values(filesByField).reduce((sum, arr) => sum + arr.length, 0);
+        console.log(`📤 Updating form with ${totalFiles} file(s) across ${Object.keys(filesByField).length} field(s)...`);
 
         // ✅ Use BASE_URL instead of hardcoded URL
         const res = await API.put('/user/update', formData, {
@@ -984,8 +1283,7 @@ formData.append('data', JSON.stringify(updatePayload));
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
         setFormValues({});
-        setPhotoFiles([]);
-        setSiteSurveyPhotos([]);
+        setFilesByField({});
       } catch (err: any) {
   console.error('Update error:', err);
   console.error('Update error response:', JSON.stringify(err?.response?.data));  // ← ADD THIS
@@ -1003,16 +1301,14 @@ formData.append('data', JSON.stringify(updatePayload));
           mobileNumber: lead.phone,
           deal_id: lead.dealId,
           ...formValues,
-          _photoFiles: photoFiles,
-          _siteSurveyPhotos: siteSurveyPhotos,
+          _filesByField: filesByField,
         };
         console.log('🆔 [handleUpdate/offline] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
         await saveFormDataLocally(lead.id, offlinePayload);
         // ✅ Use BASE_URL instead of hardcoded URL
         await enqueue(`form_update_${lead.id}`, 'FORM_UPDATE', {
   formData: offlinePayload,
-  photoFiles: photoFiles,
-  siteSurveyPhotos: siteSurveyPhotos,
+  filesByField: filesByField,
   mobile: lead.phone,
   url: '/user/update',
 });
@@ -1022,8 +1318,7 @@ formData.append('data', JSON.stringify(updatePayload));
           [{ text: 'OK', onPress: () => navigation.goBack() }],
         );
         setFormValues({});
-        setPhotoFiles([]);
-        setSiteSurveyPhotos([]);
+        setFilesByField({});
       } catch (e) {
         Alert.alert('Error', 'Failed to save update offline.');
       } finally {
@@ -1071,7 +1366,6 @@ formData.append('data', JSON.stringify(updatePayload));
 
   const properties     = template.schema?.properties ?? {};
   const requiredFields = template.schema?.required ?? [];
-  const groups         = template.uischema?.elements ?? [];
 
   return (
     <View style={{ flex: 1 }}>
@@ -1117,6 +1411,12 @@ formData.append('data', JSON.stringify(updatePayload));
               const fieldKey   = element.scope?.split('/').pop() ?? '';
               const field      = properties[fieldKey];
               if (!field) return null;
+
+              // uischema "rule": SHOW/HIDE — skip rendering (and thus
+              // collecting) fields that aren't currently applicable, e.g.
+              // Advance_Paid_Date when Advance_payment_Received is false.
+              if (!isFieldVisible(element, formValues)) return null;
+
               const isRequired = requiredFields.includes(fieldKey);
               const isMulti    = element.options?.multi === true;
               const uploadType = element.options?.uploadType;
@@ -1125,10 +1425,8 @@ formData.append('data', JSON.stringify(updatePayload));
                 field,
                 formValues,
                 setFormValues,
-                photoFiles,
-                setPhotoFiles,
-                siteSurveyPhotos,
-                setSiteSurveyPhotos,
+                filesByField,
+                setFilesByField,
                 isRequired,
                 isMulti,
                 uploadType,

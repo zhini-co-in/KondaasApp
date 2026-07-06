@@ -29,6 +29,7 @@ const InProgressScreen = () => {
   const route = useRoute();
   const isMounted = useRef(true);
   const { lead, completedLeadId } = route.params || {};
+  const [startLocation] = useState(route.params?.initialLocation || null);
 
   const [inProgressLeads, setInProgressLeads] = useState(
     lead ? [{ ...lead, id: lead.id || lead._id }] : []
@@ -163,6 +164,28 @@ await API.post('/notification/trigger', {
   surveyorNumber, customerMobile: item.phone, name: item.name, scenarioType: 3,
 });
     } catch (e) {}
+    // 👇 புதுசா சேர்த்தது: Start location + Reached location — exact lat/long
+  // இரண்டையும் dealId-யோட backend-க்கு அனுப்பி km calc பண்ண save பண்ணும்
+  try {
+    if (startLocation && currentLocation && item.dealId) {
+      await API.post('/location/distance', {
+        dealId:   item.dealId,
+        startLat: startLocation.latitude,
+        startLng: startLocation.longitude,
+        endLat:   currentLocation.latitude,
+        endLng:   currentLocation.longitude,
+      });
+    }
+  } catch (e) {
+    // offline / API fail — queue-ல போட்டு பின்னாடி sync ஆகும்
+    await enqueue(`job_coords_${item.id}`, 'JOB_COORDINATES', {
+      dealId:   item.dealId,
+      startLat: startLocation?.latitude,
+      startLng: startLocation?.longitude,
+      endLat:   currentLocation?.latitude,
+      endLng:   currentLocation?.longitude,
+    });
+  }
     setSelectedLead({ ...item, id: item.id || item._id });
     setReachedModalVisible(true);
   };

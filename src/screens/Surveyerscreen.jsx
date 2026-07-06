@@ -626,6 +626,17 @@ const takeAndUploadPhoto = async () => {
   const handleStart = async (id) => {
     const lead = acceptedLeadsRef.current.find((l) => l.id === id);
     if (!lead) return;
+    const alreadyInProgress = acceptedLeadsRef.current.find(
+      (l) => l.status === 'inprogress' && l.id !== id
+    );
+    if (alreadyInProgress) {
+      Alert.alert(
+        'One Lead at a Time!',
+        `Please complete "${alreadyInProgress.name}" before starting a new lead.`,
+        [{ text: 'OK, Got It' }]
+      );
+      return;
+    }
 
     // STEP 1: ETA + Maps URL calculation
     let etaText  = 'N/A';
