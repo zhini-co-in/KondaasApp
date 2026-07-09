@@ -37,6 +37,8 @@ import {
   startHighFrequencyTracking,
   stopHighFrequencyTracking,
 } from '../service/logisticService';
+import LogisticDealCard from '../components/LogisticDealCard';
+import LogisticCardTrackingModal from '../components/LogisticCardTrackingModal';
 import { saveScannedProduct, confirmDeliveryToWarehouse, getNewAssignedCards, updateLogisticsStatus } from '../service/logisticProductService';
 
 const LogisticScreen = ({ navigation }) => {
@@ -48,7 +50,6 @@ const LogisticScreen = ({ navigation }) => {
   const [isAvailable, setIsAvailable] = useState(false);
   const [currentView, setCurrentView] = useState('scanner');
   const [cameraError, setCameraError] = useState(null);
-  const [showLogoutPopup, setShowLogoutPopup] = useState(false);
   const [scannedData, setScannedData] = useState(null);
   const [isScanning, setIsScanning] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -61,11 +62,22 @@ const LogisticScreen = ({ navigation }) => {
   const [isCompleted, setIsCompleted] = useState(false);
   const [cameraPermissionGranted, setCameraPermissionGranted] = useState(false);
 
-  const [trackingSteps, setTrackingSteps] = useState([
-    { id: 1, label: 'Product Scanned', sub: '', time: '', done: false },
-    { id: 2, label: 'Picked from Warehouse', sub: '', time: '', done: false },
-    { id: 3, label: 'Delivered to Warehouse', sub: '', time: '', done: false },
-  ]);
+  const [cardScanModalVisible, setCardScanModalVisible] = useState(false);
+  const [scanningCardIndex, setScanningCardIndex] = useState(null);
+
+  // 🆕 Hard boolean lock (was timestamp-based). Set synchronously the
+  // instant a code is detected, BEFORE any async work starts, so every
+  // extra camera frame that fires while we're still processing the first
+  // one is dropped instantly. This is what was letting the same QR code
+  // fire the save/update calls 20-30 times in a row.
+  const cardScanLock = useRef(false);
+
+  // 3-column tab state: 'new' | 'inprogress' | 'completed'
+  const [cardTab, setCardTab] = useState('new');
+
+  // Per-card tracking modal (kept for "View full details" / completed cards)
+  const [trackingModalVisible, setTrackingModalVisible] = useState(false);
+  const [trackingModalCard, setTrackingModalCard] = useState(null);
 
   const device = useCameraDevice('back');
   const lastScanTime = useRef(0);
@@ -122,57 +134,7 @@ const LogisticScreen = ({ navigation }) => {
     }
   };
 
-
-  // ✅ புதுசா add பண்ணு
-// useEffect(() => {
-//   const loadExistingPickedProducts = async () => {
-//     try {
-//       const res = await getScannedProducts();
-//       const picked = res.filter((p) => p.status === 'picked');
-
-//       if (picked.length > 0) {
-//         const mapped = picked.map((item) => ({
-//           _id: item._id,
-//           rawCode: item.rawValue || '',
-//           displayText: item.rawValue?.split('\n')[0] || 'Unknown Product',
-//         }));
-
-//         setScannedProducts(mapped);
-//         console.log('📦 Restored picked products:', mapped.length);
-
-//         setTrackingSteps([
-//           {
-//             id: 1,
-//             label: 'Product Scanned',
-//             sub: `${mapped.length} Product${mapped.length > 1 ? 's' : ''} Scanned`,
-//             time: '',
-//             done: true,
-//           },
-//           {
-//             id: 2,
-//             label: 'Picked from Warehouse',
-//             sub: 'Restored from previous session',
-//             time: '',
-//             done: true,
-//           },
-//           {
-//             id: 3,
-//             label: 'Delivered to Drop Warehouse',
-//             sub: 'Waiting to reach drop location...',
-//             time: '',
-//             done: false,
-//           },
-//         ]);
-//       }
-//     } catch (e) {
-//       console.error('loadExistingPickedProducts error:', e);
-//     }
-//   };
-
-//   loadExistingPickedProducts();
-// }, []);
-
- const loadNewAssignedCards = async () => {
+  const loadNewAssignedCards = async () => {
     try {
       const cards = await getNewAssignedCards();
       setNewAssignedCards(cards);
@@ -181,7 +143,7 @@ const LogisticScreen = ({ navigation }) => {
     }
   };
 
-///////////////refresh//////////////////
+  ///////////////refresh//////////////////
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadNewAssignedCards();
@@ -226,124 +188,85 @@ const LogisticScreen = ({ navigation }) => {
     }
   };
 
-  const codeScanner = useCodeScanner({
+  // 🆕 Hardened per-card scanner. Fires once per scan session, closes the
+  // camera modal immediately (before async work), and only releases its
+  // lock once the whole save/update cycle has finished.
+  const cardCodeScanner = useCodeScanner({
     codeTypes: ['qr', 'ean-13', 'ean-8', 'code-128', 'code-39', 'data-matrix', 'aztec'],
-    onCodeScanned: useCallback(
-      (codes) => {
-        if (codes.length === 0 || !isScanning) return;
+    onCodeScanned: (codes) => {
+      if (codes.length === 0 || scanningCardIndex === null) return;
 
-        const now = Date.now();
-        if (now - lastScanTime.current < 600) return;
-        lastScanTime.current = now;
+      if (cardScanLock.current) return; // already processing a scan — drop this frame
+      cardScanLock.current = true; // lock synchronously, before anything async
 
-        const value = codes[0].value?.trim();
-        if (!value) return;
+      const value = codes[0].value?.trim();
+      if (!value) {
+        cardScanLock.current = false;
+        return;
+      }
 
-        setIsScanning(false);
+      const index = scanningCardIndex;
+      const card = newAssignedCards[index];
 
-        // Simple scan - no match check
-        const scannedItem = { rawCode: value, displayText: value };
-        setScannedProducts((prev) => [...prev, scannedItem]);
-        setScannedData(scannedItem);
+      if (!card) {
+        // stale index (list changed / card removed) — bail safely
+        cardScanLock.current = false;
+        setCardScanModalVisible(false);
+        setScanningCardIndex(null);
+        return;
+      }
 
-        saveScannedProduct(value, locationRef.current);
+      // Close the scanner UI immediately so isActive={false} stops the
+      // camera from feeding any more frames, before we even start the
+      // async DB calls.
+      setCardScanModalVisible(false);
+      setScanningCardIndex(null);
 
-        updateToPickedFromWarehouse();
-      },
-      [isScanning]
-    ),
+      (async () => {
+        try {
+          setNewAssignedCards((prev) =>
+            prev.map((item, i) =>
+              i === index ? { ...item, scannedCode: value, scannedAt: new Date().toISOString() } : item
+            )
+          );
+
+          await saveScannedProduct(value, locationRef.current);
+
+          const success = await updateLogisticsStatus(card.deal_id, 'inprogress');
+          if (success) {
+            setNewAssignedCards((prev) =>
+              prev.map((item, i) => (i === index ? { ...item, status: 'inprogress' } : item))
+            );
+            // 🆕 Auto-switch to "In Progress" tab so the card — and its new
+            // "Picked" button — is immediately visible after scanning.
+            // This is why it looked like "nothing happened": the card had
+            // actually moved out of the "New" tab.
+            setCardTab('inprogress');
+          } else {
+            Alert.alert('Error', 'Failed to update status after scan');
+          }
+        } catch (e) {
+          console.error('[cardCodeScanner] scan handling failed:', e);
+          Alert.alert('Error', 'Something went wrong while saving the scan');
+        } finally {
+          cardScanLock.current = false; // ready for the next scan session
+        }
+      })();
+    },
   });
-
-  const updateToPickedFromWarehouse = () => {
-    const total = scannedProducts.length + 1;
-    setIsCompleted(false);
-    setTrackingSteps([
-      {
-        id: 1,
-        label: 'Product Scanned',
-        sub: `${total} Product${total > 1 ? 's' : ''} Scanned`,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        done: true,
-      },
-      {
-        id: 2,
-        label: 'Picked from Warehouse',
-        sub: `Location: ${currentLocation ? `${currentLocation.latitude.toFixed(4)}, ${currentLocation.longitude.toFixed(4)}` : 'Chennai Warehouse'}`,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        done: true,
-      },
-      {
-        id: 3,
-        label: 'Delivered to Drop Warehouse',
-        sub: 'Waiting to reach drop location...',
-        time: '',
-        done: false,
-      },
-    ]);
-  };
-
-  // ✅  — confirmDeliveryToWarehouse call pannudu
-  
-  const markAsDelivered = async () => {
-    if (scannedProducts.length === 0) {
-      Alert.alert('No Products', 'Please scan at least one product');
-      return;
-    }
-
-    setIsCompleted(true);
-
-    // UI Update
-    setTrackingSteps((prev) =>
-      prev.map((step) =>
-        step.id === 3
-          ? {
-              ...step,
-              sub: `Delivered at ${
-                currentLocation
-                  ? `${currentLocation.latitude.toFixed(4)}, ${currentLocation.longitude.toFixed(4)}`
-                  : 'Warehouse'
-              }`,
-              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              done: true,
-            }
-          : step
-      )
-    );
-
-    // ✅ DB status → "dropped"
-    try {
-      await confirmDeliveryToWarehouse(scannedProducts);
-      console.log('✅ Delivery confirmed in DB');
-    } catch (e) {
-      console.error('❌ confirmDeliveryToWarehouse failed:', e);
-    }
-
-    Alert.alert('Success', 'Products Delivered to Warehouse');
-
-    setTimeout(() => {
-      setScannedProducts([]);
-      setScannedData(null);
-      setIsCompleted(false);
-      setTrackingSteps([
-        { id: 1, label: 'Product Scanned', sub: '', time: '', done: false },
-        { id: 2, label: 'Picked from Warehouse', sub: '', time: '', done: false },
-        { id: 3, label: 'Delivered to Warehouse', sub: '', time: '', done: false },
-      ]);
-    }, 1200);
-  };
 
   const handleRescan = () => {
     setScannedData(null);
     setIsScanning(true);
   };
 
-    const showFullDealDetails = (card) => {
+  const showFullDealDetails = (card) => {
     setSelectedDeal(card);
     setShowDealModal(true);
   };
 
-   // Accept → Status change + Start Scan button show
-const acceptAssignedCard = async (card, index) => {
+  // Accept → Status change + Start Scan button show
+  const acceptAssignedCard = async (card, index) => {
     const success = await updateLogisticsStatus(card.deal_id, 'accepted');
 
     if (success) {
@@ -356,27 +279,8 @@ const acceptAssignedCard = async (card, index) => {
     }
   };
 
-   const startScanFlow = (card, index) => {
-    // Just change status to inprogress (no actual scan)
-    setNewAssignedCards((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, status: 'inprogress' } : item))
-    );
-    Alert.alert('In Progress', 'Deal is now in progress. Mark as Completed when done.');
-  };
-
-    const markAsCompleted = async (card, index) => {
-    const success = await updateLogisticsStatus(card.deal_id, 'completed');
-
-    if (success) {
-      setNewAssignedCards((prev) => prev.filter((_, i) => i !== index));
-      Alert.alert('✅ Completed', 'Deal marked as completed');
-    } else {
-      Alert.alert('Error', 'Failed to mark as completed');
-    }
-  };
-
   // Reject Card
-const rejectAssignedCard = async (card, index) => {
+  const rejectAssignedCard = async (card, index) => {
     const success = await updateLogisticsStatus(card.deal_id, 'rejected');
 
     if (success) {
@@ -387,52 +291,146 @@ const rejectAssignedCard = async (card, index) => {
     }
   };
 
+  const openScannerForCard = (index) => {
+    cardScanLock.current = false; // 🆕 fresh lock for this new scan session
+    setScanningCardIndex(index);
+    setCardScanModalVisible(true);
+  };
 
+  const closeCardScanner = () => {
+    setCardScanModalVisible(false);
+    setScanningCardIndex(null);
+  };
 
-  const handleLogout = async () => {
-    stopTracking();
-    stopHighFrequencyTracking();
-    if (Platform.OS === 'android') NativeModules.StartStopService?.stopService();
-    await AsyncStorage.removeItem(USER_DATA);
-    setShowLogoutPopup(false);
-    navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.LOGIN }] });
+  // 🆕 "Picked" button on an in-progress card → status 'picked'
+  const markProductPicked = async (card, index) => {
+    const success = await updateLogisticsStatus(card.deal_id, 'picked');
+    if (success) {
+      setNewAssignedCards((prev) =>
+        prev.map((item, i) =>
+          i === index ? { ...item, status: 'picked', pickedAt: new Date().toISOString() } : item
+        )
+      );
+    } else {
+      Alert.alert('Error', 'Failed to update status');
+    }
+  };
+
+  // 🆕 "Delivered" button on a picked card → status 'completed'
+  const markAsDropped = async (card, index) => {
+    const success = await updateLogisticsStatus(card.deal_id, 'completed');
+    if (success) {
+      setNewAssignedCards((prev) =>
+        prev.map((item, i) =>
+          i === index ? { ...item, status: 'completed', deliveredAt: new Date().toISOString() } : item
+        )
+      );
+      setCardTab('completed'); // 🆕 jump to Completed tab so the result is visible right away
+    } else {
+      Alert.alert('Error', 'Failed to update status');
+    }
+  };
+
+  // Per-card tracking sheet (used for "View full details" / completed cards)
+  const openCardTracking = (card) => {
+    setTrackingModalCard(card);
+    setTrackingModalVisible(true);
+  };
+
+  const closeCardTracking = () => {
+    setTrackingModalVisible(false);
+    setTrackingModalCard(null);
+  };
+
+  const handleConfirmPickupFromModal = async (card) => {
+    const index = newAssignedCards.findIndex((c) => c.deal_id === card.deal_id);
+    if (index === -1) return;
+    await markProductPicked(card, index);
+    closeCardTracking();
+  };
+
+  const handleMarkDeliveredFromModal = async (card) => {
+    const index = newAssignedCards.findIndex((c) => c.deal_id === card.deal_id);
+    if (index === -1) return;
+    await markAsDropped(card, index);
+    closeCardTracking();
+  };
+
+  const handleLogout = () => {
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Yes',
+        onPress: async () => {
+          try {
+            stopTracking();
+            stopHighFrequencyTracking();
+            if (Platform.OS === 'android') NativeModules.StartStopService?.stopService();
+            await AsyncStorage.removeItem(USER_DATA);
+            navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.LOGIN }] });
+          } catch (e) {
+            Alert.alert('Error', 'Failed to logout.');
+          }
+        },
+      },
+    ]);
+  };
+
+  // Map a card's raw status to one of the 3 tab columns
+  const getCardColumn = (status) => {
+    if (status === 'completed') return 'completed';
+    if (status === 'accepted' || status === 'inprogress' || status === 'picked') return 'inprogress';
+    return 'new'; // pending / undefined / rejected-filtered-out-already
+  };
+
+  const filteredCards = newAssignedCards.filter(
+    (card) => getCardColumn(card.status) === cardTab
+  );
+
+  const cardCounts = {
+    new: newAssignedCards.filter((c) => getCardColumn(c.status) === 'new').length,
+    inprogress: newAssignedCards.filter((c) => getCardColumn(c.status) === 'inprogress').length,
+    completed: newAssignedCards.filter((c) => getCardColumn(c.status) === 'completed').length,
   };
 
   if (!isAvailable) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#fff' }}>
-        <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
-        <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-          <Text style={styles.pageTitle}>Logistic Dashboard</Text>
-          <View style={styles.profileRow}>
-            <View style={styles.profileLeft}>
-              <View style={styles.avatarCircle}>
-                <Ionicons name="person" size={28} color="#888" />
-              </View>
-              <View style={{ marginLeft: 12 }}>
-                <Text style={styles.profileName}>Logistic</Text>
-              </View>
-            </View>
+      <LinearGradient colors={['#F00001', '#B00100']} style={{ flex: 1 }}>
+        <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+
+        <TouchableOpacity style={styles.offLogoutBtn} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={28} color="#fff" />
+        </TouchableOpacity>
+
+        <View style={{ position: 'absolute', top: 50, right: 20, alignItems: 'center', zIndex: 10 }}>
+          <View style={styles.offToggleBtn}>
             <Switch
+              trackColor={{ false: '#ffffff88', true: '#fff' }}
+              thumbColor="#F00001"
               value={isAvailable}
               onValueChange={handleToggle}
-              trackColor={{ false: '#ccc', true: '#F00001' }}
-              thumbColor="#fff"
             />
           </View>
-          <LinearGradient colors={['#F00001', '#B00100']} style={styles.logoBanner}>
+        </View>
+
+        <ScrollView
+          contentContainerStyle={{ paddingTop: 60, paddingBottom: 30 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={{ alignItems: 'center', paddingTop: 20, marginBottom: 20 }}>
             <Image
               source={require('../../assets/images/kondass.png')}
-              style={{ width: 160, height: 70 }}
+              style={styles.logo}
               resizeMode="contain"
             />
-          </LinearGradient>
-          <View style={styles.welcomeContainer}>
-            <Text style={styles.welcomeText}>Welcome!</Text>
-            <Text style={styles.welcomeSub}>Let's get started! Turn on availability!</Text>
           </View>
-        </SafeAreaView>
-      </View>
+
+          <View style={styles.offTextContainer}>
+            <Text style={styles.welcome}>Welcome!</Text>
+            <Text style={styles.message}>Let's get started! Turn on availability!</Text>
+          </View>
+        </ScrollView>
+      </LinearGradient>
     );
   }
 
@@ -440,306 +438,79 @@ const rejectAssignedCard = async (card, index) => {
     <View style={{ flex: 1, backgroundColor: '#f8fafc' }}>
       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={styles.topBar}>
-          <Text style={styles.pageTitle}>Logistic Dashboard</Text>
-          <View style={styles.profileRowSmall}>
-            <View style={styles.avatarSmall}>
-              <Ionicons name="person" size={20} color="#888" />
-            </View>
-            <View style={{ marginLeft: 8 }}>
-              <Text style={styles.profileNameSmall}>User</Text>
-              <Text style={styles.profileRoleSmall}>Logistic</Text>
-            </View>
-            <Switch
-              value={isAvailable}
-              onValueChange={handleToggle}
-              trackColor={{ false: '#ccc', true: '#F00001' }}
-              thumbColor="#fff"
-              style={{ marginLeft: 12 }}
-            />
-          </View>
+        <View style={styles.fixedTopBar}>
+          <TouchableOpacity onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={28} color="#F00001" />
+          </TouchableOpacity>
+          <Text style={{ fontSize: 15, fontWeight: '700', color: '#1a1a1a' }}>
+            Logistic Dashboard
+          </Text>
+          <Switch
+            trackColor={{ false: '#ccc', true: '#F00001' }}
+            thumbColor="#fff"
+            value={isAvailable}
+            onValueChange={handleToggle}
+          />
         </View>
-
-        <View style={styles.tabRow}>
-          {['scanner', 'tracking'].map((tab) => (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.tabBtn, currentView === tab && styles.tabBtnActive]}
-              onPress={() => setCurrentView(tab)}
-            >
-              <Text style={[styles.tabText, currentView === tab && styles.tabTextActive]}>
-                {tab === 'scanner' ? 'Scanner' : 'Tracking'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <ScrollView
-          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#F00001']} />
-          }
-        >
-          {currentView === 'scanner' && (
-            <>
-              <View style={styles.cameraBox}>
-                {device && cameraPermissionGranted && !cameraError ? (
-                  <Camera
-                    style={StyleSheet.absoluteFill}
-                    device={device}
-                    isActive={isScanning}
-                    codeScanner={codeScanner}
-                    onError={(error) => setCameraError(error.message)}
-                  />
-                ) : (
-                  <View style={styles.cameraPlaceholder}>
-                    <Ionicons name="camera-off-outline" size={50} color="#aaa" />
-                    <Text style={{ color: '#aaa', marginTop: 12, fontSize: 14, textAlign: 'center', paddingHorizontal: 20 }}>
-                      {cameraError || !cameraPermissionGranted
-                        ? 'Camera permission is required to scan QR / Barcode'
-                        : 'No camera device found'}
-                    </Text>
-                    {!cameraPermissionGranted && (
-                      <TouchableOpacity
-                        style={[styles.rescanBtn, { marginTop: 20, marginHorizontal: 40 }]}
-                        onPress={checkCameraPermission}
-                      >
-                        <LinearGradient colors={['#3b82f6', '#1d4ed8']} style={styles.rescanGradient}>
-                          <Text style={styles.rescanText}>Grant Camera Permission</Text>
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                )}
-                <View style={styles.scanFrameContainer}>
-                  <View style={styles.scanFrame}>
-                    <View style={[styles.corner, styles.cornerTL]} />
-                    <View style={[styles.corner, styles.cornerTR]} />
-                    <View style={[styles.corner, styles.cornerBL]} />
-                    <View style={[styles.corner, styles.cornerBR]} />
-                  </View>
-                </View>
-                <View style={styles.scanLabel}>
-                  <Text style={{ color: '#fff', fontSize: 12 }}>
-                    {isScanning ? 'Align QR / Barcode within frame' : '✓ Scan successful'}
-                  </Text>
-                </View>
-              </View>
-
-              {locationRef.current && (
-                <View style={styles.locationBadge}>
-                  <Ionicons name="location" size={14} color="#22c55e" />
-                  <Text style={styles.locationBadgeText}>
-                    {locationRef.current.latitude.toFixed(5)},{' '}
-                    {locationRef.current.longitude.toFixed(5)}
-                  </Text>
-                </View>
-              )}
-
-              {scannedData && (
-                <View style={styles.card}>
-                  <View style={styles.rowBetween}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                      <MaterialCommunityIcons name="barcode-scan" size={32} color="#3b82f6" />
-                      <View>
-                        <Text style={styles.productName}>{scannedData.displayText}</Text>
-                        <Text style={styles.productId}>{scannedData.rawCode}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.scannedBadge}>
-                      <Ionicons name="checkmark-circle" size={14} color="#22c55e" />
-                      <Text style={styles.scannedText}>Scanned</Text>
-                    </View>
-                  </View>
-                </View>
-              )}
-
-              <TouchableOpacity style={styles.rescanBtn} onPress={handleRescan}>
-                <LinearGradient colors={['#3b82f6', '#1d4ed8']} style={styles.rescanGradient}>
-                  <Ionicons name="scan-outline" size={18} color="#fff" />
-                  <Text style={styles.rescanText}>Scan Again</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </>
-          )}
-
-          {currentView === 'tracking' && (
-            <>
+        <View style={{ flex: 1, paddingTop: 90 }}>
+          <ScrollView
+            contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#F00001']} />
+            }
+          >
+            {/* ASSIGNED DEALS — 3 COLUMN TABS: New / In Progress / Completed */}
+            {newAssignedCards.length > 0 && (
               <View style={styles.card}>
-                <View style={styles.rowBetween}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <MaterialCommunityIcons name="package-variant" size={32} color="#3b82f6" />
-                    <View>
-                      <Text style={styles.productName}>
-                        {scannedProducts.length} Product{scannedProducts.length !== 1 ? 's' : ''} Scanned
-                      </Text>
-                      <Text style={styles.productId}>Total Items: {scannedProducts.length}</Text>
-                    </View>
-                  </View>
-                  <View style={[styles.scannedBadge, isCompleted && { backgroundColor: '#d1fae5' }]}>
-                    <Ionicons name="checkmark-circle" size={14} color={isCompleted ? '#10b981' : '#22c55e'} />
-                    <Text style={[styles.scannedText, isCompleted && { color: '#10b981' }]}>
-                      {isCompleted ? 'Completed' : 'In Progress'}
-                    </Text>
-                  </View>
-                </View>
-              </View>
+                <Text style={[styles.sectionLabel, { color: '#8b5cf6' }]}>
+                  🆕 ASSIGNED DEALS
+                </Text>
 
-              {scannedProducts.length > 0 && (
-                <View style={styles.card}>
-                  <Text style={styles.sectionLabel}>SCANNED PRODUCTS</Text>
-                  {scannedProducts.map((item, index) => (
-                    <View key={index} style={styles.scannedItem}>
-                      <MaterialCommunityIcons name="barcode-scan" size={24} color="#3b82f6" />
-                      <View style={{ marginLeft: 12, flex: 1 }}>
-                        <Text style={{ fontWeight: '600' }}>{item.displayText}</Text>
-                        <Text style={{ fontSize: 12, color: '#64748b' }}>{item.rawCode}</Text>
-                      </View>
-                      <Ionicons name="checkmark-circle" size={20} color="#22c55e" />
-                    </View>
+                {/* Tab Switcher */}
+                <View style={styles.cardTabRow}>
+                  {[
+                    { key: 'new', label: 'New' },
+                    { key: 'inprogress', label: 'In Progress' },
+                    { key: 'completed', label: 'Completed' },
+                  ].map((tab) => (
+                    <TouchableOpacity
+                      key={tab.key}
+                      style={[styles.cardTabBtn, cardTab === tab.key && styles.cardTabBtnActive]}
+                      onPress={() => setCardTab(tab.key)}
+                    >
+                      <Text style={[styles.cardTabText, cardTab === tab.key && styles.cardTabTextActive]}>
+                        {tab.label} ({cardCounts[tab.key]})
+                      </Text>
+                    </TouchableOpacity>
                   ))}
                 </View>
-              )}
 
-              {/* 🔥 NEW ASSIGNED BY ADMIN - SEE MORE + ACCEPT + START SCAN + COMPLETED */}
-              {newAssignedCards.length > 0 && (
-                <View style={styles.card}>
-                  <Text style={[styles.sectionLabel, { color: '#8b5cf6' }]}>
-                    🆕 NEW ASSIGNED BY ADMIN
+                {filteredCards.length === 0 ? (
+                  <Text style={{ color: '#94a3b8', textAlign: 'center', paddingVertical: 20 }}>
+                    No {cardTab === 'inprogress' ? 'in progress' : cardTab} deals
                   </Text>
-                  {newAssignedCards.map((card, index) => {
-                    const products = card.products_info || [];
-                    const visibleProducts = products.slice(0, 3);
-                    const isAccepted = card.status === 'accepted';
-
+                ) : (
+                  filteredCards.map((card) => {
+                    const index = newAssignedCards.indexOf(card); // original array index, for handlers
                     return (
-                      <View key={index} style={[styles.scannedItem, { flexDirection: 'column', alignItems: 'flex-start', paddingBottom: 16 }]}>
-                        <View style={{ flexDirection: 'row', width: '100%' }}>
-                          <MaterialCommunityIcons name="card-account-details" size={24} color="#8b5cf6" />
-                          <View style={{ marginLeft: 12, flex: 1 }}>
-                            <Text style={{ fontWeight: '600' }}>
-                              {products[1] || card.deal_id || 'New Assigned Deal'}
-                            </Text>
-                            <Text style={{ fontSize: 12, color: '#64748b' }}>
-                              {card.address || 'Chennai'} • {new Date(card.assignedAt).toLocaleDateString()}
-                            </Text>
-                          </View>
-                        </View>
-
-                        {/* Products Preview */}
-                        <View style={{ marginLeft: 36, marginTop: 6 }}>
-                          {visibleProducts.map((prod, i) => (
-                            <Text key={i} style={{ fontSize: 12, color: '#666' }}>• {prod}</Text>
-                          ))}
-                          {products.length > 3 && (
-                            <Text style={{ fontSize: 12, color: '#3b82f6' }}>+{products.length - 3} more...</Text>
-                          )}
-                        </View>
-
-                        {/* See More Button */}
-                        <TouchableOpacity 
-                          onPress={() => showFullDealDetails(card)}
-                          style={{ marginLeft: 36, marginTop: 8 }}
-                        >
-                          <Text style={{ color: '#3b82f6', fontWeight: '600' }}>See More</Text>
-                        </TouchableOpacity>
-
-                        {/* Buttons */}
-                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 12, marginLeft: 36 }}>
-                          {!isAccepted ? (
-                            <>
-                              <TouchableOpacity 
-                                style={{ backgroundColor: '#ef4444', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 }}
-                                onPress={() => rejectAssignedCard(card, index)}
-                              >
-                                <Text style={{ color: '#fff', fontWeight: '600' }}>Reject</Text>
-                              </TouchableOpacity>
-
-                              <TouchableOpacity 
-                                style={{ backgroundColor: '#10b981', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 }}
-                                onPress={() => acceptAssignedCard(card, index)}
-                              >
-                                <Text style={{ color: '#fff', fontWeight: '600' }}>Accept</Text>
-                              </TouchableOpacity>
-                            </>
-                          ) : (
-                            <>
-                              <TouchableOpacity 
-                                style={{ backgroundColor: '#3b82f6', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, flex: 1 }}
-                                onPress={() => startScanFlow(card)}
-                              >
-                                <Text style={{ color: '#fff', fontWeight: '600' }}>Start Scan</Text>
-                              </TouchableOpacity>
-
-                              <TouchableOpacity 
-                                style={{ backgroundColor: '#1e40af', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, flex: 1 }}
-                                onPress={() => markAsCompleted(card, index)}
-                              >
-                                <Text style={{ color: '#fff', fontWeight: '600' }}>Completed</Text>
-                              </TouchableOpacity>
-                            </>
-                          )}
-                        </View>
-                      </View>
+                      <LogisticDealCard
+                        key={card.deal_id || index}
+                        card={card}
+                        index={index}
+                        onAccept={acceptAssignedCard}
+                        onReject={rejectAssignedCard}
+                        onStartScan={openScannerForCard}
+                        onMarkPicked={markProductPicked}
+                        onMarkDropped={markAsDropped}
+                        onSeeMore={showFullDealDetails}
+                        onCardPress={openCardTracking}
+                      />
                     );
-                  })}
-                </View>
-              )}
-
-              <Text style={styles.sectionLabel}>LIVE TRACKING UPDATES</Text>
-              <View style={styles.card}>
-                {trackingSteps.map((step, index) => (
-                  <View key={step.id} style={styles.stepRow}>
-                    <View style={styles.stepLeft}>
-                      <View style={[styles.stepDot, step.done ? styles.stepDotDone : styles.stepDotPending]}>
-                        {step.done && <Ionicons name="checkmark" size={12} color="#fff" />}
-                      </View>
-                      {index < trackingSteps.length - 1 && (
-                        <View style={[styles.stepLine, step.done && styles.stepLineDone]} />
-                      )}
-                    </View>
-                    <View style={{ flex: 1, paddingBottom: 20 }}>
-                      <View style={styles.rowBetween}>
-                        <Text style={[styles.stepLabel, step.done && { color: '#22c55e' }]}>{step.label}</Text>
-                        {step.time && <Text style={styles.stepTime}>{step.time}</Text>}
-                      </View>
-                      {step.sub && <Text style={styles.stepSub}>{step.sub}</Text>}
-                    </View>
-                  </View>
-                ))}
-
-                {!isCompleted && (
-                  <TouchableOpacity style={styles.deliverBtn} onPress={markAsDelivered}>
-                    <Ionicons name="truck-check" size={18} color="#fff" />
-                    <Text style={styles.deliverBtnText}>Yes, Delivered</Text>
-                  </TouchableOpacity>
+                  })
                 )}
               </View>
-
-              <Text style={styles.sectionLabel}>Live Location</Text>
-              {locationRef.current && (
-                <View style={styles.liveLocationCard}>
-                  <Ionicons name="location" size={18} color="#22c55e" />
-                  <View style={{ marginLeft: 10 }}>
-                    <Text style={styles.liveLocLabel}>Current Location</Text>
-                    <Text style={styles.liveLocValue}>
-                      {locationRef.current.latitude.toFixed(6)},{' '}
-                      {locationRef.current.longitude.toFixed(6)}
-                    </Text>
-                  </View>
-                </View>
-              )}
-            </>
-          )}
-        </ScrollView>
-
-        <View style={styles.logoutButtonContainer}>
-          <LinearGradient colors={['#F00001', '#d42f2f']} style={styles.logoutButtonGradient}>
-            <TouchableOpacity style={styles.logoutBtn} onPress={() => setShowLogoutPopup(true)}>
-              <Ionicons name="log-out-outline" size={20} color="#fff" />
-              <Text style={styles.logoutText}>Logout</Text>
-            </TouchableOpacity>
-          </LinearGradient>
+            )}
+          </ScrollView>
         </View>
       </SafeAreaView>
 
@@ -748,7 +519,7 @@ const rejectAssignedCard = async (card, index) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Deal Details</Text>
-            
+
             {selectedDeal && (
               <>
                 <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: 10 }}>
@@ -771,8 +542,8 @@ const rejectAssignedCard = async (card, index) => {
               </>
             )}
 
-            <TouchableOpacity 
-              style={styles.acceptBtn} 
+            <TouchableOpacity
+              style={styles.acceptBtn}
               onPress={() => setShowDealModal(false)}
             >
               <Text style={styles.acceptText}>Close</Text>
@@ -781,26 +552,54 @@ const rejectAssignedCard = async (card, index) => {
         </View>
       </Modal>
 
-      <Modal transparent visible={showLogoutPopup} animationType="fade" onRequestClose={() => setShowLogoutPopup(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '100%' }}>
-            <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: 8 }}>Logout</Text>
-            <Text style={{ fontSize: 14, color: '#64748b', marginBottom: 24 }}>Are you sure you want to logout?</Text>
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <TouchableOpacity
-                onPress={() => setShowLogoutPopup(false)}
-                style={{ flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center' }}
-              >
-                <Text style={{ fontWeight: '600', color: '#64748b' }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleLogout}
-                style={{ flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: '#F00001', alignItems: 'center' }}
-              >
-                <Text style={{ fontWeight: '600', color: '#fff' }}>Logout</Text>
+      {/* PER-CARD TRACKING MODAL */}
+      <LogisticCardTrackingModal
+        visible={trackingModalVisible}
+        card={trackingModalCard}
+        onClose={closeCardTracking}
+        onConfirmPickup={handleConfirmPickupFromModal}
+        onMarkDelivered={handleMarkDeliveredFromModal}
+      />
+
+      {/* PRODUCT SCAN MODAL - per card */}
+      <Modal visible={cardScanModalVisible} transparent={false} animationType="slide" onRequestClose={closeCardScanner}>
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          <SafeAreaView style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 }}>
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Scan Product</Text>
+              <TouchableOpacity onPress={closeCardScanner}>
+                <Ionicons name="close" size={28} color="#fff" />
               </TouchableOpacity>
             </View>
-          </View>
+
+            <View style={{ flex: 1 }}>
+              {device && cameraPermissionGranted ? (
+                <Camera
+                  style={StyleSheet.absoluteFill}
+                  device={device}
+                  isActive={cardScanModalVisible}
+                  codeScanner={cardCodeScanner}
+                />
+              ) : (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                  <Text style={{ color: '#fff' }}>Camera not available</Text>
+                </View>
+              )}
+
+              <View style={styles.scanFrameContainer}>
+                <View style={styles.scanFrame}>
+                  <View style={[styles.corner, styles.cornerTL]} />
+                  <View style={[styles.corner, styles.cornerTR]} />
+                  <View style={[styles.corner, styles.cornerBL]} />
+                  <View style={[styles.corner, styles.cornerBR]} />
+                </View>
+              </View>
+
+              <View style={styles.scanLabel}>
+                <Text style={{ color: '#fff', fontSize: 12 }}>Align QR / Barcode within frame</Text>
+              </View>
+            </View>
+          </SafeAreaView>
         </View>
       </Modal>
     </View>
@@ -877,12 +676,49 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  completedPill: {
+    backgroundColor: '#22c55e',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  completedPillText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  logo: { width: 200, height: 100 },
   modalContent: {
     backgroundColor: '#fff',
     width: '90%',
     borderRadius: 16,
     padding: 20,
     maxHeight: '80%',
+  },
+  offLogoutBtn: { position: 'absolute', top: 55, left: 20, zIndex: 10 },
+  offToggleBtn: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    elevation: 4,
+  },
+  avatarCircleWhite: {
+    width: 60, height: 60, borderRadius: 30,
+    backgroundColor: '#fff',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  offTextContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 30 },
+  welcome: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
+  message: { marginTop: 10, color: '#ffffffcc', textAlign: 'center', paddingHorizontal: 30 },
+  fixedTopBar: {
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingTop: 50, paddingBottom: 12,
+    backgroundColor: '#fff', elevation: 6,
   },
   modalTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 15 },
   acceptBtn: {
@@ -893,4 +729,34 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   acceptText: { color: '#fff', fontWeight: '600' },
+
+  // 3-COLUMN TAB STYLES
+  cardTabRow: {
+    flexDirection: 'row',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 10,
+    padding: 4,
+    marginBottom: 14,
+  },
+  cardTabBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  cardTabBtnActive: {
+    backgroundColor: '#fff',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  cardTabText: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  cardTabTextActive: {
+    color: '#8b5cf6',
+  },
 });
