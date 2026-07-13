@@ -599,18 +599,26 @@ const DataUrlUploadField = ({
   required?: boolean; accentColor: string;
 }) => {
   const pick = (fromCamera: boolean) => {
-    const launcher = fromCamera ? launchCamera : launchImageLibrary;
-    launcher(
-      { mediaType: 'photo', quality: 0.7, selectionLimit: 1, includeBase64: true, saveToPhotos: fromCamera },
-      (response) => {
-        if (response.didCancel || response.errorCode) return;
-        const asset = response.assets?.[0];
-        if (!asset?.base64) return;
-        const mime = asset.type ?? 'image/jpeg';
-        onChange(`data:${mime};base64,${asset.base64}`);
-      }
-    );
-  };
+  const launcher = fromCamera ? launchCamera : launchImageLibrary;
+  launcher(
+    {
+      mediaType: 'photo',
+      quality: 0.5,          // ✅ CHANGED — 0.7 → 0.5, screenshot ku high quality theva illa
+      maxWidth: 1000,        // ✅ ADDED — camera resolution 4000px+ irundhalum cap pannum
+      maxHeight: 1000,       // ✅ ADDED
+      selectionLimit: 1,
+      includeBase64: true,
+      saveToPhotos: fromCamera,
+    },
+    (response) => {
+      if (response.didCancel || response.errorCode) return;
+      const asset = response.assets?.[0];
+      if (!asset?.base64) return;
+      const mime = asset.type ?? 'image/jpeg';
+      onChange(`data:${mime};base64,${asset.base64}`);
+    }
+  );
+};
 
   return (
     <View style={styles.fieldContainer}>
@@ -670,17 +678,17 @@ const SignatureField = ({
   };
 
   const handleUpload = () => {
-    launchImageLibrary(
-      { mediaType: 'photo', quality: 0.7, selectionLimit: 1, includeBase64: true },
-      (response) => {
-        if (response.didCancel || response.errorCode) return;
-        const asset = response.assets?.[0];
-        if (!asset?.base64) return;
-        const mime = asset.type ?? 'image/jpeg';
-        onChange(`data:${mime};base64,${asset.base64}`);
-      }
-    );
-  };
+  launchImageLibrary(
+    { mediaType: 'photo', quality: 0.5, maxWidth: 1000, maxHeight: 1000, selectionLimit: 1, includeBase64: true },
+    (response) => {
+      if (response.didCancel || response.errorCode) return;
+      const asset = response.assets?.[0];
+      if (!asset?.base64) return;
+      const mime = asset.type ?? 'image/jpeg';
+      onChange(`data:${mime};base64,${asset.base64}`);
+    }
+  );
+};
 
   const handleClear = () => onChange('');
 
@@ -1185,7 +1193,7 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
 
   const fetchTemplate = async () => {
     try {
-      // solarv1 is the confirmed-correct template id — left unchanged.
+      // solarv1
       const res = await API.get('/template/get/solarv1');
       const templateData = res.data?.data || res.data?.template || res.data;
       if (!templateData?.schema || !templateData?.uischema) {
