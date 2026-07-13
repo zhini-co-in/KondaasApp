@@ -40,7 +40,11 @@ interface UIRule {
 }
 interface UIElement {
   type: string; scope?: string; label?: string;
-  elements?: UIElement[]; options?: { multi?: boolean; uploadType?: string };
+  elements?: UIElement[];
+  // ✅ ADDED: readOnly — lets uischema mark a field (e.g. Report_Number,
+  // Plant_Cost_After_Subsidy) as view-only so the field renderer disables
+  // editing instead of silently showing an editable text box.
+  options?: { multi?: boolean; uploadType?: string; readOnly?: boolean };
   rule?: UIRule;
 }
 interface UISchema { type: string; elements: UIElement[]; }
@@ -86,6 +90,55 @@ const colorForUploadType = (uploadType?: string): string => {
 // MUST be the exact schema field key — no renaming, or the backend can't
 // match it to the schema / pick the right folder.
 const multipartFieldName = (fieldKey: string): string => fieldKey;
+
+// ── Zoho "Single Line" text-field enforcer ──────────────────────────────────
+// Some schema fields (Report_Number, Zip_Postal_Code, etc.) are plain
+// strings on our side, but if a value happens to be all-digits (e.g.
+// Report_Number = "105"), some serialization paths can let it slip through
+// as a JS number instead of a string, which Zoho's "Single Line" (text)
+// custom fields reject with "expected_data_type":"text". This list is the
+// single source of truth for which schema fields must always be forced to
+// a real string right before they're sent — add a new field key here if a
+// future Zoho text field starts throwing the same INVALID_DATA error.
+const ZOHO_TEXT_FIELDS = [
+  'Report_Number',
+  'Zip_Postal_Code',
+  'Consumer_Number',
+  'Advance_Payment_UTR',
+];
+
+const enforceZohoTextFields = (
+  payload: Record<string, any>,
+): Record<string, any> => {
+  const fixed = { ...payload };
+  ZOHO_TEXT_FIELDS.forEach((key) => {
+    if (fixed[key] !== undefined && fixed[key] !== null) {
+      fixed[key] = String(fixed[key]).trim();
+    }
+  });
+  return fixed;
+};
+
+// ── Zoho DateTime formatter ──────────────────────────────────────────────────
+// Zoho's DateTime custom field expects "yyyy-MM-ddTHH:mm:ss±HH:mm" (local
+// time with a numeric offset) — NOT raw .toISOString(), which returns UTC
+// with a trailing "Z" and milliseconds (e.g. "2026-07-13T05:00:00.000Z").
+// Sending that raw ISO-Z string is exactly what triggers Zoho's
+// "expected_data_type":"datetime" INVALID_DATA error. Every place that used
+// to call .toISOString() for a datetime field now calls this instead.
+const toZohoDateTime = (date: Date): string => {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const offsetMin = -date.getTimezoneOffset(); // e.g. IST => +330
+  const sign = offsetMin >= 0 ? '+' : '-';
+  const offH = pad(Math.floor(Math.abs(offsetMin) / 60));
+  const offM = pad(Math.abs(offsetMin) % 60);
+
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}` +
+    `${sign}${offH}:${offM}`
+  );
+};
 
 // ── Conditional field visibility (uischema "rule": SHOW/HIDE) ──────────────────
 // formValues stores everything as strings, so boolean/number `const` values
@@ -140,10 +193,10 @@ const buildVisiblePayload = (
 
 // ── Dropdown ──────────────────────────────────────────────────────────────────
 const DropdownPicker = ({
-  label, options, value, onChange, required,
+  label, options, value, onChange, required, readOnly,
 }: {
   label: string; options: string[]; value: string;
-  onChange: (val: string) => void; required?: boolean;
+  onChange: (val: string) => void; required?: boolean; readOnly?: boolean;
 }) => {
   const [visible, setVisible] = useState(false);
   return (
@@ -151,11 +204,15 @@ const DropdownPicker = ({
       <Text style={styles.label}>
         {label} {required && <Text style={{ color: '#ED1C25' }}>*</Text>}
       </Text>
-      <TouchableOpacity style={styles.dropdownBtn} onPress={() => setVisible(true)}>
+      <TouchableOpacity
+        style={[styles.dropdownBtn, readOnly && styles.readOnlyBox]}
+        onPress={() => { if (!readOnly) setVisible(true); }}
+        activeOpacity={readOnly ? 1 : 0.7}
+      >
         <Text style={{ color: value ? '#333' : '#aaa', fontSize: 14, flex: 1 }}>
           {value || 'Select...'}
         </Text>
-        <Ionicons name="chevron-down-outline" size={16} color="#888" />
+        {!readOnly && <Ionicons name="chevron-down-outline" size={16} color="#888" />}
       </TouchableOpacity>
       <Modal visible={visible} transparent animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setVisible(false)}>
@@ -254,15 +311,17 @@ const GpsLocationField = ({
 
 // ── Date / DateTime Picker Field ────────────────────────────────────────────────
 // Handles schema fields with format: "date" (date only) or format: "date-time"
-// (date + time). Stores value as an ISO string in formValues.
+// (date + time). Stores value as a Zoho-compatible string in formValues:
+//   - date-only:      "yyyy-MM-dd"
+//   - date-time:      "yyyy-MM-ddTHH:mm:ss±HH:mm"  (via toZohoDateTime)
 // Android's native picker has no combined "datetime" mode, so on Android a
 // date-time field opens the date picker first, then the time picker.
 // iOS supports mode="datetime" directly in a single spinner.
 const DateTimeField = ({
-  label, value, onChange, required, mode,
+  label, value, onChange, required, mode, readOnly,
 }: {
   label: string; value: string; onChange: (val: string) => void;
-  required?: boolean; mode: 'date' | 'datetime';
+  required?: boolean; mode: 'date' | 'datetime'; readOnly?: boolean;
 }) => {
   const [showDate, setShowDate] = useState(false);
   const [showTime, setShowTime] = useState(false);
@@ -279,6 +338,7 @@ const DateTimeField = ({
     : '';
 
   const openPicker = () => {
+    if (readOnly) return; // ✅ ADDED — readOnly fields never open the picker
     setTempDate(parsedValue ?? new Date());
     setShowDate(true);
   };
@@ -301,7 +361,10 @@ const DateTimeField = ({
 
     // datetime handling
     if (Platform.OS === 'ios') {
-      onChange(selected.toISOString());
+      // ✅ CHANGED — was selected.toISOString() (UTC + "Z" + millis, which
+      // Zoho's DateTime field rejects). Now uses the local-time,
+      // offset-formatted string Zoho actually expects.
+      onChange(toZohoDateTime(selected));
       return;
     }
 
@@ -315,7 +378,8 @@ const DateTimeField = ({
 
     const combined = new Date(tempDate);
     combined.setHours(selected.getHours(), selected.getMinutes(), 0, 0);
-    onChange(combined.toISOString());
+    // ✅ CHANGED — was combined.toISOString(); now Zoho-formatted.
+    onChange(toZohoDateTime(combined));
   };
 
   const clear = () => onChange('');
@@ -325,19 +389,23 @@ const DateTimeField = ({
       <Text style={styles.label}>
         {label} {required && <Text style={{ color: '#ED1C25' }}>*</Text>}
       </Text>
-      <TouchableOpacity style={styles.dropdownBtn} onPress={openPicker}>
+      <TouchableOpacity
+        style={[styles.dropdownBtn, readOnly && styles.readOnlyBox]}
+        onPress={openPicker}
+        activeOpacity={readOnly ? 1 : 0.7}
+      >
         <Ionicons name="calendar-outline" size={16} color="#888" style={{ marginRight: 8 }} />
         <Text style={{ color: parsedValue ? '#333' : '#aaa', fontSize: 14, flex: 1 }}>
           {displayValue || (mode === 'datetime' ? 'Select date & time...' : 'Select date...')}
         </Text>
-        {!!parsedValue && (
+        {!readOnly && !!parsedValue && (
           <TouchableOpacity onPress={clear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Ionicons name="close-circle" size={18} color="#ccc" />
           </TouchableOpacity>
         )}
       </TouchableOpacity>
 
-      {showDate && (
+      {showDate && !readOnly && (
         <DateTimePicker
           value={tempDate}
           mode={Platform.OS === 'ios' ? mode : 'date'}
@@ -345,7 +413,7 @@ const DateTimeField = ({
           onChange={handleDateChange}
         />
       )}
-      {showTime && Platform.OS === 'android' && (
+      {showTime && !readOnly && Platform.OS === 'android' && (
         <DateTimePicker
           value={tempDate}
           mode="time"
@@ -740,6 +808,7 @@ const renderField = (
   gpsMapLink: string,
   gpsLoading: boolean,
   onRefetchGps: () => void,
+  isReadOnly: boolean,               // ✅ ADDED
 ) => {
   const label = field.title ?? fieldKey;
   const value = formValues[fieldKey] ?? '';
@@ -785,6 +854,7 @@ const renderField = (
         onChange={(val) => setFormValues((prev) => ({ ...prev, [fieldKey]: val }))}
         required={required}
         mode={field.format === 'date-time' ? 'datetime' : 'date'}
+        readOnly={isReadOnly}          // ✅ ADDED
       />
     );
   }
@@ -830,6 +900,7 @@ const renderField = (
         key={fieldKey} label={label} options={field.enum} value={value}
         onChange={(val) => setFormValues((prev) => ({ ...prev, [fieldKey]: val }))}
         required={required}
+        readOnly={isReadOnly}          // ✅ ADDED
       />
     );
   }
@@ -864,10 +935,11 @@ const renderField = (
           {label} {required && <Text style={{ color: '#ED1C25' }}>*</Text>}
         </Text>
         <TextInput
-          style={[styles.input, styles.textarea]}
+          style={[styles.input, styles.textarea, isReadOnly && styles.readOnlyBox]}
           multiline numberOfLines={4} value={value}
           onChangeText={(val) => setFormValues((prev) => ({ ...prev, [fieldKey]: val }))}
           placeholderTextColor="#aaa" placeholder={label}
+          editable={!isReadOnly}       // ✅ ADDED
         />
       </View>
     );
@@ -879,10 +951,12 @@ const renderField = (
         {label} {required && <Text style={{ color: '#ED1C25' }}>*</Text>}
       </Text>
       <TextInput
-        style={styles.input} value={value}
+        style={[styles.input, isReadOnly && styles.readOnlyBox]}
+        value={value}
         onChangeText={(val) => setFormValues((prev) => ({ ...prev, [fieldKey]: val }))}
         placeholderTextColor="#aaa" placeholder={label}
         keyboardType={field.type === 'number' ? 'numeric' : 'default'}
+        editable={!isReadOnly}         // ✅ ADDED
       />
     </View>
   );
@@ -1093,8 +1167,25 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
     saveFormDataLocally(lead.id, formValues);
   }, [formValues]);
 
+  // ✅ ADDED — auto-calculate Plant_Cost_After_Subsidy (readOnly field) any
+  // time Total_Plant_Cost or Subsidy changes, so the value shown/submitted
+  // always stays in sync instead of relying on manual entry.
+  useEffect(() => {
+    const total = parseFloat(formValues.Total_Plant_Cost || '');
+    const subsidy = parseFloat(formValues.Subsidy || '');
+    if (isNaN(total)) return; // nothing entered yet — leave field as-is
+
+    const safeSubsidy = isNaN(subsidy) ? 0 : subsidy;
+    const computed = String(total - safeSubsidy);
+
+    if (formValues.Plant_Cost_After_Subsidy !== computed) {
+      setFormValues((prev) => ({ ...prev, Plant_Cost_After_Subsidy: computed }));
+    }
+  }, [formValues.Total_Plant_Cost, formValues.Subsidy]);
+
   const fetchTemplate = async () => {
     try {
+      // solarv1 is the confirmed-correct template id — left unchanged.
       const res = await API.get('/template/get/solarv1');
       const templateData = res.data?.data || res.data?.template || res.data;
       if (!templateData?.schema || !templateData?.uischema) {
@@ -1126,6 +1217,19 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
   const handleSubmit = async () => {
     setSubmitting(true);
 
+    // ✅ ADDED — "Site Survey Completed Date & Time" is auto-stamped with the
+    // live current date/time right at submission, instead of relying on a
+    // manual picker value. Computed here (not via setFormValues) because the
+    // state update below is async and the payload is built synchronously
+    // right after — using `nowZoho` directly guarantees the fresh timestamp
+    // actually makes it into this submission.
+    // ✅ CHANGED — was `new Date().toISOString()` (UTC + "Z" + millis,
+    // rejected by Zoho's DateTime field). Now formatted via toZohoDateTime()
+    // as local time with a proper "+HH:mm" offset, e.g. 2026-07-13T14:30:00+05:30.
+    const nowZoho = toZohoDateTime(new Date());
+    const stampedValues = { ...formValues, Site_survey_Completed_Date_Time: nowZoho };
+    setFormValues(stampedValues); // keeps on-screen field in sync too
+
     if (isOnline) {
       try {
         const formData = new FormData();
@@ -1138,7 +1242,7 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
         const dataPayload = {
           mobileNumber: lead.phone,
           deal_id: lead.dealId,
-          ...buildVisiblePayload(groups, formValues),
+          ...buildVisiblePayload(groups, stampedValues),
         };
         console.log('🔍 Clean visible payload:', JSON.stringify(dataPayload, null, 2));
         console.log('🆔 [handleSubmit] leadId (local):', lead.id, '| deal_id (backend):', dataPayload.deal_id);
@@ -1193,7 +1297,7 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
         const offlinePayload = {
           mobileNumber: lead.phone,
           deal_id: lead.dealId,
-          ...formValues,
+          ...stampedValues, // ✅ CHANGED — was ...formValues, now carries the live completion timestamp
           _filesByField: filesByField,
         };
         console.log('🆔 [handleSubmit/offline] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
@@ -1420,6 +1524,7 @@ formData.append('data', JSON.stringify(updatePayload));
               const isRequired = requiredFields.includes(fieldKey);
               const isMulti    = element.options?.multi === true;
               const uploadType = element.options?.uploadType;
+              const isReadOnly = element.options?.readOnly === true; // ✅ ADDED
               return renderField(
                 fieldKey,
                 field,
@@ -1434,6 +1539,7 @@ formData.append('data', JSON.stringify(updatePayload));
                 gpsMapLink,
                 gpsLoading,
                 fetchGpsLocation,
+                isReadOnly,           // ✅ ADDED
               );
             })}
           </View>
@@ -1513,6 +1619,10 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
     padding: 10, fontSize: 14, color: '#333', backgroundColor: '#fafafa',
+  },
+  // ✅ ADDED — visually distinct style for readOnly / auto-filled fields
+  readOnlyBox: {
+    backgroundColor: '#eef1f4', borderColor: '#dbe0e5', opacity: 0.85,
   },
   textarea: { minHeight: 90, textAlignVertical: 'top' },
   dropdownBtn: {

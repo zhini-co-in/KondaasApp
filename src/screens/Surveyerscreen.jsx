@@ -208,8 +208,7 @@ useFocusEffect(
         phone:      item.mobile,
         city:       item.city,
         comment:    item.comment,
-        // 👇 FIX: backend field name எதுவா இருந்தாலும் (referredBy /
-        // referred_by / Referred_By) catch பண்ணும் மாதிரி fallback
+
         referredBy: item.referredBy || item.referred_by || item.Referred_By || null,
         date:       item.assignedAt,
         time:       item.time,
@@ -219,12 +218,18 @@ useFocusEffect(
         email:      item.email,
         address:    item.address,
         status:     item.siteSurveyStatus ?? 'notassigned',
-        // 👇 புதுசா சேர்த்தது: backend-ல siteSurveyDateTime field save ஆனா
-        // (Zoho payload-ல Site_Survey_Req_Date_Time) இங்க கிடைக்கும்.
-        // NOTE: backend zohoWorkflowAssignment-ல fullDealPayload object-ல
-        // "siteSurveyDateTime: Site_Survey_Req_Date_Time" சேர்க்கணும்,
-        // இல்லனா இந்த field எப்பவும் null-ஆ தான் வரும்.
+        
         scheduledAt: item.siteSurveyDateTime || null,
+        productType:            item.productType,
+  orderType:               item.orderType,
+  projectType:             item.projectType,
+  projectModel:            item.projectModel,
+  inverterConnectionType:  item.inverterConnectionType,
+  inverterCapacity:        item.inverterCapacity,
+  solarPanelModel:         item.solarPanelModel,
+  solarPanelBrand:         item.solarPanelBrand,
+  noOfPanels:              item.noOfPanels,
+  roofType:                item.roofType,
       }));
 
       if (!isMounted.current) return;

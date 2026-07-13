@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, Linking, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Linking, Alert, Modal, ScrollView } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { getDistance, getRoadDistanceKm } from '../service/locationService';
 import API from '../api/api1';
@@ -55,11 +55,13 @@ const LeadCard = ({
   const withinRange = distToLead !== null && distToLead <= 300;
   const notifiedRef = useRef(false);
 
-  // 👇 புதுசா சேர்த்தது: Road distance (OSRM) — "Distance" box la DISPLAY
-  // பண்ண மட்டும் use ஆகும். withinRange logic இதை touch பண்ணல.
+  // 👇 Road distance (OSRM) — "Distance" box la DISPLAY பண்ண மட்டும் use ஆகும்.
   const [roadDistanceKm, setRoadDistanceKm] = useState(null);
   const [distanceLoading, setDistanceLoading] = useState(false);
   const lastFetchRef = useRef({ time: 0, straightKm: null });
+
+  // 👇 புதுசா சேர்த்தது: Interested Product popup state
+  const [productModalVisible, setProductModalVisible] = useState(false);
 
   useEffect(() => {
     if (cardType !== 'inprogress') return;
@@ -116,6 +118,24 @@ const LeadCard = ({
       Alert.alert('Location not available', 'No coordinates or address found.');
     }
   };
+
+  // ── Interested Product — data prep ───────────────────────────────────────
+  // 👇 புதுசா சேர்த்தது: backend-ல இருந்து வரும் product fields-ஐ ஒரு array-ஆ
+  // தயார் பண்ணி, value இருக்கிற fields மட்டும் காட்டறோம்.
+  const productFields = [
+    { label: 'Product Type',        value: item.productType },
+    { label: 'Order Type',          value: item.orderType },
+    { label: 'Project Type',        value: item.projectType },
+    { label: 'Project Model',       value: item.projectModel },
+    { label: 'Inverter Connection', value: item.inverterConnectionType },
+    { label: 'Inverter Capacity',   value: item.inverterCapacity },
+    { label: 'Solar Panel Brand',   value: item.solarPanelBrand },
+    { label: 'Solar Panel Model',   value: item.solarPanelModel },
+    { label: 'No. of Panels',       value: item.noOfPanels },
+    { label: 'Roof Type',           value: item.roofType },
+  ].filter((f) => f.value !== null && f.value !== undefined && f.value !== '');
+
+  const hasProductInfo = productFields.length > 0;
 
   // ── Action buttons — cardType-based ──────────────────────────────────────
   const renderActions = () => {
@@ -237,9 +257,7 @@ const LeadCard = ({
             Referred by — <Text style={{ fontWeight: 'bold' }}>{item.referredBy || 'N/A'}</Text>
           </Text>
         </View>
-        {/* 👇 FIX: formatDate() helper-ஐ use பண்ணி readable-ஆ காட்டு.
-            முன்பு "{item.date} • {item.time}" raw ISO string-ஐயும், backend-ல
-            இல்லாத "time" field-ஐயும் (எப்போதும் undefined) நேரடியா காட்டியது. */}
+        {/* formatDate() helper-ஐ use பண்ணி readable-ஆ காட்டு. */}
         <Text style={styles.date}>{formatDate(item.date)}</Text>
       </View>
 
@@ -270,6 +288,18 @@ const LeadCard = ({
             <Ionicons name="chatbubble-outline" size={16} color={item.phone ? '#555' : '#ccc'} />
             <Ionicons name="mail-outline" size={16} color={item.email ? '#555' : '#ccc'} />
           </View>
+
+          {/* 👇 புதுசா சேர்த்தது: Interested Product chip — tap பண்ணா popup open */}
+          {hasProductInfo && (
+            <TouchableOpacity
+              style={styles.productChip}
+              onPress={() => setProductModalVisible(true)}
+            >
+              <Ionicons name="cube-outline" size={13} color="#185FA5" style={{ marginRight: 4 }} />
+              <Text style={styles.productChipText}>Interested Product</Text>
+              <Ionicons name="chevron-forward" size={12} color="#185FA5" style={{ marginLeft: 2 }} />
+            </TouchableOpacity>
+          )}
         </View>
 
         {renderActions()}
@@ -289,6 +319,45 @@ const LeadCard = ({
           }]}>See more</Text>
         </TouchableOpacity>
       </View>
+
+      {/* 👇 புதுசா சேர்த்தது: Interested Product Modal */}
+      <Modal
+        visible={productModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setProductModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { maxHeight: '75%' }]}>
+            <View style={styles.productModalHeader}>
+              <Ionicons name="cube" size={20} color="#185FA5" style={{ marginRight: 8 }} />
+              <Text style={styles.modalTitle}>Interested Product</Text>
+            </View>
+
+            <ScrollView style={{ marginTop: 10, marginBottom: 16 }} showsVerticalScrollIndicator={false}>
+              {productFields.length > 0 ? (
+                productFields.map((f, idx) => (
+                  <View key={idx} style={styles.productRow}>
+                    <Text style={styles.productLabel}>{f.label}</Text>
+                    <Text style={styles.productValue}>{String(f.value)}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={{ textAlign: 'center', color: '#999', paddingVertical: 20 }}>
+                  No product details available.
+                </Text>
+              )}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.modalSaveBtn}
+              onPress={() => setProductModalVisible(false)}
+            >
+              <Text style={styles.modalSaveBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -301,6 +370,7 @@ const CompletedPill = () => (
 );
 
 export default LeadCard;
+
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff', marginHorizontal: 15, marginBottom: 12,
@@ -357,4 +427,36 @@ const styles = StyleSheet.create({
     paddingVertical: 8, borderRadius: 6, alignItems: 'center', width: 100,
   },
   smallSiteBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold', textAlign: 'center' },
+
+  // 👇 புதுசா சேர்த்தது: Interested Product chip + modal styles
+  productChip: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#E6F1FB', alignSelf: 'flex-start',
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 20, marginTop: 8,
+  },
+  productChipText: { fontSize: 11, color: '#185FA5', fontWeight: '600' },
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  modalBox: {
+    backgroundColor: '#fff', width: '85%',
+    borderRadius: 16, padding: 20, elevation: 10,
+  },
+  productModalHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+  },
+  modalTitle: { fontSize: 17, fontWeight: 'bold', color: '#222', textAlign: 'center' },
+  productRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    paddingVertical: 9, borderBottomWidth: 0.5, borderBottomColor: '#eee',
+  },
+  productLabel: { fontSize: 13, color: '#666', fontWeight: '600', flex: 1 },
+  productValue: { fontSize: 13, color: '#222', flex: 1, textAlign: 'right' },
+  modalSaveBtn: {
+    backgroundColor: '#ED1C25', paddingVertical: 12,
+    borderRadius: 8, alignItems: 'center',
+  },
+  modalSaveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
 });
