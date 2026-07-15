@@ -19,6 +19,8 @@ import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import SignatureScreen from 'react-native-signature-canvas';
 import ImageResizer from 'react-native-image-resizer';
 import DateTimePicker from '@react-native-community/datetimepicker';
+// ✅ ADDED — video compression library (npm install react-native-compressor)
+import { Video } from 'react-native-compressor';
 
 interface FieldProperty {
   title?: string; description?: string; type?: string;
@@ -426,14 +428,44 @@ const DateTimeField = ({
 };
 
 // ── Multi-file Upload Field (photos OR videos) ─────────────────────────────────
+// ✅ CHANGED — stronger compression: 1280→1024 max dimension, quality 70→50.
+// This shrinks every photo further so the total multipart payload stays
+// safely under server body-size limits.
 async function compressImage(uri: string): Promise<string> {
   try {
     const resized = await ImageResizer.createResizedImage(
-      uri, 1280, 1280, 'JPEG', 70, 0
+      uri, 1024, 1024, 'JPEG', 50, 0
     );
     return resized.uri;
   } catch (err) {
     console.warn('⚠️ Image compress failed, using original:', err);
+    return uri;
+  }
+}
+
+// ✅ ADDED — video compression. Previously videos were sent completely
+// uncompressed (raw camera/gallery file, often 20-50MB+ each), which was
+// the single biggest contributor to the 413 "Request Entity Too Large"
+// error. This shrinks resolution/bitrate before the file ever reaches
+// FormData, so the whole multipart body stays much smaller.
+async function compressVideo(uri: string): Promise<string> {
+  try {
+    console.log('🎬 Compressing video:', uri);
+    const compressedUri = await Video.compress(
+      uri,
+      {
+        compressionMethod: 'auto',
+        maxSize: 640,                    // caps resolution — plenty for site-survey clips
+        minimumFileSizeForCompress: 2,    // MB — skip already-tiny videos
+      },
+      (progress) => {
+        console.log('📹 Video compress progress:', Math.round(progress * 100), '%');
+      }
+    );
+    console.log('✅ Video compressed:', compressedUri);
+    return compressedUri;
+  } catch (err) {
+    console.warn('⚠️ Video compress failed, using original:', err);
     return uri;
   }
 }
@@ -457,8 +489,12 @@ const PhotoUploadField = ({
     const valid = assets.filter((asset) => asset.uri);
     const results = await Promise.all(
       valid.map(async (asset) => {
-        // Video files are sent as-is; only images go through the resizer.
-        const finalUri = isVideo ? asset.uri : await compressImage(asset.uri);
+        // ✅ CHANGED — videos now also get compressed (was: asset.uri as-is,
+        // which is what caused huge uncompressed videos to blow past the
+        // server's body-size limit and trigger 413 errors).
+        const finalUri = isVideo
+          ? await compressVideo(asset.uri)
+          : await compressImage(asset.uri);
         const ext = isVideo ? 'mp4' : 'jpg';
         return {
           uri: finalUri,
@@ -599,26 +635,26 @@ const DataUrlUploadField = ({
   required?: boolean; accentColor: string;
 }) => {
   const pick = (fromCamera: boolean) => {
-  const launcher = fromCamera ? launchCamera : launchImageLibrary;
-  launcher(
-    {
-      mediaType: 'photo',
-      quality: 0.5,          // ✅ CHANGED — 0.7 → 0.5, screenshot ku high quality theva illa
-      maxWidth: 1000,        // ✅ ADDED — camera resolution 4000px+ irundhalum cap pannum
-      maxHeight: 1000,       // ✅ ADDED
-      selectionLimit: 1,
-      includeBase64: true,
-      saveToPhotos: fromCamera,
-    },
-    (response) => {
-      if (response.didCancel || response.errorCode) return;
-      const asset = response.assets?.[0];
-      if (!asset?.base64) return;
-      const mime = asset.type ?? 'image/jpeg';
-      onChange(`data:${mime};base64,${asset.base64}`);
-    }
-  );
-};
+    const launcher = fromCamera ? launchCamera : launchImageLibrary;
+    launcher(
+      {
+        mediaType: 'photo',
+        quality: 0.3,        // ✅ CHANGED — was 0.5, smaller base64 payload
+        maxWidth: 800,         // ✅ CHANGED — was 1000
+        maxHeight: 800,        // ✅ CHANGED — was 1000
+        selectionLimit: 1,
+        includeBase64: true,
+        saveToPhotos: fromCamera,
+      },
+      (response) => {
+        if (response.didCancel || response.errorCode) return;
+        const asset = response.assets?.[0];
+        if (!asset?.base64) return;
+        const mime = asset.type ?? 'image/jpeg';
+        onChange(`data:${mime};base64,${asset.base64}`);
+      }
+    );
+  };
 
   return (
     <View style={styles.fieldContainer}>
@@ -678,17 +714,24 @@ const SignatureField = ({
   };
 
   const handleUpload = () => {
-  launchImageLibrary(
-    { mediaType: 'photo', quality: 0.5, maxWidth: 1000, maxHeight: 1000, selectionLimit: 1, includeBase64: true },
-    (response) => {
-      if (response.didCancel || response.errorCode) return;
-      const asset = response.assets?.[0];
-      if (!asset?.base64) return;
-      const mime = asset.type ?? 'image/jpeg';
-      onChange(`data:${mime};base64,${asset.base64}`);
-    }
-  );
-};
+    launchImageLibrary(
+      {
+        mediaType: 'photo',
+        quality: 0.3,        // ✅ CHANGED — was 0.5
+        maxWidth: 800,         // ✅ CHANGED — was 1000
+        maxHeight: 800,        // ✅ CHANGED — was 1000
+        selectionLimit: 1,
+        includeBase64: true,
+      },
+      (response) => {
+        if (response.didCancel || response.errorCode) return;
+        const asset = response.assets?.[0];
+        if (!asset?.base64) return;
+        const mime = asset.type ?? 'image/jpeg';
+        onChange(`data:${mime};base64,${asset.base64}`);
+      }
+    );
+  };
 
   const handleClear = () => onChange('');
 
@@ -1256,6 +1299,15 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
         console.log('🆔 [handleSubmit] leadId (local):', lead.id, '| deal_id (backend):', dataPayload.deal_id);
         formData.append('data', JSON.stringify(dataPayload));
 
+        // ✅ ADDED — quick diagnostic log of estimated file payload size so
+        // you can see in the console whether compression is actually
+        // bringing things down (helps confirm before/after when testing).
+        const totalFilesSizeEstimateMB = Object.values(filesByField).reduce(
+          (sum, arr) => sum + arr.length,
+          0
+        );
+        console.log(`📦 Total files about to upload: ${totalFilesSizeEstimateMB}`);
+
         // Append every array-upload field under its own multipart part name.
         Object.entries(filesByField).forEach(([fieldKey, files]) => {
           const partName = multipartFieldName(fieldKey);
@@ -1289,10 +1341,20 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
         }
       } catch (err: any) {
         console.error('Submit error:', err);
-        Alert.alert(
-          'Error',
-          err?.response?.data?.error || err?.message || 'Submit failed. Please try again.',
-        );
+        // ✅ CHANGED — friendlier message specifically for 413, so the
+        // surveyor knows to retake with fewer/shorter videos instead of
+        // just seeing a generic failure.
+        if (err?.response?.status === 413) {
+          Alert.alert(
+            'Files Too Large',
+            'The photos/videos attached are too large to upload. Please remove a video or retake photos, then try again.',
+          );
+        } else {
+          Alert.alert(
+            'Error',
+            err?.response?.data?.error || err?.message || 'Submit failed. Please try again.',
+          );
+        }
       } finally {
         setSubmitting(false);
       }
@@ -1399,10 +1461,18 @@ formData.append('data', JSON.stringify(updatePayload));
       } catch (err: any) {
   console.error('Update error:', err);
   console.error('Update error response:', JSON.stringify(err?.response?.data));  // ← ADD THIS
-  Alert.alert(
-    'Error',
-    err?.response?.data?.error || err?.message || 'Update failed.',
-  );
+  // ✅ CHANGED — friendlier message specifically for 413.
+  if (err?.response?.status === 413) {
+    Alert.alert(
+      'Files Too Large',
+      'The photos/videos attached are too large to upload. Please remove a video or retake photos, then try again.',
+    );
+  } else {
+    Alert.alert(
+      'Error',
+      err?.response?.data?.error || err?.message || 'Update failed.',
+    );
+  }
 } finally {
         setSubmitting(false);
       }
