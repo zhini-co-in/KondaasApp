@@ -261,6 +261,20 @@ const LeadCard = ({
         <Text style={styles.date}>{formatDate(item.date)}</Text>
       </View>
 
+      {/* ✅ CHANGED — "Site Survey Assigned By" moved out of here (now shown
+          below the user row, centered). Only "Lead Source" stays in this
+          top pill row. */}
+      {item.leadSource ? (
+        <View style={styles.badgeRow}>
+          <View style={styles.leadSourceBadge}>
+            <Ionicons name="git-branch-outline" size={11} color="#7C3AED" style={{ marginRight: 4 }} />
+            <Text style={styles.leadSourceText} numberOfLines={1} ellipsizeMode="tail">
+              Lead Source — <Text style={{ fontWeight: 'bold' }}>{item.leadSource}</Text>
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
       {/* User row */}
       <View style={styles.userRow}>
         <View style={styles.avatar}>
@@ -269,7 +283,7 @@ const LeadCard = ({
           </Text>
         </View>
 
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.name}>{item.name}</Text>
           <TouchableOpacity
             onPress={() => item.phone && Linking.openURL(`tel:${item.phone}`)}
@@ -304,6 +318,19 @@ const LeadCard = ({
 
         {renderActions()}
       </View>
+
+      {/* ✅ ADDED — "Site Survey Assigned By" now lives here, below the
+          user row, as its own centered badge/line. */}
+      {item.siteSurveyAssignedBy ? (
+        <View style={styles.assignedByRow}>
+          <View style={styles.assignedByBadge}>
+            <Ionicons name="person-outline" size={11} color="#0F766E" style={{ marginRight: 4 }} />
+            <Text style={styles.assignedByText} numberOfLines={1} ellipsizeMode="tail">
+              Site Survey Assigned By — <Text style={{ fontWeight: 'bold' }}>{item.siteSurveyAssignedBy}</Text>
+            </Text>
+          </View>
+        </View>
+      ) : null}
 
       {/* Comment */}
       <View style={[styles.commentRow, {
@@ -383,6 +410,35 @@ const styles = StyleSheet.create({
   },
   referredText: { fontSize: 11, color: '#A32D2D' },
   date: { fontSize: 11, color: '#888' },
+
+  // Top row — now only holds Lead Source (Site Survey Assigned By moved
+  // below the user row, see assignedByRow).
+  badgeRow: {
+    flexDirection: 'row', flexWrap: 'wrap',
+    gap: 6, marginTop: 8,
+  },
+  // ✅ ADDED — centered row below the user row that holds the
+  // "Site Survey Assigned By" badge on its own.
+  assignedByRow: {
+    flexDirection: 'row', justifyContent: 'center',
+    marginTop: 10,
+  },
+  assignedByBadge: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#E6FBF6', paddingHorizontal: 8,
+    paddingVertical: 3, borderRadius: 20,
+    maxWidth: '100%', flexShrink: 1,
+  },
+  assignedByText: { fontSize: 11, color: '#0F766E', flexShrink: 1 },
+  // "Lead Source" pill, violet-coded.
+  leadSourceBadge: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F1EBFE', paddingHorizontal: 8,
+    paddingVertical: 3, borderRadius: 20,
+    maxWidth: '100%', flexShrink: 1,
+  },
+  leadSourceText: { fontSize: 11, color: '#7C3AED', flexShrink: 1 },
+
   userRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
   avatar: {
     width: 44, height: 44, borderRadius: 22,

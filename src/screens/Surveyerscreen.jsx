@@ -220,6 +220,8 @@ useFocusEffect(
         status:     item.siteSurveyStatus ?? 'notassigned',
         
         scheduledAt: item.siteSurveyDateTime || null,
+        siteSurveyAssignedBy: item.CreatedBy || item.createdBy || null,
+  leadSource:           item.leadSource || item.Lead_Source || null,
         productType:            item.productType,
   orderType:               item.orderType,
   projectType:             item.projectType,

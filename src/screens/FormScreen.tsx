@@ -19,8 +19,6 @@ import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import SignatureScreen from 'react-native-signature-canvas';
 import ImageResizer from 'react-native-image-resizer';
 import DateTimePicker from '@react-native-community/datetimepicker';
-// ✅ ADDED — video compression library (npm install react-native-compressor)
-import { Video } from 'react-native-compressor';
 
 interface FieldProperty {
   title?: string; description?: string; type?: string;
@@ -191,6 +189,60 @@ const buildVisiblePayload = (
     cleaned[key] = val;
   });
   return cleaned;
+};
+
+// ── Required-field validation ────────────────────────────────────────────────
+// Walks every group's elements, and for every field that is (a) marked
+// required in schema.required AND (b) currently visible per its uischema
+// rule, checks that it actually has a value:
+//   - array upload fields (photos/videos)  → at least 1 file in filesByField
+//   - everything else (text/dropdown/date/signature/single data-url) → a
+//     non-empty, non-whitespace value in formValues
+// Returns the list of human-readable field labels that are still missing,
+// so the caller can show one clear alert instead of failing silently or
+// only after the server rejects the request.
+const validateRequiredFields = (
+  properties: SchemaProperties,
+  requiredFields: string[],
+  groups: UIElement[],
+  formValues: Record<string, string>,
+  filesByField: Record<string, PhotoFile[]>,
+): string[] => {
+  const missing: string[] = [];
+  const seen = new Set<string>();
+
+  groups.forEach((group) => {
+    (group.elements ?? []).forEach((element) => {
+      const fieldKey = element.scope?.split('/').pop();
+      if (!fieldKey) return;
+      if (!requiredFields.includes(fieldKey)) return;
+      if (seen.has(fieldKey)) return; // avoid duplicate messages
+      if (!isFieldVisible(element, formValues)) return; // hidden → not required right now
+
+      const field = properties[fieldKey];
+      const label = field?.title ?? fieldKey;
+
+      // Multi-file upload fields (photos / videos) — need at least 1 file
+      if (field?.type === 'array' && field.items?.format === 'data-url') {
+        const files = filesByField[fieldKey] ?? [];
+        if (files.length === 0) {
+          missing.push(label);
+          seen.add(fieldKey);
+        }
+        return;
+      }
+
+      // Everything else — text, dropdown, date/date-time, signature,
+      // single data-url (Aadhar/PAN/etc) — must have a real, non-blank value
+      const val = formValues[fieldKey];
+      if (val === undefined || val === null || String(val).trim() === '') {
+        missing.push(label);
+        seen.add(fieldKey);
+      }
+    });
+  });
+
+  return missing;
 };
 
 // ── Dropdown ──────────────────────────────────────────────────────────────────
@@ -443,32 +495,28 @@ async function compressImage(uri: string): Promise<string> {
   }
 }
 
-// ✅ ADDED — video compression. Previously videos were sent completely
-// uncompressed (raw camera/gallery file, often 20-50MB+ each), which was
-// the single biggest contributor to the 413 "Request Entity Too Large"
-// error. This shrinks resolution/bitrate before the file ever reaches
-// FormData, so the whole multipart body stays much smaller.
-async function compressVideo(uri: string): Promise<string> {
+// ✅ REMOVED — react-native-compressor video compression (module wasn't
+// installed / resolvable, causing a build-time "Cannot find module" error).
+// Videos are now sent as-is (no compression step); the 50 MB size gate
+// below still protects against oversized uploads.
+
+// ✅ ADDED — 50 MB hard cap for video uploads, checked on the original
+// (uncompressed) file straight from the camera/gallery picker.
+const MAX_VIDEO_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
+
+// Cross-platform file-size check with no extra native dependency: RN's
+// built-in fetch() can read local file:// / content:// URIs and the
+// resulting Blob exposes .size in bytes.
+const getFileSizeInBytes = async (uri: string): Promise<number> => {
   try {
-    console.log('🎬 Compressing video:', uri);
-    const compressedUri = await Video.compress(
-      uri,
-      {
-        compressionMethod: 'auto',
-        maxSize: 640,                    // caps resolution — plenty for site-survey clips
-        minimumFileSizeForCompress: 2,    // MB — skip already-tiny videos
-      },
-      (progress) => {
-        console.log('📹 Video compress progress:', Math.round(progress * 100), '%');
-      }
-    );
-    console.log('✅ Video compressed:', compressedUri);
-    return compressedUri;
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    return blob.size;
   } catch (err) {
-    console.warn('⚠️ Video compress failed, using original:', err);
-    return uri;
+    console.warn('⚠️ Could not determine file size for', uri, err);
+    return 0; // fail-open — don't block upload just because size check failed
   }
-}
+};
 
 const PhotoUploadField = ({
   label, photoFiles, onChange, required,
@@ -487,14 +535,34 @@ const PhotoUploadField = ({
 
   const mapAssets = async (assets: any[]): Promise<PhotoFile[]> => {
     const valid = assets.filter((asset) => asset.uri);
+    // ✅ ADDED — collects names of any video rejected for exceeding 50 MB,
+    // so we can show ONE clear alert listing all of them instead of one
+    // popup per file.
+    const rejectedForSize: string[] = [];
+
     const results = await Promise.all(
       valid.map(async (asset) => {
-        // ✅ CHANGED — videos now also get compressed (was: asset.uri as-is,
-        // which is what caused huge uncompressed videos to blow past the
-        // server's body-size limit and trigger 413 errors).
+        // ✅ CHANGED — video compression removed (react-native-compressor
+        // module wasn't resolvable). Videos now go through as-is; photos
+        // are still compressed as before.
         const finalUri = isVideo
-          ? await compressVideo(asset.uri)
+          ? asset.uri
           : await compressImage(asset.uri);
+
+        const displayName = asset.fileName ?? asset.uri?.split('/').pop() ?? `${namePrefix}_${Date.now()}`;
+
+        // ✅ 50 MB size gate for videos, checked on the raw picked file
+        // since there's no compression step anymore.
+        if (isVideo) {
+          const sizeBytes = await getFileSizeInBytes(finalUri);
+          if (sizeBytes > MAX_VIDEO_SIZE_BYTES) {
+            const sizeMB = (sizeBytes / (1024 * 1024)).toFixed(1);
+            console.warn(`⚠️ Rejected video "${displayName}" — ${sizeMB} MB exceeds 50 MB limit`);
+            rejectedForSize.push(`${displayName} (${sizeMB} MB)`);
+            return null;
+          }
+        }
+
         const ext = isVideo ? 'mp4' : 'jpg';
         return {
           uri: finalUri,
@@ -503,7 +571,16 @@ const PhotoUploadField = ({
         };
       })
     );
-    return results;
+
+    if (rejectedForSize.length > 0) {
+      Alert.alert(
+        'Video Too Large',
+        `The following video(s) exceed the 50 MB limit and were NOT added:\n\n${rejectedForSize.join('\n')}\n\nPlease record a shorter clip or trim the video and try again.`,
+      );
+    }
+
+    // Drop the nulls from rejected videos before returning
+    return results.filter((r): r is PhotoFile => r !== null);
   };
 
   const handleCapture = () => {
@@ -578,6 +655,12 @@ const PhotoUploadField = ({
           <Text style={{ color: accentColor, fontWeight: '700', fontSize: 13 }}>Upload</Text>
         </TouchableOpacity>
       </View>
+
+      {isVideo && (
+        <Text style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
+          Maximum upload size: 50 MB per video
+        </Text>
+      )}
 
       {photoFiles.length > 0 && (
         <>
@@ -1263,9 +1346,28 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
   // Groups from the current template's uischema (used for both rendering
   // and for building the "visible-only" payload on submit/update).
   const groups = template?.uischema?.elements ?? [];
+  // ✅ ADDED — hoisted here (rather than only inside the JSX return below)
+  // so handleSubmit/handleUpdate can run required-field validation using
+  // the same schema properties / required list the form is rendering with.
+  const schemaProperties = template?.schema?.properties ?? {};
+  const schemaRequiredFields = template?.schema?.required ?? [];
 
   // ── Submit (New Form) ──────────────────────────────────────────────────────
   const handleSubmit = async () => {
+    // ✅ ADDED — block submit until every currently-visible required field
+    // actually has a value / file. Runs BEFORE setSubmitting(true) so the
+    // button doesn't spin for a request that's never going to be sent.
+    const missingFields = validateRequiredFields(
+      schemaProperties, schemaRequiredFields, groups, formValues, filesByField,
+    );
+    if (missingFields.length > 0) {
+      Alert.alert(
+        'Required Fields Missing',
+        `Please fill in the following before submitting:\n\n${missingFields.join('\n')}`,
+      );
+      return;
+    }
+
     setSubmitting(true);
 
     // ✅ ADDED — "Site Survey Completed Date & Time" is auto-stamped with the
@@ -1394,6 +1496,20 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
 
   // ── Update (Edit Mode) ─────────────────────────────────────────────────────
   const handleUpdate = async () => {
+    // ✅ ADDED — same required-field gate as handleSubmit. Even in edit
+    // mode, every currently-visible required field must still be filled
+    // before we allow the update to go out.
+    const missingFields = validateRequiredFields(
+      schemaProperties, schemaRequiredFields, groups, formValues, filesByField,
+    );
+    if (missingFields.length > 0) {
+      Alert.alert(
+        'Required Fields Missing',
+        `Please fill in the following before updating:\n\n${missingFields.join('\n')}`,
+      );
+      return;
+    }
+
     setSubmitting(true);
 
     // Only fields that actually changed from the loaded baseline are sent.
