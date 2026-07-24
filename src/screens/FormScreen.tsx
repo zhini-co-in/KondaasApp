@@ -140,6 +140,60 @@ const toZohoDateTime = (date: Date): string => {
   );
 };
 
+// ── Prefill form fields from data that already arrived with the lead ───────
+// Deal Name, Mobile, WhatsApp, Lead Source, Referred By, Assigned By,
+// Service Agent, District/State/City/Street, Order/Project Type, Panel &
+// Inverter info, Roof Type — all of these already exist on the `lead`
+// object (mapped in SurveyerScreen from the Zoho webhook). Prefilled here
+// so the surveyor doesn't retype them — every field stays fully editable.
+const buildPrefillFromLead = (leadData: Lead & Record<string, any>): Record<string, string> => {
+  const prefill: Record<string, string> = {};
+  const set = (key: string, val: any) => {
+    if (val !== undefined && val !== null && String(val).trim() !== '') {
+      prefill[key] = String(val);
+    }
+  };
+
+  set('Deal_Name', leadData.name);
+  set('Mobile_Number', leadData.phone);
+  set('Phone_Number', leadData.phone);
+  set('WhatsApp_Number', leadData.whatsappNo);
+  set('Lead_Source', leadData.leadSource);
+  set('Referred_By', leadData.referredBy);
+  set('Site_Survey_Assigned_By', leadData.siteSurveyAssignedBy);
+  set('Service_Agents_Name', leadData.serviceAgentName);
+  set('State_Province', leadData.state);
+  set('District', leadData.District);
+  set('Sub_District', leadData.subDistrict);
+  set('City', leadData.city);
+  set('Street_Address', leadData.street);
+  set('Order_Type', leadData.orderType);
+  set('Project_Type', leadData.projectType);
+  set('Project_Model', leadData.projectModel);
+  set('Inverter_Connection_Type', leadData.inverterConnectionType);
+  set('Inverter_Capacity', leadData.inverterCapacity);
+  set('Solar_Panel_Model', leadData.solarPanelModel);
+  set('Solar_Panel_Brand', leadData.solarPanelBrand);
+  set('No_of_Panels', leadData.noOfPanels);
+  set('Roof_Type', leadData.roofType);
+  set('Country_Region', leadData.country);
+  set('Zip_Postal_Code', leadData.zipCode);
+
+  return prefill;
+};
+
+// Site_Engineer_Contact = logged-in surveyor's own number, so prefill it
+// separately (async AsyncStorage read).
+const getMySurveyorNumber = async (): Promise<string> => {
+  try {
+    const userData = await AsyncStorage.getItem(USER_DATA);
+    const parsed = userData ? JSON.parse(userData) : null;
+    return parsed?.UserInfo?.phoneNo || '';
+  } catch {
+    return '';
+  }
+};
+
 // ── Conditional field visibility (uischema "rule": SHOW/HIDE) ──────────────────
 // formValues stores everything as strings, so boolean/number `const` values
 // from the schema are coerced to string before comparing.
@@ -1253,6 +1307,7 @@ const FormScreen = ({
 useEffect(() => {
     if (!template) return;
     const restoreData = async () => {
+      console.log('🟢 restoreData called, isEditMode:', isEditMode, 'lead:', JSON.stringify(lead));
       if (isEditMode) {
         try {
           const res = await API.get(`/user/get?mobile=${lead.phone}`);
@@ -1282,24 +1337,51 @@ Object.entries(flattened).forEach(([k, v]) => {
 setFormValues(flattened);
 setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
         } catch (err) {
-          const draft = await getSavedFormData(lead.id);
-          if (draft) {
-            setFormValues(draft);
-            setOriginalValues(draft); // ✅ ADD THIS LINE — offline draft baseline
-          }
-        }
-      } else {
-        const draft = await getSavedFormData(lead.id);
-        if (draft) setFormValues(draft);
-      }
-    };
-    restoreData();
-  }, [template]);
+  const draft = await getSavedFormData(lead.id);
+  if (draft) {
+    setFormValues((prev) => ({ ...prev, ...draft }));
+    setOriginalValues(draft);
+  }
+}
+       } else {
+  const draft = await getSavedFormData(lead.id);
+  const prefill = buildPrefillFromLead(lead);
+  // Draft has no Deal_Name → treat as stale (from the old GPS-only bug), prefer prefill
+  const isDraftUsable = draft && draft.Deal_Name;
+  setFormValues((prev) => ({
+    ...prev,
+    ...prefill,
+    ...(isDraftUsable ? draft : {}),
+  }));
+}
+    hasRestoredRef.current = true;
+    console.log('🟡 restoreData FINISHED');   // ✅ ADD — ippo mattum auto-save start aagum
+  };
+  restoreData();
+}, [template]);
 
+  // Site_Engineer_Contact = logged-in surveyor's own number. Prefilled once
+  // on a fresh (non-edit) form; skipped entirely in edit mode since the
+  // saved value is already restored above.
   useEffect(() => {
-    if (Object.keys(formValues).length === 0) return;
-    saveFormDataLocally(lead.id, formValues);
-  }, [formValues]);
+    if (isEditMode) return;
+    (async () => {
+      const myNumber = await getMySurveyorNumber();
+      if (myNumber) {
+        setFormValues((prev) =>
+          prev.Site_Engineer_Contact ? prev : { ...prev, Site_Engineer_Contact: myNumber }
+        );
+      }
+    })();
+  }, [isEditMode]);
+
+  const hasRestoredRef = useRef(false);   // ✅ ADD near other refs
+
+useEffect(() => {
+  if (!hasRestoredRef.current) return;      // ✅ restore mudiyara varaikkum save pannadhey
+  if (Object.keys(formValues).length === 0) return;
+  saveFormDataLocally(lead.id, formValues);
+}, [formValues]);
 
   // ✅ ADDED — auto-calculate Plant_Cost_After_Subsidy (readOnly field) any
   // time Total_Plant_Cost or Subsidy changes, so the value shown/submitted
@@ -1395,6 +1477,7 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
         const dataPayload = {
           mobileNumber: lead.phone,
           deal_id: lead.dealId,
+          state: lead.state,
           ...buildVisiblePayload(groups, stampedValues),
         };
         console.log('🔍 Clean visible payload:', JSON.stringify(dataPayload, null, 2));
@@ -1469,6 +1552,7 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
         const offlinePayload = {
           mobileNumber: lead.phone,
           deal_id: lead.dealId,
+          state: lead.state,
           ...stampedValues, // ✅ CHANGED — was ...formValues, now carries the live completion timestamp
           _filesByField: filesByField,
         };
@@ -1538,6 +1622,7 @@ console.log('✏️ Changed fields (diagnostic only):', JSON.stringify(changedFi
   id: lead.dealId,
   mobileNumber: lead.phone,
   deal_id: lead.dealId,
+  state: lead.state,
   ...buildVisiblePayload(groups, changedFields),   // ✅ CHANGED — was sanitizePayload(changedFields)
 };
 console.log('🆔 [handleUpdate] leadId (local):', lead.id, '| deal_id (backend):', updatePayload.deal_id);
@@ -1598,6 +1683,7 @@ formData.append('data', JSON.stringify(updatePayload));
         const offlinePayload = {
           mobileNumber: lead.phone,
           deal_id: lead.dealId,
+          state: lead.state,
           ...formValues,
           _filesByField: filesByField,
         };

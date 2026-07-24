@@ -137,6 +137,34 @@ const LeadCard = ({
 
   const hasProductInfo = productFields.length > 0;
 
+  // ── Full Address — data prep ─────────────────────────────────────────────
+  // 👇 புதுசா சேர்த்தது: Country/Region, State/Province, District, Sub
+  // District, City, Street, Postal Code — same order as the Zoho schema's
+  // "Address Information" group. Only fields that actually have a value
+  // are shown — missing ones are skipped instead of showing blank rows.
+  const addressFields = [
+    { label: 'Country/Region', value: item.country },
+    { label: 'State/Province', value: item.state },
+    { label: 'District',       value: item.District },
+    { label: 'Sub District',   value: item.subDistrict },
+    { label: 'City',           value: item.city },
+    { label: 'Street',         value: item.street },
+    { label: 'Postal Code',    value: item.zipCode },
+  ].filter((f) => f.value !== null && f.value !== undefined && f.value !== '');
+
+  const hasAddressInfo = addressFields.length > 0;
+
+  // Short one-line summary shown directly on the card (replaces the old
+  // "city only" line). Falls back to item.address / item.city if none of
+  // the structured fields are present.
+  const addressSummaryParts = [item.street, item.city, item.District, item.state]
+    .filter((part) => part && String(part).trim().length > 0);
+  const addressSummary = addressSummaryParts.length > 0
+    ? addressSummaryParts.join(', ')
+    : (item.address || item.city || '—');
+
+  const [addressModalVisible, setAddressModalVisible] = useState(false);
+
   // ── Action buttons — cardType-based ──────────────────────────────────────
   const renderActions = () => {
     switch (cardType) {
@@ -292,10 +320,25 @@ const LeadCard = ({
             <Ionicons name="call-outline" size={12} color="#25D366" />
             <Text style={styles.subText}>{item.phone}</Text>
           </TouchableOpacity>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+
+          {/* ✅ CHANGED — was just item.city; now a full address summary
+              (Street, City, District, State) that opens the Full Address
+              modal on tap so every field (Country/Region, State/Province,
+              District, Sub District, City, Street, Postal Code) is visible. */}
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+            onPress={() => hasAddressInfo && setAddressModalVisible(true)}
+            disabled={!hasAddressInfo}
+          >
             <Ionicons name="location-outline" size={12} color="#555" />
-            <Text style={styles.subText}>{item.city}</Text>
-          </View>
+            <Text style={styles.subText} numberOfLines={1} ellipsizeMode="tail">
+              {addressSummary}
+            </Text>
+            {hasAddressInfo && (
+              <Ionicons name="chevron-forward" size={12} color="#185FA5" />
+            )}
+          </TouchableOpacity>
+
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
             <Ionicons name="notifications-outline" size={16} color="#aaa" />
             <Ionicons name="logo-whatsapp" size={16} color={item.whatsappNo ? '#25D366' : '#ccc'} />
@@ -379,6 +422,46 @@ const LeadCard = ({
             <TouchableOpacity
               style={styles.modalSaveBtn}
               onPress={() => setProductModalVisible(false)}
+            >
+              <Text style={styles.modalSaveBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 👇 புதுசா சேர்த்தது: Full Address Modal — Country/Region,
+          State/Province, District, Sub District, City, Street, Postal Code */}
+      <Modal
+        visible={addressModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAddressModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { maxHeight: '75%' }]}>
+            <View style={styles.productModalHeader}>
+              <Ionicons name="location" size={20} color="#185FA5" style={{ marginRight: 8 }} />
+              <Text style={styles.modalTitle}>Full Address</Text>
+            </View>
+
+            <ScrollView style={{ marginTop: 10, marginBottom: 16 }} showsVerticalScrollIndicator={false}>
+              {addressFields.length > 0 ? (
+                addressFields.map((f, idx) => (
+                  <View key={idx} style={styles.productRow}>
+                    <Text style={styles.productLabel}>{f.label}</Text>
+                    <Text style={styles.productValue}>{String(f.value)}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={{ textAlign: 'center', color: '#999', paddingVertical: 20 }}>
+                  No address details available.
+                </Text>
+              )}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.modalSaveBtn}
+              onPress={() => setAddressModalVisible(false)}
             >
               <Text style={styles.modalSaveBtnText}>Close</Text>
             </TouchableOpacity>

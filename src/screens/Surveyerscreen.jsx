@@ -43,6 +43,19 @@ const isSurveyDue = (scheduledAt) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 👇 புதுசா சேர்த்தது: street + address + district + state-ஐ ஒரே
+// readable address string-ஆ combine பண்ற helper. இது front-end-ல மட்டும்
+// use ஆகும் — backend payload-ஐ தொடல. missing பண்ற parts-ஐ skip பண்ணி,
+// stray commas வராம join பண்ணும்.
+// ─────────────────────────────────────────────────────────────────────────────
+const buildFullAddress = (item) => {
+  const parts = [item.street, item.address, item.District, item.state].filter(
+    (part) => part && String(part).trim().length > 0
+  );
+  return parts.length > 0 ? parts.join(', ') : (item.address || '');
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SurveyerScreen
 // ─────────────────────────────────────────────────────────────────────────────
 const SurveyerScreen = () => {
@@ -201,38 +214,66 @@ useFocusEffect(
       const storedRejected = await AsyncStorage.getItem('rejected_lead_ids');
       const rejectedIds    = storedRejected ? JSON.parse(storedRejected) : [];
 
-      const mapped = rawData.map((item) => ({
-        id:         item._id,
-        dealId:     item.deal_id,
-        name:       item.deal_name || item.name || '—',
-        phone:      item.mobile,
-        city:       item.city,
-        comment:    item.comment,
+      const mapped = rawData.map((item) => {
+        // 👇 புதுசா சேர்த்தது: raw fields முதல்ல தனியா prep பண்ணி,
+        // அப்புறம் buildFullAddress()-க்கு கொடுக்கிறோம்.
+        const rawStreet   = item.street || null;
+        const rawDistrict = item.district || item.District || null;
+        const rawState    = item.state || item.State || null;
+        const rawAddress  = item.address || null;
 
-        referredBy: item.referredBy || item.referred_by || item.Referred_By || null,
-        date:       item.assignedAt,
-        time:       item.time,
-        latitude:   item.latitude,
-        longitude:  item.longitude,
-        whatsappNo: item.whatsappNo,
-        email:      item.email,
-        address:    item.address,
-        status:     item.siteSurveyStatus ?? 'notassigned',
-        
-        scheduledAt: item.siteSurveyDateTime || null,
-        siteSurveyAssignedBy: item.CreatedBy || item.createdBy || null,
-  leadSource:           item.leadSource || item.Lead_Source || null,
-        productType:            item.productType,
-  orderType:               item.orderType,
-  projectType:             item.projectType,
-  projectModel:            item.projectModel,
-  inverterConnectionType:  item.inverterConnectionType,
-  inverterCapacity:        item.inverterCapacity,
-  solarPanelModel:         item.solarPanelModel,
-  solarPanelBrand:         item.solarPanelBrand,
-  noOfPanels:              item.noOfPanels,
-  roofType:                item.roofType,
-      }));
+        const fullAddress = buildFullAddress({
+          street:   rawStreet,
+          address:  rawAddress,
+          District: rawDistrict,
+          state:    rawState,
+        });
+
+        return {
+          id:         item._id,
+          dealId:     item.deal_id,
+          name:       item.deal_name || item.name || '—',
+          phone:      item.mobile,
+          city:       item.city,
+          comment:    item.comment,
+          street:     rawStreet,
+          District:   rawDistrict,
+          state:      rawState,
+
+          referredBy: item.referredBy || item.referred_by || item.Referred_By || null,
+          // ✅ ADDED — already sent by the Zoho webhook (ServiceAgentName /
+          // SubDistrict) but wasn't being picked up here before, so
+          // FormScreen's prefill had nothing to read for these two.
+          serviceAgentName: item.ServiceAgentName || item.serviceAgentName || null,
+          subDistrict: item.SubDistrict || item.subDistrict || null,
+          date:       item.assignedAt,
+          time:       item.time,
+          latitude:   item.latitude,
+          longitude:  item.longitude,
+          whatsappNo: item.whatsappNo,
+          email:      item.email,
+          // 👇 புதுசா சேர்த்தது: street/district/state சேர்த்த full address.
+          // ஏதாவது missing-னா skip ஆகி, இருக்கிறதை மட்டும் join பண்ணும்.
+          address:    fullAddress,
+          status:     item.siteSurveyStatus ?? 'notassigned',
+
+          scheduledAt: item.siteSurveyDateTime || null,
+          siteSurveyAssignedBy: item.CreatedBy || item.createdBy || null,
+          leadSource:           item.leadSource || item.Lead_Source || null,
+          productType:            item.productType,
+          orderType:               item.orderType,
+          projectType:             item.projectType,
+          projectModel:            item.projectModel,
+          inverterConnectionType:  item.inverterConnectionType,
+          inverterCapacity:        item.inverterCapacity,
+          solarPanelModel:         item.solarPanelModel,
+          solarPanelBrand:         item.solarPanelBrand,
+          noOfPanels:              item.noOfPanels,
+          roofType:                item.roofType,
+          country: item.country || null,
+zipCode: item.zipCode || item.Zip_Postal_Code || null,
+        };
+      });
 
       if (!isMounted.current) return;
 
