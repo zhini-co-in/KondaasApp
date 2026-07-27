@@ -745,25 +745,25 @@ const takeAndUploadPhoto = async () => {
       }));
 
       try {
-        await API.post('/notification/trigger', {
-          surveyorNumber,
-          customerMobile: lead.phone,
-          name:           lead.name,
-          scenarioType:   1,
-          eta:            totalMins,
-          mapsUrl,
-        });
-      } catch (e) {
-      }
-    } else {
-      await enqueue(`notif_start_${id}`, 'NOTIFICATION', {
-        customerMobile: lead.phone,
-        name:           lead.name,
-        scenarioType:   1,
-        eta:            totalMins,
-        mapsUrl,
-      });
-    }
+  await API.post('/notification/trigger', {
+    surveyorNumber,
+    customerMobile: lead.whatsappNo || lead.phone,
+    name:           lead.name,
+    scenarioType:   1,
+    eta:            totalMins,
+    mapsUrl,
+  });
+} catch (e) {
+}
+} else {
+  await enqueue(`notif_start_${id}`, 'NOTIFICATION', {
+    customerMobile: lead.whatsappNo || lead.phone,
+    name:           lead.name,
+    scenarioType:   1,
+    eta:            totalMins,
+    mapsUrl,
+  });
+}
 
     startHighFrequencyTracking(() => locationRef.current);
 

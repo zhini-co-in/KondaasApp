@@ -19,6 +19,7 @@ import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import SignatureScreen from 'react-native-signature-canvas';
 import ImageResizer from 'react-native-image-resizer';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import KondaasPaymentQR from '../../assets/images/kondaas_payment_qr.png';
 
 interface FieldProperty {
   title?: string; description?: string; type?: string;
@@ -71,9 +72,6 @@ interface LocationCoords {
 }
 
 // ── Upload helpers ──────────────────────────────────────────────────────────────
-// Multi-file array fields (EB_Bill_Copy, Site_Survey_Photos, and every new
-// "sitePhoto" / "siteVideo" field from the schema) are colour-coded by
-// uploadType so the UI stays visually distinct without hardcoding each field.
 const colorForUploadType = (uploadType?: string): string => {
   switch (uploadType) {
     case 'ebBill': return '#22c55e';
@@ -84,22 +82,8 @@ const colorForUploadType = (uploadType?: string): string => {
   }
 };
 
-// Backend now loops over every multipart field name dynamically
-// (`for (const fieldName of Object.keys(body))`) and only special-cases
-// "EB_Bill_Copy" for the WorkDrive folder name. So the multipart part name
-// MUST be the exact schema field key — no renaming, or the backend can't
-// match it to the schema / pick the right folder.
 const multipartFieldName = (fieldKey: string): string => fieldKey;
 
-// ── Zoho "Single Line" text-field enforcer ──────────────────────────────────
-// Some schema fields (Report_Number, Zip_Postal_Code, etc.) are plain
-// strings on our side, but if a value happens to be all-digits (e.g.
-// Report_Number = "105"), some serialization paths can let it slip through
-// as a JS number instead of a string, which Zoho's "Single Line" (text)
-// custom fields reject with "expected_data_type":"text". This list is the
-// single source of truth for which schema fields must always be forced to
-// a real string right before they're sent — add a new field key here if a
-// future Zoho text field starts throwing the same INVALID_DATA error.
 const ZOHO_TEXT_FIELDS = [
   'Report_Number',
   'Zip_Postal_Code',
@@ -119,16 +103,9 @@ const enforceZohoTextFields = (
   return fixed;
 };
 
-// ── Zoho DateTime formatter ──────────────────────────────────────────────────
-// Zoho's DateTime custom field expects "yyyy-MM-ddTHH:mm:ss±HH:mm" (local
-// time with a numeric offset) — NOT raw .toISOString(), which returns UTC
-// with a trailing "Z" and milliseconds (e.g. "2026-07-13T05:00:00.000Z").
-// Sending that raw ISO-Z string is exactly what triggers Zoho's
-// "expected_data_type":"datetime" INVALID_DATA error. Every place that used
-// to call .toISOString() for a datetime field now calls this instead.
 const toZohoDateTime = (date: Date): string => {
   const pad = (n: number) => String(n).padStart(2, '0');
-  const offsetMin = -date.getTimezoneOffset(); // e.g. IST => +330
+  const offsetMin = -date.getTimezoneOffset();
   const sign = offsetMin >= 0 ? '+' : '-';
   const offH = pad(Math.floor(Math.abs(offsetMin) / 60));
   const offM = pad(Math.abs(offsetMin) % 60);
@@ -140,12 +117,6 @@ const toZohoDateTime = (date: Date): string => {
   );
 };
 
-// ── Prefill form fields from data that already arrived with the lead ───────
-// Deal Name, Mobile, WhatsApp, Lead Source, Referred By, Assigned By,
-// Service Agent, District/State/City/Street, Order/Project Type, Panel &
-// Inverter info, Roof Type — all of these already exist on the `lead`
-// object (mapped in SurveyerScreen from the Zoho webhook). Prefilled here
-// so the surveyor doesn't retype them — every field stays fully editable.
 const buildPrefillFromLead = (leadData: Lead & Record<string, any>): Record<string, string> => {
   const prefill: Record<string, string> = {};
   const set = (key: string, val: any) => {
@@ -161,7 +132,6 @@ const buildPrefillFromLead = (leadData: Lead & Record<string, any>): Record<stri
   set('Lead_Source', leadData.leadSource);
   set('Referred_By', leadData.referredBy);
   set('Site_Survey_Assigned_By', leadData.siteSurveyAssignedBy);
-  set('Service_Agents_Name', leadData.serviceAgentName);
   set('State_Province', leadData.state);
   set('District', leadData.District);
   set('Sub_District', leadData.subDistrict);
@@ -182,8 +152,6 @@ const buildPrefillFromLead = (leadData: Lead & Record<string, any>): Record<stri
   return prefill;
 };
 
-// Site_Engineer_Contact = logged-in surveyor's own number, so prefill it
-// separately (async AsyncStorage read).
 const getMySurveyorNumber = async (): Promise<string> => {
   try {
     const userData = await AsyncStorage.getItem(USER_DATA);
@@ -194,9 +162,6 @@ const getMySurveyorNumber = async (): Promise<string> => {
   }
 };
 
-// ── Conditional field visibility (uischema "rule": SHOW/HIDE) ──────────────────
-// formValues stores everything as strings, so boolean/number `const` values
-// from the schema are coerced to string before comparing.
 const isFieldVisible = (
   element: UIElement,
   formValues: Record<string, string>,
@@ -213,10 +178,6 @@ const isFieldVisible = (
   return effect === 'SHOW' ? matches : !matches;
 };
 
-// Walks every group's elements, keeps only fields whose rule currently
-// evaluates to visible, and drops any empty-string / null / undefined values
-// so hidden or untouched optional fields (e.g. Advance_Paid_Date when
-// Advance_payment_Received is false) never reach the backend/Zoho as "".
 const buildVisiblePayload = (
   groups: UIElement[],
   formValues: Record<string, string>,
@@ -232,29 +193,16 @@ const buildVisiblePayload = (
 
   const cleaned: Record<string, string> = {};
   Object.entries(formValues).forEach(([key, val]) => {
-    // Fields with no matching uischema control (e.g. Longitude, GPS_Accuracy,
-    // Google_Map_Location which are rendered inline by the Latitude group)
-    // are always kept — only rule-driven fields get filtered.
     const isRuleControlled = groups.some((group) =>
       (group.elements ?? []).some((el) => el.scope?.split('/').pop() === key && el.rule)
     );
-    if (isRuleControlled && !visibleKeys.has(key)) return; // hidden → skip
-    if (val === '' || val === null || val === undefined) return; // empty → skip
+    if (isRuleControlled && !visibleKeys.has(key)) return;
+    if (val === '' || val === null || val === undefined) return;
     cleaned[key] = val;
   });
   return cleaned;
 };
 
-// ── Required-field validation ────────────────────────────────────────────────
-// Walks every group's elements, and for every field that is (a) marked
-// required in schema.required AND (b) currently visible per its uischema
-// rule, checks that it actually has a value:
-//   - array upload fields (photos/videos)  → at least 1 file in filesByField
-//   - everything else (text/dropdown/date/signature/single data-url) → a
-//     non-empty, non-whitespace value in formValues
-// Returns the list of human-readable field labels that are still missing,
-// so the caller can show one clear alert instead of failing silently or
-// only after the server rejects the request.
 const validateRequiredFields = (
   properties: SchemaProperties,
   requiredFields: string[],
@@ -270,13 +218,12 @@ const validateRequiredFields = (
       const fieldKey = element.scope?.split('/').pop();
       if (!fieldKey) return;
       if (!requiredFields.includes(fieldKey)) return;
-      if (seen.has(fieldKey)) return; // avoid duplicate messages
-      if (!isFieldVisible(element, formValues)) return; // hidden → not required right now
+      if (seen.has(fieldKey)) return;
+      if (!isFieldVisible(element, formValues)) return;
 
       const field = properties[fieldKey];
       const label = field?.title ?? fieldKey;
 
-      // Multi-file upload fields (photos / videos) — need at least 1 file
       if (field?.type === 'array' && field.items?.format === 'data-url') {
         const files = filesByField[fieldKey] ?? [];
         if (files.length === 0) {
@@ -286,8 +233,6 @@ const validateRequiredFields = (
         return;
       }
 
-      // Everything else — text, dropdown, date/date-time, signature,
-      // single data-url (Aadhar/PAN/etc) — must have a real, non-blank value
       const val = formValues[fieldKey];
       if (val === undefined || val === null || String(val).trim() === '') {
         missing.push(label);
@@ -418,13 +363,6 @@ const GpsLocationField = ({
 };
 
 // ── Date / DateTime Picker Field ────────────────────────────────────────────────
-// Handles schema fields with format: "date" (date only) or format: "date-time"
-// (date + time). Stores value as a Zoho-compatible string in formValues:
-//   - date-only:      "yyyy-MM-dd"
-//   - date-time:      "yyyy-MM-ddTHH:mm:ss±HH:mm"  (via toZohoDateTime)
-// Android's native picker has no combined "datetime" mode, so on Android a
-// date-time field opens the date picker first, then the time picker.
-// iOS supports mode="datetime" directly in a single spinner.
 const DateTimeField = ({
   label, value, onChange, required, mode, readOnly,
 }: {
@@ -446,7 +384,7 @@ const DateTimeField = ({
     : '';
 
   const openPicker = () => {
-    if (readOnly) return; // ✅ ADDED — readOnly fields never open the picker
+    if (readOnly) return;
     setTempDate(parsedValue ?? new Date());
     setShowDate(true);
   };
@@ -463,15 +401,11 @@ const DateTimeField = ({
     if (event?.type === 'dismissed' || !selected) return;
 
     if (mode === 'date') {
-      onChange(formatDateOnly(selected));           // ← Pure YYYY-MM-DD
+      onChange(formatDateOnly(selected));
       return;
     }
 
-    // datetime handling
     if (Platform.OS === 'ios') {
-      // ✅ CHANGED — was selected.toISOString() (UTC + "Z" + millis, which
-      // Zoho's DateTime field rejects). Now uses the local-time,
-      // offset-formatted string Zoho actually expects.
       onChange(toZohoDateTime(selected));
       return;
     }
@@ -486,7 +420,6 @@ const DateTimeField = ({
 
     const combined = new Date(tempDate);
     combined.setHours(selected.getHours(), selected.getMinutes(), 0, 0);
-    // ✅ CHANGED — was combined.toISOString(); now Zoho-formatted.
     onChange(toZohoDateTime(combined));
   };
 
@@ -534,9 +467,6 @@ const DateTimeField = ({
 };
 
 // ── Multi-file Upload Field (photos OR videos) ─────────────────────────────────
-// ✅ CHANGED — stronger compression: 1280→1024 max dimension, quality 70→50.
-// This shrinks every photo further so the total multipart payload stays
-// safely under server body-size limits.
 async function compressImage(uri: string): Promise<string> {
   try {
     const resized = await ImageResizer.createResizedImage(
@@ -549,18 +479,8 @@ async function compressImage(uri: string): Promise<string> {
   }
 }
 
-// ✅ REMOVED — react-native-compressor video compression (module wasn't
-// installed / resolvable, causing a build-time "Cannot find module" error).
-// Videos are now sent as-is (no compression step); the 50 MB size gate
-// below still protects against oversized uploads.
-
-// ✅ ADDED — 50 MB hard cap for video uploads, checked on the original
-// (uncompressed) file straight from the camera/gallery picker.
 const MAX_VIDEO_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
 
-// Cross-platform file-size check with no extra native dependency: RN's
-// built-in fetch() can read local file:// / content:// URIs and the
-// resulting Blob exposes .size in bytes.
 const getFileSizeInBytes = async (uri: string): Promise<number> => {
   try {
     const response = await fetch(uri);
@@ -568,7 +488,7 @@ const getFileSizeInBytes = async (uri: string): Promise<number> => {
     return blob.size;
   } catch (err) {
     console.warn('⚠️ Could not determine file size for', uri, err);
-    return 0; // fail-open — don't block upload just because size check failed
+    return 0;
   }
 };
 
@@ -589,24 +509,16 @@ const PhotoUploadField = ({
 
   const mapAssets = async (assets: any[]): Promise<PhotoFile[]> => {
     const valid = assets.filter((asset) => asset.uri);
-    // ✅ ADDED — collects names of any video rejected for exceeding 50 MB,
-    // so we can show ONE clear alert listing all of them instead of one
-    // popup per file.
     const rejectedForSize: string[] = [];
 
     const results = await Promise.all(
       valid.map(async (asset) => {
-        // ✅ CHANGED — video compression removed (react-native-compressor
-        // module wasn't resolvable). Videos now go through as-is; photos
-        // are still compressed as before.
         const finalUri = isVideo
           ? asset.uri
           : await compressImage(asset.uri);
 
         const displayName = asset.fileName ?? asset.uri?.split('/').pop() ?? `${namePrefix}_${Date.now()}`;
 
-        // ✅ 50 MB size gate for videos, checked on the raw picked file
-        // since there's no compression step anymore.
         if (isVideo) {
           const sizeBytes = await getFileSizeInBytes(finalUri);
           if (sizeBytes > MAX_VIDEO_SIZE_BYTES) {
@@ -633,7 +545,6 @@ const PhotoUploadField = ({
       );
     }
 
-    // Drop the nulls from rejected videos before returning
     return results.filter((r): r is PhotoFile => r !== null);
   };
 
@@ -762,9 +673,6 @@ const PhotoUploadField = ({
 };
 
 // ── Single-file Data-URL Upload Field (Aadhar, PAN, screenshots, etc) ──────────
-// These schema fields are `type: "string", format: "data-url"` (not arrays),
-// so — like the signature field — the picked image is base64-encoded and
-// stored directly in formValues rather than sent as a multipart file.
 const DataUrlUploadField = ({
   label, value, onChange, required, accentColor,
 }: {
@@ -776,9 +684,9 @@ const DataUrlUploadField = ({
     launcher(
       {
         mediaType: 'photo',
-        quality: 0.3,        // ✅ CHANGED — was 0.5, smaller base64 payload
-        maxWidth: 800,         // ✅ CHANGED — was 1000
-        maxHeight: 800,        // ✅ CHANGED — was 1000
+        quality: 0.3,
+        maxWidth: 800,
+        maxHeight: 800,
         selectionLimit: 1,
         includeBase64: true,
         saveToPhotos: fromCamera,
@@ -845,7 +753,6 @@ const SignatureField = ({
   const sigRef = useRef<any>(null);
 
   const handleOK = (signature: string) => {
-    // signature already arrives as "data:image/png;base64,...."
     onChange(signature);
     setDrawVisible(false);
   };
@@ -854,9 +761,9 @@ const SignatureField = ({
     launchImageLibrary(
       {
         mediaType: 'photo',
-        quality: 0.3,        // ✅ CHANGED — was 0.5
-        maxWidth: 800,         // ✅ CHANGED — was 1000
-        maxHeight: 800,        // ✅ CHANGED — was 1000
+        quality: 0.3,
+        maxWidth: 800,
+        maxHeight: 800,
         selectionLimit: 1,
         includeBase64: true,
       },
@@ -981,30 +888,35 @@ const sanitizePayload = (data: Record<string, string>): Record<string, any> => {
   return cleaned;
 };
 
-// ── Field Renderer ─────────────────────────────────────────────────────────────
-const renderField = (
-  fieldKey: string,
-  field: FieldProperty,
-  formValues: Record<string, string>,
-  setFormValues: React.Dispatch<React.SetStateAction<Record<string, string>>>,
-  filesByField: Record<string, PhotoFile[]>,
-  setFilesByField: React.Dispatch<React.SetStateAction<Record<string, PhotoFile[]>>>,
-  required: boolean,
-  isMulti: boolean | undefined,
-  uploadType: string | undefined,
-  gpsCoords: GpsCoords,
-  gpsMapLink: string,
-  gpsLoading: boolean,
-  onRefetchGps: () => void,
-  isReadOnly: boolean,               // ✅ ADDED
-) => {
+// ── Field Renderer (memoized component — module level, NOT inside JSX) ────────
+interface FieldRendererProps {
+  fieldKey: string;
+  field: FieldProperty;
+  value: string;
+  onChange: (val: string) => void;
+  filesByField: Record<string, PhotoFile[]>;
+  setFilesByField: React.Dispatch<React.SetStateAction<Record<string, PhotoFile[]>>>;
+  required: boolean;
+  isMulti: boolean | undefined;
+  uploadType: string | undefined;
+  gpsCoords: GpsCoords;
+  gpsMapLink: string;
+  gpsLoading: boolean;
+  onRefetchGps: () => void;
+  isReadOnly: boolean;
+  onChangeObjectField: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+}
+
+const FieldRenderer = React.memo(({
+  fieldKey, field, value, onChange, filesByField, setFilesByField,
+  required, isMulti, uploadType, gpsCoords, gpsMapLink, gpsLoading,
+  onRefetchGps, isReadOnly, onChangeObjectField,
+}: FieldRendererProps) => {
   const label = field.title ?? fieldKey;
-  const value = formValues[fieldKey] ?? '';
 
   if (fieldKey === 'Latitude') {
     return (
       <GpsLocationField
-        key="gps-location-group"
         label="GPS Geo-Location Coordinates"
         coords={gpsCoords}
         mapLink={gpsMapLink}
@@ -1019,42 +931,23 @@ const renderField = (
   }
 
   if (fieldKey === 'Site_Engineer_Signature' || fieldKey === 'Customer_Confirmation_Signature') {
-    return (
-      <SignatureField
-        key={fieldKey}
-        label={label}
-        value={value}
-        onChange={(val) => setFormValues((prev) => ({ ...prev, [fieldKey]: val }))}
-        required={required}
-      />
-    );
+    return <SignatureField label={label} value={value} onChange={onChange} required={required} />;
   }
 
-  // Date / DateTime fields — e.g. Site_Survey_Completed_Date_Time (date-time),
-  // Advance_Paid_Date (date). Driven off field.format, so any new date/date-time
-  // field added to the schema gets the picker automatically.
   if (field.format === 'date-time' || field.format === 'date') {
     return (
       <DateTimeField
-        key={fieldKey}
-        label={label}
-        value={value}
-        onChange={(val) => setFormValues((prev) => ({ ...prev, [fieldKey]: val }))}
-        required={required}
+        label={label} value={value} onChange={onChange} required={required}
         mode={field.format === 'date-time' ? 'datetime' : 'date'}
-        readOnly={isReadOnly}          // ✅ ADDED
+        readOnly={isReadOnly}
       />
     );
   }
 
-  // Multi-file array fields — EB_Bill_Copy, Site_Survey_Photos, and every new
-  // "sitePhoto" / "siteVideo" upload field. Driven purely off the schema
-  // (type: array, items.format: data-url) so no per-field hardcoding needed.
   if (field.type === 'array' && field.items?.format === 'data-url') {
     const currentFiles = filesByField[fieldKey] ?? [];
     return (
       <PhotoUploadField
-        key={fieldKey}
         label={label}
         photoFiles={currentFiles}
         onChange={(files) => setFilesByField((prev) => ({ ...prev, [fieldKey]: files }))}
@@ -1067,16 +960,10 @@ const renderField = (
     );
   }
 
-  // Single-file data-url fields — Aadhar Card, PAN Card, Passport Photo,
-  // Bank Passbook Copy, Advance Payment Screenshot, etc.
   if (field.type === 'string' && field.format === 'data-url') {
     return (
       <DataUrlUploadField
-        key={fieldKey}
-        label={label}
-        value={value}
-        onChange={(val) => setFormValues((prev) => ({ ...prev, [fieldKey]: val }))}
-        required={required}
+        label={label} value={value} onChange={onChange} required={required}
         accentColor={colorForUploadType(uploadType)}
       />
     );
@@ -1085,17 +972,15 @@ const renderField = (
   if (field.enum && field.enum.length > 0) {
     return (
       <DropdownPicker
-        key={fieldKey} label={label} options={field.enum} value={value}
-        onChange={(val) => setFormValues((prev) => ({ ...prev, [fieldKey]: val }))}
-        required={required}
-        readOnly={isReadOnly}          // ✅ ADDED
+        label={label} options={field.enum} value={value}
+        onChange={onChange} required={required} readOnly={isReadOnly}
       />
     );
   }
 
   if (field.type === 'object' && field.properties) {
     return (
-      <View key={fieldKey} style={styles.groupContainer}>
+      <View style={styles.groupContainer}>
         <Text style={styles.groupTitle}>{label}</Text>
         {Object.entries(field.properties).map(([subKey, subField]) => {
           const fullKey = `${fieldKey}.${subKey}`;
@@ -1104,8 +989,7 @@ const renderField = (
               <Text style={styles.label}>{subField.title ?? subKey}</Text>
               <TextInput
                 style={styles.input}
-                value={formValues[fullKey] ?? ''}
-                onChangeText={(val) => setFormValues((prev) => ({ ...prev, [fullKey]: val }))}
+                onChangeText={(val) => onChangeObjectField((prev) => ({ ...prev, [fullKey]: val }))}
                 placeholderTextColor="#aaa"
                 placeholder={subField.title ?? subKey}
               />
@@ -1118,37 +1002,33 @@ const renderField = (
 
   if (isMulti) {
     return (
-      <View key={fieldKey} style={styles.fieldContainer}>
-        <Text style={styles.label}>
-          {label} {required && <Text style={{ color: '#ED1C25' }}>*</Text>}
-        </Text>
+      <View style={styles.fieldContainer}>
+        <Text style={styles.label}>{label} {required && <Text style={{ color: '#ED1C25' }}>*</Text>}</Text>
         <TextInput
           style={[styles.input, styles.textarea, isReadOnly && styles.readOnlyBox]}
           multiline numberOfLines={4} value={value}
-          onChangeText={(val) => setFormValues((prev) => ({ ...prev, [fieldKey]: val }))}
+          onChangeText={onChange}
           placeholderTextColor="#aaa" placeholder={label}
-          editable={!isReadOnly}       // ✅ ADDED
+          editable={!isReadOnly}
         />
       </View>
     );
   }
 
   return (
-    <View key={fieldKey} style={styles.fieldContainer}>
-      <Text style={styles.label}>
-        {label} {required && <Text style={{ color: '#ED1C25' }}>*</Text>}
-      </Text>
+    <View style={styles.fieldContainer}>
+      <Text style={styles.label}>{label} {required && <Text style={{ color: '#ED1C25' }}>*</Text>}</Text>
       <TextInput
         style={[styles.input, isReadOnly && styles.readOnlyBox]}
         value={value}
-        onChangeText={(val) => setFormValues((prev) => ({ ...prev, [fieldKey]: val }))}
+        onChangeText={onChange}
         placeholderTextColor="#aaa" placeholder={label}
         keyboardType={field.type === 'number' ? 'numeric' : 'default'}
-        editable={!isReadOnly}         // ✅ ADDED
+        editable={!isReadOnly}
       />
     </View>
   );
-};
+});
 
 // ── Main Screen ────────────────────────────────────────────────────────────────
 const FormScreen = ({
@@ -1164,9 +1044,6 @@ const FormScreen = ({
   const { currentLocation, startTracking } = useLocationTracking(isMounted);
   const typedLocation = currentLocation as LocationCoords | null;
 
-  // Keep a ref in sync with the latest location so the setInterval callback
-  // inside fetchGpsLocation always reads the live value instead of a stale
-  // snapshot captured when fetchGpsLocation was first called.
   const locationRef = useRef<LocationCoords | null>(null);
   useEffect(() => {
     locationRef.current = typedLocation;
@@ -1175,8 +1052,6 @@ const FormScreen = ({
   const [template, setTemplate]                 = useState<Template | null>(null);
   const [loading, setLoading]                   = useState(true);
   const [formValues, setFormValues]             = useState<Record<string, string>>({});
-  // Every multi-file (array) upload field keeps its own bucket here, keyed by
-  // schema field name — e.g. filesByField.EB_Bill_Copy, filesByField.Roof_Videos.
   const [filesByField, setFilesByField]         = useState<Record<string, PhotoFile[]>>({});
   const [submitting, setSubmitting]             = useState(false);
   const [isOnline, setIsOnline]                 = useState(true);
@@ -1235,7 +1110,6 @@ const FormScreen = ({
   clearInterval(checkLocation);
   setGpsLoading(false);
 
-  // fallback to last cached location instead of hard error
   AsyncStorage.getItem('last_known_location').then((cached) => {
     if (cached) {
       const parsed = JSON.parse(cached);
@@ -1327,7 +1201,6 @@ flattened[fullKey] = strVal === '-' ? '' : strVal;
           flatten(existing);
 console.log('🔎 Flattened existing data:', JSON.stringify(flattened, null, 2));
 
-// dash value scan
 Object.entries(flattened).forEach(([k, v]) => {
   if (v === '-' || (typeof v === 'string' && v.startsWith('-') && !/^-?\d/.test(v.slice(1)))) {
     console.log('⚠️ Suspicious dash value found:', k, '=', JSON.stringify(v));
@@ -1335,7 +1208,7 @@ Object.entries(flattened).forEach(([k, v]) => {
 });
 
 setFormValues(flattened);
-setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
+setOriginalValues(flattened);
         } catch (err) {
   const draft = await getSavedFormData(lead.id);
   if (draft) {
@@ -1346,7 +1219,6 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
        } else {
   const draft = await getSavedFormData(lead.id);
   const prefill = buildPrefillFromLead(lead);
-  // Draft has no Deal_Name → treat as stale (from the old GPS-only bug), prefer prefill
   const isDraftUsable = draft && draft.Deal_Name;
   setFormValues((prev) => ({
     ...prev,
@@ -1355,14 +1227,11 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
   }));
 }
     hasRestoredRef.current = true;
-    console.log('🟡 restoreData FINISHED');   // ✅ ADD — ippo mattum auto-save start aagum
+    console.log('🟡 restoreData FINISHED');
   };
   restoreData();
 }, [template]);
 
-  // Site_Engineer_Contact = logged-in surveyor's own number. Prefilled once
-  // on a fresh (non-edit) form; skipped entirely in edit mode since the
-  // saved value is already restored above.
   useEffect(() => {
     if (isEditMode) return;
     (async () => {
@@ -1375,21 +1244,44 @@ setOriginalValues(flattened);// ✅ ADD THIS LINE — baseline snapshot
     })();
   }, [isEditMode]);
 
-  const hasRestoredRef = useRef(false);   // ✅ ADD near other refs
+  const hasRestoredRef = useRef(false);
 
-useEffect(() => {
-  if (!hasRestoredRef.current) return;      // ✅ restore mudiyara varaikkum save pannadhey
-  if (Object.keys(formValues).length === 0) return;
-  saveFormDataLocally(lead.id, formValues);
-}, [formValues]);
+  // ✅ ADDED — per-field stable onChange handlers, created ONCE per fieldKey.
+  const fieldChangeHandlersRef = useRef<Record<string, (val: string) => void>>({});
+  const getFieldChangeHandler = (fieldKey: string) => {
+    if (!fieldChangeHandlersRef.current[fieldKey]) {
+      fieldChangeHandlersRef.current[fieldKey] = (val: string) => {
+        setFormValues((prev) => ({ ...prev, [fieldKey]: val }));
+      };
+    }
+    return fieldChangeHandlersRef.current[fieldKey];
+  };
 
-  // ✅ ADDED — auto-calculate Plant_Cost_After_Subsidy (readOnly field) any
-  // time Total_Plant_Cost or Subsidy changes, so the value shown/submitted
-  // always stays in sync instead of relying on manual entry.
+  // ✅ CHANGED — debounced auto-save.
+  const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!hasRestoredRef.current) return;
+    if (Object.keys(formValues).length === 0) return;
+
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      saveFormDataLocally(lead.id, formValues);
+    }, 1200);
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [formValues]);
+
   useEffect(() => {
     const total = parseFloat(formValues.Total_Plant_Cost || '');
     const subsidy = parseFloat(formValues.Subsidy || '');
-    if (isNaN(total)) return; // nothing entered yet — leave field as-is
+    if (isNaN(total)) return;
 
     const safeSubsidy = isNaN(subsidy) ? 0 : subsidy;
     const computed = String(total - safeSubsidy);
@@ -1401,7 +1293,6 @@ useEffect(() => {
 
   const fetchTemplate = async () => {
     try {
-      // solarv1
       const res = await API.get('/template/get/solarv1');
       const templateData = res.data?.data || res.data?.template || res.data;
       if (!templateData?.schema || !templateData?.uischema) {
@@ -1425,20 +1316,12 @@ useEffect(() => {
     }
   };
 
-  // Groups from the current template's uischema (used for both rendering
-  // and for building the "visible-only" payload on submit/update).
   const groups = template?.uischema?.elements ?? [];
-  // ✅ ADDED — hoisted here (rather than only inside the JSX return below)
-  // so handleSubmit/handleUpdate can run required-field validation using
-  // the same schema properties / required list the form is rendering with.
   const schemaProperties = template?.schema?.properties ?? {};
   const schemaRequiredFields = template?.schema?.required ?? [];
 
   // ── Submit (New Form) ──────────────────────────────────────────────────────
   const handleSubmit = async () => {
-    // ✅ ADDED — block submit until every currently-visible required field
-    // actually has a value / file. Runs BEFORE setSubmitting(true) so the
-    // button doesn't spin for a request that's never going to be sent.
     const missingFields = validateRequiredFields(
       schemaProperties, schemaRequiredFields, groups, formValues, filesByField,
     );
@@ -1452,28 +1335,14 @@ useEffect(() => {
 
     setSubmitting(true);
 
-    // ✅ ADDED — "Site Survey Completed Date & Time" is auto-stamped with the
-    // live current date/time right at submission, instead of relying on a
-    // manual picker value. Computed here (not via setFormValues) because the
-    // state update below is async and the payload is built synchronously
-    // right after — using `nowZoho` directly guarantees the fresh timestamp
-    // actually makes it into this submission.
-    // ✅ CHANGED — was `new Date().toISOString()` (UTC + "Z" + millis,
-    // rejected by Zoho's DateTime field). Now formatted via toZohoDateTime()
-    // as local time with a proper "+HH:mm" offset, e.g. 2026-07-13T14:30:00+05:30.
     const nowZoho = toZohoDateTime(new Date());
     const stampedValues = { ...formValues, Site_survey_Completed_Date_Time: nowZoho };
-    setFormValues(stampedValues); // keeps on-screen field in sync too
+    setFormValues(stampedValues);
 
     if (isOnline) {
       try {
         const formData = new FormData();
 
-        // Zoho field mapping removed — raw form field names are sent as-is.
-        // The backend now owns all field-name handling / type coercion for Zoho.
-        // Only fields currently VISIBLE per the uischema rules are sent, and
-        // empty-string values are dropped — this is what stops things like an
-        // untouched "Advance_Paid_Date" from reaching Zoho as "".
         const dataPayload = {
           mobileNumber: lead.phone,
           deal_id: lead.dealId,
@@ -1484,16 +1353,12 @@ useEffect(() => {
         console.log('🆔 [handleSubmit] leadId (local):', lead.id, '| deal_id (backend):', dataPayload.deal_id);
         formData.append('data', JSON.stringify(dataPayload));
 
-        // ✅ ADDED — quick diagnostic log of estimated file payload size so
-        // you can see in the console whether compression is actually
-        // bringing things down (helps confirm before/after when testing).
         const totalFilesSizeEstimateMB = Object.values(filesByField).reduce(
           (sum, arr) => sum + arr.length,
           0
         );
         console.log(`📦 Total files about to upload: ${totalFilesSizeEstimateMB}`);
 
-        // Append every array-upload field under its own multipart part name.
         Object.entries(filesByField).forEach(([fieldKey, files]) => {
           const partName = multipartFieldName(fieldKey);
           files.forEach((file) => {
@@ -1526,9 +1391,6 @@ useEffect(() => {
         }
       } catch (err: any) {
         console.error('Submit error:', err);
-        // ✅ CHANGED — friendlier message specifically for 413, so the
-        // surveyor knows to retake with fewer/shorter videos instead of
-        // just seeing a generic failure.
         if (err?.response?.status === 413) {
           Alert.alert(
             'Files Too Large',
@@ -1545,15 +1407,11 @@ useEffect(() => {
       }
     } else {
       try {
-        // Zoho field mapping removed — raw form field names are saved/queued as-is.
-        // Offline drafts keep the full formValues (including empty fields) so
-        // resuming the draft later restores exactly what was on screen; the
-        // visible-only cleanup happens at actual submit time (see syncQueue).
         const offlinePayload = {
           mobileNumber: lead.phone,
           deal_id: lead.dealId,
           state: lead.state,
-          ...stampedValues, // ✅ CHANGED — was ...formValues, now carries the live completion timestamp
+          ...stampedValues,
           _filesByField: filesByField,
         };
         console.log('🆔 [handleSubmit/offline] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
@@ -1580,9 +1438,6 @@ useEffect(() => {
 
   // ── Update (Edit Mode) ─────────────────────────────────────────────────────
   const handleUpdate = async () => {
-    // ✅ ADDED — same required-field gate as handleSubmit. Even in edit
-    // mode, every currently-visible required field must still be filled
-    // before we allow the update to go out.
     const missingFields = validateRequiredFields(
       schemaProperties, schemaRequiredFields, groups, formValues, filesByField,
     );
@@ -1596,11 +1451,9 @@ useEffect(() => {
 
     setSubmitting(true);
 
-    // Only fields that actually changed from the loaded baseline are sent.
     const changedFields: Record<string, string> = {};
 Object.entries(formValues).forEach(([key, val]) => {
   if (originalValues[key] !== val) {
-    // Skip unchanged base64/signature fields
     if (
       (key === 'Site_Engineer_Signature' || key === 'Customer_Confirmation_Signature') &&
       val === originalValues[key]
@@ -1614,22 +1467,17 @@ console.log('✏️ Changed fields (diagnostic only):', JSON.stringify(changedFi
       try {
         const formData = new FormData();
 
-        // Zoho field mapping removed — raw form field names are sent as-is.
-        // buildVisiblePayload drops any changed field that is currently
-        // hidden by a uischema rule, and drops empty-string values, so a
-        // cleared-then-hidden date/amount field never reaches Zoho as "".
         const updatePayload = {
   id: lead.dealId,
   mobileNumber: lead.phone,
   deal_id: lead.dealId,
   state: lead.state,
-  ...buildVisiblePayload(groups, changedFields),   // ✅ CHANGED — was sanitizePayload(changedFields)
+  ...buildVisiblePayload(groups, changedFields),
 };
 console.log('🆔 [handleUpdate] leadId (local):', lead.id, '| deal_id (backend):', updatePayload.deal_id);
 console.log('📦 updatePayload JSON:', JSON.stringify(updatePayload));
 formData.append('data', JSON.stringify(updatePayload));
 
-        // Append every array-upload field under its own multipart part name.
         Object.entries(filesByField).forEach(([fieldKey, files]) => {
           const partName = multipartFieldName(fieldKey);
           files.forEach((file) => {
@@ -1644,7 +1492,6 @@ formData.append('data', JSON.stringify(updatePayload));
         const totalFiles = Object.values(filesByField).reduce((sum, arr) => sum + arr.length, 0);
         console.log(`📤 Updating form with ${totalFiles} file(s) across ${Object.keys(filesByField).length} field(s)...`);
 
-        // ✅ Use BASE_URL instead of hardcoded URL
         const res = await API.put('/user/update', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
           timeout: 90000,
@@ -1661,8 +1508,7 @@ formData.append('data', JSON.stringify(updatePayload));
         setFilesByField({});
       } catch (err: any) {
   console.error('Update error:', err);
-  console.error('Update error response:', JSON.stringify(err?.response?.data));  // ← ADD THIS
-  // ✅ CHANGED — friendlier message specifically for 413.
+  console.error('Update error response:', JSON.stringify(err?.response?.data));
   if (err?.response?.status === 413) {
     Alert.alert(
       'Files Too Large',
@@ -1679,7 +1525,6 @@ formData.append('data', JSON.stringify(updatePayload));
       }
     } else {
       try {
-        // Zoho field mapping removed — raw form field names are saved/queued as-is.
         const offlinePayload = {
           mobileNumber: lead.phone,
           deal_id: lead.dealId,
@@ -1689,7 +1534,6 @@ formData.append('data', JSON.stringify(updatePayload));
         };
         console.log('🆔 [handleUpdate/offline] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
         await saveFormDataLocally(lead.id, offlinePayload);
-        // ✅ Use BASE_URL instead of hardcoded URL
         await enqueue(`form_update_${lead.id}`, 'FORM_UPDATE', {
   formData: offlinePayload,
   filesByField: filesByField,
@@ -1795,33 +1639,48 @@ formData.append('data', JSON.stringify(updatePayload));
               const fieldKey   = element.scope?.split('/').pop() ?? '';
               const field      = properties[fieldKey];
               if (!field) return null;
-
-              // uischema "rule": SHOW/HIDE — skip rendering (and thus
-              // collecting) fields that aren't currently applicable, e.g.
-              // Advance_Paid_Date when Advance_payment_Received is false.
               if (!isFieldVisible(element, formValues)) return null;
 
               const isRequired = requiredFields.includes(fieldKey);
               const isMulti    = element.options?.multi === true;
               const uploadType = element.options?.uploadType;
-              const isReadOnly = element.options?.readOnly === true; // ✅ ADDED
-              return renderField(
-                fieldKey,
-                field,
-                formValues,
-                setFormValues,
-                filesByField,
-                setFilesByField,
-                isRequired,
-                isMulti,
-                uploadType,
-                gpsCoords,
-                gpsMapLink,
-                gpsLoading,
-                fetchGpsLocation,
-                isReadOnly,           // ✅ ADDED
+              const isReadOnly = element.options?.readOnly === true;
+              return (
+                <FieldRenderer
+                  key={fieldKey}
+                  fieldKey={fieldKey}
+                  field={field}
+                  value={formValues[fieldKey] ?? ''}
+                  onChange={getFieldChangeHandler(fieldKey)}
+                  filesByField={filesByField}
+                  setFilesByField={setFilesByField}
+                  required={isRequired}
+                  isMulti={isMulti}
+                  uploadType={uploadType}
+                  gpsCoords={gpsCoords}
+                  gpsMapLink={gpsMapLink}
+                  gpsLoading={gpsLoading}
+                  onRefetchGps={fetchGpsLocation}
+                  isReadOnly={isReadOnly}
+                  onChangeObjectField={setFormValues}
+                />
               );
             })}
+
+            {/* ✅ QR code shows only inside "Payment Details" group,
+                only when Advance Payment Collection Status = "Collected" */}
+            {group.label === 'Payment Details' &&
+              formValues.Advance_Payment_Collection_Status === 'Collected' && (
+                <View style={styles.qrContainer}>
+                  <Text style={styles.qrLabel}>Scan & Pay — Kondaas Automation</Text>
+                  <Image
+                    source={KondaasPaymentQR}
+                    style={styles.qrImage}
+                    resizeMode="contain"
+                  />
+                  <Text style={styles.qrUpiId}>kondaasautomationpltd016@tmb</Text>
+                </View>
+            )}
           </View>
         ))}
 
@@ -1900,7 +1759,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
     padding: 10, fontSize: 14, color: '#333', backgroundColor: '#fafafa',
   },
-  // ✅ ADDED — visually distinct style for readOnly / auto-filled fields
   readOnlyBox: {
     backgroundColor: '#eef1f4', borderColor: '#dbe0e5', opacity: 0.85,
   },
@@ -1966,4 +1824,19 @@ const styles = StyleSheet.create({
     paddingVertical: 13, alignItems: 'center', backgroundColor: '#fff',
   },
   sigFooterBtnText: { fontWeight: '700', fontSize: 14, color: '#333' },
+
+  qrContainer: {
+    backgroundColor: '#fff', marginHorizontal: 15,
+    marginBottom: 10, borderRadius: 10, padding: 16,
+    elevation: 2, alignItems: 'center',
+  },
+  qrLabel: {
+    fontSize: 13, fontWeight: '700', color: '#333', marginBottom: 10,
+  },
+  qrImage: {
+    width: 220, height: 220, borderRadius: 6,
+  },
+  qrUpiId: {
+    fontSize: 12, color: '#666', marginTop: 8, fontWeight: '600',
+  },
 });

@@ -99,9 +99,9 @@ const LeadCard = ({
     if (withinRange && !item.manualSiteEnabled && !notifiedRef.current) {
       notifiedRef.current = true;
       API.post('/notification/trigger', {
-        customerMobile: item.phone,
-        scenarioType: 3,
-      }).catch(() => {});
+  customerMobile: item.whatsappNo || item.phone,
+  scenarioType: 3,
+}).catch(() => {});
       onManualEnable?.(item);
     }
   }, [withinRange]);
@@ -326,12 +326,12 @@ const LeadCard = ({
               modal on tap so every field (Country/Region, State/Province,
               District, Sub District, City, Street, Postal Code) is visible. */}
           <TouchableOpacity
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2, paddingVertical: 3, flexShrink: 1 }}
             onPress={() => hasAddressInfo && setAddressModalVisible(true)}
             disabled={!hasAddressInfo}
           >
             <Ionicons name="location-outline" size={12} color="#555" />
-            <Text style={styles.subText} numberOfLines={1} ellipsizeMode="tail">
+            <Text style={[styles.subText, { flexShrink: 1 }]} numberOfLines={1} ellipsizeMode="tail">
               {addressSummary}
             </Text>
             {hasAddressInfo && (
@@ -339,7 +339,7 @@ const LeadCard = ({
             )}
           </TouchableOpacity>
 
-          <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
             <Ionicons name="notifications-outline" size={16} color="#aaa" />
             <Ionicons name="logo-whatsapp" size={16} color={item.whatsappNo ? '#25D366' : '#ccc'} />
             <Ionicons name="chatbubble-outline" size={16} color={item.phone ? '#555' : '#ccc'} />

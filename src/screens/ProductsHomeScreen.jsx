@@ -18,9 +18,9 @@ import firestore from "@react-native-firebase/firestore";
 import { saveMailCredentials } from "../api/api1";
 import Loader from "../components/Loader";
 import ProfileImg from "../../assets/images/Round.png";
-import { getStorageData, USER_DATA } from "../service/localStorage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SCREEN_NAMES } from '../constants/screenNames';
+import { getStorageData, USER_DATA, IsLackCallsShown } from "../service/localStorage";
 
 const ProductsHomeScreen = () => {
   const navigation = useNavigation();
@@ -38,25 +38,41 @@ const ProductsHomeScreen = () => {
     Linking.openURL("tel:9244414441");
   };
 
-  // ─── Logout — ✅ FIX: AsyncStorage.clear() பண்றோம் ──────────────────────
-  // பழைய user cache (SAVINGS_KEY, STATIONS_KEY, TODAY_KEY, LIFETIME_KEY)
-  // எல்லாம் clear ஆகும் — new user login பண்ணும்போது fresh data வரும்
-  const handleLogout = async () => {
-    try {
-      setShowLogoutPopup(false);
+// ─── Logout — ✅ FIX: full clear() போடாம, stale user cache மட்டும்
+// clear பண்றோம். leads:accepted / leads:forms / sync:queue இதெல்லாம்
+// NOT-YET-SYNCED offline data — logout ஆனாலும் இது தொடக்கூடாது,
+// இல்லனா surveyor-oda pending work (site observation forms, reached
+// status, etc.) permanent-ஆ போயிடும்.
+const handleLogout = async () => {
+  try {
+    setShowLogoutPopup(false);
 
-      // ✅ FIX: removeItem மட்டும் இல்லாம எல்லா cache-உம் clear பண்ணு
-      await AsyncStorage.clear();
-      console.log("✅ AsyncStorage fully cleared on logout.");
+    const allKeys = await AsyncStorage.getAllKeys();
+    const keysToRemove = allKeys.filter(
+      (k) =>
+        k === USER_DATA ||
+        k === IsLackCallsShown ||
+        k.startsWith("savings_data_") ||
+        k.startsWith("stations_data_") ||
+        k.startsWith("today_gen_") ||
+        k.startsWith("lifetime_") ||
+        k.startsWith("history_")
+    );
 
-      navigation.reset({
-        index: 0,
-        routes: [{ name: SCREEN_NAMES.LOGIN }],
-      });
-    } catch (error) {
-      console.error("❌ Error during logout:", error);
+    if (keysToRemove.length > 0) {
+      await AsyncStorage.multiRemove(keysToRemove);
     }
-  };
+
+    console.log("✅ Logout: user cache cleared, leads/sync data preserved:", keysToRemove);
+
+    navigation.reset({
+      index: 0,
+      routes: [{ name: SCREEN_NAMES.LOGIN }],
+    });
+  } catch (error) {
+    console.error("❌ Error during logout:", error);
+  }
+};
 
   // ─── Load user from AsyncStorage ─────────────────────────────────────────
   useEffect(() => {

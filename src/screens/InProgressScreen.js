@@ -161,7 +161,7 @@ const InProgressScreen = () => {
     try {
       // handleManualEnable — scenarioType 3
 await API.post('/notification/trigger', {
-  surveyorNumber, customerMobile: item.phone, name: item.name, scenarioType: 3,
+  surveyorNumber, customerMobile: item.whatsappNo || item.phone, name: item.name, scenarioType: 3,
 });
     } catch (e) {}
     // 👇 புதுசா சேர்த்தது: Start location + Reached location — exact lat/long
@@ -294,16 +294,16 @@ await API.post('/notification/trigger', {
       // 2d. Notification trigger
       // 2d. Notification trigger
       try {
-        await API.post('/notification/trigger', {
-          customerMobile: item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
-          state: item.state || item.State || item.customerState || item.address?.state || undefined,
-        });
-      } catch (err) {
-        await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
-          customerMobile: item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
-          state: item.state || item.State || item.customerState || item.address?.state || undefined,
-        });
-      }
+  await API.post('/notification/trigger', {
+    customerMobile: item.whatsappNo || item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
+    state: item.state || item.State || item.customerState || item.address?.state || undefined,
+  });
+} catch (err) {
+  await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
+    customerMobile: item.whatsappNo || item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
+    state: item.state || item.State || item.customerState || item.address?.state || undefined,
+  });
+}
     } else {
       // Offline — queue all operations
       const surveyorNumber = await getSurveyorNumber();
@@ -324,9 +324,9 @@ await API.post('/notification/trigger', {
       // Offline branch — also add name
 // AFTER
 await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
-        customerMobile: item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
-        state: item.state || item.State || item.customerState || item.address?.state || undefined,
-      });
+  customerMobile: item.whatsappNo || item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
+  state: item.state || item.State || item.customerState || item.address?.state || undefined,
+});
     }
   };
 
