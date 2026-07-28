@@ -137,17 +137,17 @@ const buildPrefillFromLead = (leadData: Lead & Record<string, any>): Record<stri
   set('Sub_District', leadData.subDistrict);
   set('City', leadData.city);
   set('Street_Address', leadData.street);
-  set('Order_Type', leadData.orderType);
-  set('Project_Type', leadData.projectType);
-  set('Project_Model', leadData.projectModel);
-  set('Inverter_Connection_Type', leadData.inverterConnectionType);
-  set('Inverter_Capacity', leadData.inverterCapacity);
-  set('Solar_Panel_Model', leadData.solarPanelModel);
-  set('Solar_Panel_Brand', leadData.solarPanelBrand);
-  set('No_of_Panels', leadData.noOfPanels);
-  set('Roof_Type', leadData.roofType);
-  set('Country_Region', leadData.country);
-  set('Zip_Postal_Code', leadData.zipCode);
+set('Order_Type', leadData.orderType);
+set('Project_Under', leadData.projectType);   // ✅ backend key is "projectType", value holds "Hybrid Subsidy" etc.
+set('Product_Type', leadData.productType);
+set('Inverter_Connection_Type', leadData.inverterConnectionType);
+set('Inverter_Capacity', leadData.inverterCapacity);
+set('Solar_Panel_Model', leadData.solarPanelModel);
+set('Solar_Panel_Brand', leadData.solarPanelBrand);
+set('No_of_Panels', leadData.noOfPanels);
+set('Roof_Type', leadData.roofType);
+set('Country_Region', leadData.country);
+set('Zip_Postal_Code', leadData.zipCode);      // ✅ backend key is "zipCode", not "Code"
 
   return prefill;
 };

@@ -271,7 +271,7 @@ useFocusEffect(
           noOfPanels:              item.noOfPanels,
           roofType:                item.roofType,
           country: item.country || null,
-zipCode: item.zipCode || item.Zip_Postal_Code || null,
+zipCode: item.postalCode || item.zipCode || item.Zip_Postal_Code || null,
         };
       });
 
