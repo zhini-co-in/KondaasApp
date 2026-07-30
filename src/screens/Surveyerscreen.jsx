@@ -434,6 +434,14 @@ const confirmReject = async () => {
       receivedAt: Date.now(),
     });
 
+    if (lead.dealId) {
+      try {
+        await API.delete('/order/delete', { data: { dealId: lead.dealId } });
+      } catch (delErr) {
+        console.log
+      }
+    }
+
     setLeads((prev) => prev.filter((l) => l.id !== rejectLeadId));
 
     const existing    = await AsyncStorage.getItem('rejected_lead_ids');

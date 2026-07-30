@@ -10,7 +10,7 @@ export const getLifetimeKey   = (stationId)            => `lifetime_${stationId}
 export const getHistoryKey    = (stationId, tab, date) => `history_${stationId}_${tab}_${date}`;
 
 // ─────────────────────────────────────────────────────────────
-// DEVICE ID — எல்லா API call-லயும் இதை use பண்ணு
+// DEVICE ID
 // ─────────────────────────────────────────────────────────────
 export const getDeviceId = async () => {
   try {
