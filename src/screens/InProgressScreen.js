@@ -41,6 +41,13 @@ const InProgressScreen = () => {
   const [isOnline, setIsOnline]                         = useState(true);
   const [formSubmittedIds, setFormSubmittedIds] = useState(new Set());
 
+  // 👇 புதுசா சேர்த்தது: Complete பண்ணி முடிச்சதும் இந்த lead "just completed"
+  // ஆனதா தெரிஞ்சுக்க — Home/Office buttons தெரியனும், but SurveyerScreen-க்கு
+  // odana navigate ஆகக்கூடாது. Pending completedIds-ஐ இங்க வெச்சிருந்து,
+  // user தானா back பண்ணும்போது (அல்லது Home/Office/Skip click பண்ணும்போது)
+  // navigate பண்ணுவோம்.
+  const pendingCompletedIdsRef = useRef(null);
+
   const { currentLocation, setCurrentLocation, startTracking, stopTracking } = useLocationTracking(isMounted);
 
   // ── Net watcher ───────────────────────────────────────────────────────────
@@ -211,6 +218,12 @@ await API.post('/notification/trigger', {
   };
 
   // ✅ FIX: confirmMarkCompleted — with /order/complete endpoint
+  // 👇 புதுசா மாத்தியது: Complete ஆனதும் odana SurveyerScreen-க்கு
+  // navigate ஆகாம, இதே screen-லேயே "Completed" pill + Home/Office/Skip
+  // buttons தெரியனும். அதனால auto-navigate setTimeout-ஐ நீக்கிட்டு,
+  // completedIds-ஐ pendingCompletedIdsRef-ல வெச்சிருக்கிறோம் — user
+  // Home/Office/Skip எதையாவது click பண்ணும்போது (அல்லது "Back" பண்ணும்போது)
+  // அதை SurveyerScreen-க்கு கொண்டு போய் சேர்க்கலாம்.
   const confirmMarkCompleted = async () => {
     const item = completedTargetLead;
     const leadId = item.id || item._id;
@@ -232,9 +245,13 @@ await API.post('/notification/trigger', {
         .filter((l) => l.status === 'completed')
         .map((l) => l.id);
 
-      setTimeout(() => {
-        navigation.navigate(SCREEN_NAMES.SURVEYER_SCREEN, { completedIds });
-      }, 300);
+      // 👇 CHANGED — odana navigate பண்ணாம, completedIds-ஐ ref-ல save
+      // பண்ணி வெச்சிருக்கோம். Home/Office click பண்ணும்போது (handleGoTo
+      // success ஆனதும்) அல்லது Skip click பண்ணும்போது, LeadCard
+      // onFinishAndReturn callback வழியா handleFinishAndReturn() call
+      // ஆகி, இதை பயன்படுத்தி SurveyerScreen-ல accepted list-ல இருந்து
+      // இந்த lead-ஐ நீக்கி, completed list-ல சேர்ப்போம்.
+      pendingCompletedIdsRef.current = completedIds;
 
       return updated;
     });
@@ -330,22 +347,51 @@ await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
     }
   };
 
+  // 👇 புதுசா சேர்த்தது: Home/Office (distance save ஆனப்புறம்) அல்லது Skip
+  // click பண்ணும்போது LeadCard இதை call பண்ணும் (onFinishAndReturn prop).
+  // pendingCompletedIdsRef-ல இருக்கிற completedIds-ஐ SurveyerScreen-க்கு
+  // பாஸ் பண்ணி நேரடியா navigate பண்ணிடுவோம் — Back button அழுத்தத் தேவையில்லை.
+  const handleFinishAndReturn = () => {
+    if (pendingCompletedIdsRef.current) {
+      navigation.navigate(SCREEN_NAMES.SURVEYER_SCREEN, {
+        completedIds: pendingCompletedIdsRef.current,
+      });
+    } else {
+      navigation.navigate(SCREEN_NAMES.SURVEYER_SCREEN);
+    }
+  };
+
+  // 👇 புதுசா சேர்த்தது: user "Back" arrow press பண்ணும்போது — completed
+  // ஆகியிருந்தா pending completedIds-ஐ SurveyerScreen-க்கு பாஸ் பண்ணி
+  // navigate பண்ணுவோம். இல்லைன்னா plain goBack.
+  const handleBackPress = () => {
+    const hasIncomplete = inProgressLeads.some(l => l.status !== 'completed');
+    const goBackOrHome = () => {
+      if (pendingCompletedIdsRef.current) {
+        navigation.navigate(SCREEN_NAMES.SURVEYER_SCREEN, {
+          completedIds: pendingCompletedIdsRef.current,
+        });
+      } else {
+        navigation.goBack();
+      }
+    };
+
+    if (hasIncomplete) {
+      Alert.alert('Hold on!', 'You have an unsubmitted form. Are you sure you want to leave?', [
+        { text: 'Stay', style: 'cancel' },
+        { text: 'Leave Anyway', onPress: goBackOrHome },
+      ]);
+    } else {
+      goBackOrHome();
+    }
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <View style={{ flex: 1, backgroundColor: '#F5F5F5' }}>
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => {
-          const hasIncomplete = inProgressLeads.some(l => l.status !== 'completed');
-          if (hasIncomplete) {
-            Alert.alert('Hold on!', 'You have an unsubmitted form. Are you sure you want to leave?', [
-              { text: 'Stay', style: 'cancel' },
-              { text: 'Leave Anyway', onPress: () => navigation.goBack() },
-            ]);
-          } else {
-            navigation.goBack();
-          }
-        }}>
+        <TouchableOpacity onPress={handleBackPress}>
           <Ionicons name="arrow-back" size={24} color="#ED1C25" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Lead - Inprogress</Text>
@@ -373,7 +419,11 @@ await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
               onEdit={handleEdit}
               onMarkCompleted={handleMarkCompleted}
               navigation={navigation}
-              formSubmitted={formSubmittedIds.has(item.id)} 
+              formSubmitted={formSubmittedIds.has(item.id)}
+              // 👇 புதுசா சேர்த்தது: Home/Office distance save ஆனதும் அல்லது
+              // Skip click பண்ணும்போது LeadCard இதை call பண்ணி
+              // SurveyerScreen-க்கு auto-navigate பண்ணும்.
+              onFinishAndReturn={handleFinishAndReturn}
             />
           ))}
         </View>

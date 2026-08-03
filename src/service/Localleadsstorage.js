@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const LEADS_KEY    = 'leads:accepted';   // accepted/inprogress/completed leads
 const TEMPLATE_KEY = 'leads:template';   // cached form template
-const FORMS_KEY    = 'leads:forms';      // submitted form data (offline)
+const FORMS_KEY     = 'leads:forms';     // submitted form data (offline)
 
 // ─────────────────────────────────────────────────────────────────
 // INTERNAL
@@ -111,29 +111,14 @@ export const mergeWithServerLeads = async (serverLeads) => {
   return final;
 };
 
-/**
- * Logout-ல் clear பண்ணு.
- */
 export const clearAcceptedLeads = async () => {
   await AsyncStorage.removeItem(LEADS_KEY);
 };
 
-// ─────────────────────────────────────────────────────────────────
-// FORM TEMPLATE — local cache
-// ─────────────────────────────────────────────────────────────────
-
-/**
- * Fetch பண்ணிய template-ஐ local-ல் cache பண்ணு.
- * Next time net இல்லாட்டி இதை use பண்ணு.
- */
 export const cacheTemplate = async (template) => {
   await _save(TEMPLATE_KEY, { template, cachedAt: Date.now() });
 };
 
-/**
- * Cache-ல் இருக்கும் template-ஐ return பண்ணு.
- * இல்லாட்டி null return பண்ணும்.
- */
 export const getCachedTemplate = async () => {
   const data = await _load(TEMPLATE_KEY);
   return data?.template ?? null;
@@ -143,10 +128,6 @@ export const getCachedTemplate = async () => {
 // FORM DATA — offline submit save
 // ─────────────────────────────────────────────────────────────────
 
-/**
- * Form submit ஆனதை local-ல் save பண்ணு.
- * Net வந்தப்போ syncQueue process பண்ணும்.
- */
 export const saveFormDataLocally = async (leadId, formData) => {
   const existing = (await _load(FORMS_KEY)) ?? {};
   existing[leadId] = {
@@ -157,9 +138,6 @@ export const saveFormDataLocally = async (leadId, formData) => {
   await _save(FORMS_KEY, existing);
 };
 
-/**
- * ஒரு lead-ஓட form data synced-ஆ mark பண்ணு.
- */
 export const markFormSynced = async (leadId) => {
   const existing = (await _load(FORMS_KEY)) ?? {};
   if (existing[leadId]) {
@@ -168,10 +146,6 @@ export const markFormSynced = async (leadId) => {
   }
 };
 
-/**
- * Unsynced form data-ஐ return பண்ணு.
- * syncQueue.js-ல் இருந்து use ஆகும்.
- */
 export const getUnsyncedForms = async () => {
   const all = (await _load(FORMS_KEY)) ?? {};
   return Object.entries(all)
@@ -182,4 +156,25 @@ export const getUnsyncedForms = async () => {
 export const getSavedFormData = async (leadId) => {
   const all = (await _load(FORMS_KEY)) ?? {};
   return all[leadId]?.formData ?? null;
+};
+
+export const deleteSavedFormData = async (leadId) => {
+  const existing = (await _load(FORMS_KEY)) ?? {};
+  if (existing[leadId]) {
+    delete existing[leadId];
+    await _save(FORMS_KEY, existing);
+    console.log(`[Localleads] Deleted saved form data for leadId: ${leadId}`);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────
+// LOGOUT — clear everything this module owns
+// ─────────────────────────────────────────────────────────────────
+
+export const clearAllLocalData = async () => {
+  try {
+    await AsyncStorage.multiRemove([LEADS_KEY, TEMPLATE_KEY, FORMS_KEY]);
+  } catch (e) {
+    console.log('[Localleads] clearAllLocalData error:', e);
+  }
 };

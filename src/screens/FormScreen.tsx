@@ -11,6 +11,7 @@ import { useLocationTracking, requestLocationPermissions } from '../service/loca
 import {
   cacheTemplate, getCachedTemplate,
   saveFormDataLocally, getSavedFormData,
+  deleteSavedFormData,
 } from '../service/Localleadsstorage';
 import { enqueue } from '../service/syncQueue';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -242,6 +243,18 @@ const validateRequiredFields = (
   });
 
   return missing;
+};
+
+// ── Network failure detection ───────────────────────────────────────────────
+// ✅ ADDED — distinguishes a genuine connectivity drop (no response received,
+// timeout, DNS/socket failure) from a real server-side error (4xx/5xx with a
+// response). Used to auto-fallback into the offline save + sync queue flow
+// instead of just showing a dead-end "Network Error" alert.
+const isNetworkFailure = (err: any): boolean => {
+  if (!err?.response) return true;          // axios: no response received at all
+  if (err?.message === 'Network Error') return true;
+  if (err?.code === 'ECONNABORTED') return true; // timeout
+  return false;
 };
 
 // ── Dropdown ──────────────────────────────────────────────────────────────────
@@ -1064,6 +1077,18 @@ const FormScreen = ({
     ? `https://www.google.com/maps?q=${gpsCoords.latitude},${gpsCoords.longitude}`
     : '';
 
+  // ✅ ADDED — real connectivity probe. `isOnline` (from NetInfo listener)
+  // can be a false positive on some devices (Wi-Fi connected but no actual
+  // internet route), so we re-check right before a submit/update attempt.
+  const checkRealConnectivity = async (): Promise<boolean> => {
+    try {
+      const state = await NetInfo.fetch();
+      return !!state.isConnected && state.isInternetReachable !== false;
+    } catch {
+      return false;
+    }
+  };
+
   const fetchGpsLocation = async () => {
     const hasPermission = await requestLocationPermissions();
     if (!hasPermission) {
@@ -1339,7 +1364,11 @@ setOriginalValues(flattened);
     const stampedValues = { ...formValues, Site_survey_Completed_Date_Time: nowZoho };
     setFormValues(stampedValues);
 
-    if (isOnline) {
+    // ✅ CHANGED — re-verify connectivity right before attempting the
+    // network call, instead of trusting the possibly-stale `isOnline` state.
+    const reallyOnline = await checkRealConnectivity();
+
+    if (reallyOnline) {
       try {
         const formData = new FormData();
 
@@ -1383,15 +1412,52 @@ setOriginalValues(flattened);
         });
 
         if (res.status === 201 || res.data?.message) {
-          Alert.alert('✔ Submitted', 'Form submitted successfully!', [
-            { text: 'OK', onPress: _navigateBack },
-          ]);
-          setFormValues({});
-          setFilesByField({});
-        }
+  // ✅ Server-ல submit success ஆன உடனே local draft data (formData + files refs) delete
+  await deleteSavedFormData(lead.id);
+
+  Alert.alert('✔ Submitted', 'Form submitted successfully!', [
+    { text: 'OK', onPress: _navigateBack },
+  ]);
+  setFormValues({});
+  setFilesByField({});
+}
       } catch (err: any) {
         console.error('Submit error:', err);
-        if (err?.response?.status === 413) {
+
+        // ✅ ADDED — network drop mid-upload: fall back to offline save +
+        // sync queue instead of showing a dead-end "Network Error" alert.
+        if (isNetworkFailure(err)) {
+          try {
+            const offlinePayload = {
+              mobileNumber: lead.phone,
+              deal_id: lead.dealId,
+              state: lead.state,
+              ...stampedValues,
+              _filesByField: filesByField,
+            };
+            console.log('🆔 [handleSubmit/network-fallback] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
+            await saveFormDataLocally(lead.id, offlinePayload);
+            await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', {
+              formData: offlinePayload,
+              filesByField: filesByField,
+              mobile: lead.phone,
+              leadId: lead.id,
+            });
+            Alert.alert(
+              '⚠ Network Issue',
+              'Connection dropped mid-upload. Your form & photos are saved locally and will auto-submit once internet is stable.',
+              [{ text: 'OK', onPress: _navigateBack }],
+            );
+            setFormValues({});
+            setFilesByField({});
+          } catch (offlineErr) {
+            console.error('Offline fallback save failed:', offlineErr);
+            Alert.alert(
+              'Error',
+              'Network failed AND could not save offline. Please screenshot this form and contact support.',
+            );
+          }
+        } else if (err?.response?.status === 413) {
           Alert.alert(
             'Files Too Large',
             'The photos/videos attached are too large to upload. Please remove a video or retake photos, then try again.',
@@ -1420,6 +1486,7 @@ setOriginalValues(flattened);
           formData: offlinePayload,
           filesByField: filesByField,
           mobile: lead.phone,
+          leadId: lead.id,
         });
         Alert.alert(
           '✔ Saved Offline',
@@ -1463,7 +1530,10 @@ Object.entries(formValues).forEach(([key, val]) => {
 });
 console.log('✏️ Changed fields (diagnostic only):', JSON.stringify(changedFields, null, 2));
 
-    if (isOnline) {
+    // ✅ CHANGED — real connectivity re-check before attempting update.
+    const reallyOnline = await checkRealConnectivity();
+
+    if (reallyOnline) {
       try {
         const formData = new FormData();
 
@@ -1501,15 +1571,50 @@ formData.append('data', JSON.stringify(updatePayload));
           },
         });
 
-        Alert.alert('✔ Updated', 'Form updated successfully!', [
-          { text: 'OK', onPress: () => navigation.goBack() },
-        ]);
-        setFormValues({});
-        setFilesByField({});
+        await deleteSavedFormData(lead.id);
+
+Alert.alert('✔ Updated', 'Form updated successfully!', [
+  { text: 'OK', onPress: () => navigation.goBack() },
+]);
+setFormValues({});
+setFilesByField({});
       } catch (err: any) {
   console.error('Update error:', err);
   console.error('Update error response:', JSON.stringify(err?.response?.data));
-  if (err?.response?.status === 413) {
+
+  // ✅ ADDED — network drop mid-update: fall back to offline save + sync queue.
+  if (isNetworkFailure(err)) {
+    try {
+      const offlinePayload = {
+        mobileNumber: lead.phone,
+        deal_id: lead.dealId,
+        state: lead.state,
+        ...formValues,
+        _filesByField: filesByField,
+      };
+      console.log('🆔 [handleUpdate/network-fallback] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
+      await saveFormDataLocally(lead.id, offlinePayload);
+      await enqueue(`form_update_${lead.id}`, 'FORM_UPDATE', {
+        formData: offlinePayload,
+        filesByField: filesByField,
+        mobile: lead.phone,
+        url: '/user/update',
+      });
+      Alert.alert(
+        '⚠ Network Issue',
+        'Connection dropped mid-update. Saved locally and will sync automatically when online.',
+        [{ text: 'OK', onPress: () => navigation.goBack() }],
+      );
+      setFormValues({});
+      setFilesByField({});
+    } catch (offlineErr) {
+      console.error('Offline fallback save failed:', offlineErr);
+      Alert.alert(
+        'Error',
+        'Network failed AND could not save offline. Please screenshot this form and contact support.',
+      );
+    }
+  } else if (err?.response?.status === 413) {
     Alert.alert(
       'Files Too Large',
       'The photos/videos attached are too large to upload. Please remove a video or retake photos, then try again.',

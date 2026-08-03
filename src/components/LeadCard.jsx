@@ -1,6 +1,8 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, Linking, Alert, Modal, ScrollView } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { USER_DATA } from '../service/localStorage';
 import { getDistance, getRoadDistanceKm } from '../service/locationService';
 import API from '../api/api1';
 import { StyleSheet } from 'react-native'; // or inline styles
@@ -23,6 +25,31 @@ const formatDate = (dateStr) => {
   }
 };
 
+// 👇 புதுசா சேர்த்தது: Google Maps URL string-ல இருந்து lat/lng extract பண்ற helper
+// Zoho backend அனுப்ற home_location / office_location — பல format-ல வரலாம்,
+// அதனால மூணு common pattern-ஐ try பண்றோம்.
+// Supported:
+//   https://www.google.com/maps/@13.05,80.25,15z
+//   https://www.google.com/maps?q=13.05,80.25
+//   https://www.google.com/maps?ll=13.05,80.25
+const parseLatLngFromUrl = (url) => {
+  if (!url || typeof url !== 'string') return null;
+  try {
+    let m = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);        // .../@13.05,80.25,15z
+    if (m) return { latitude: parseFloat(m[1]), longitude: parseFloat(m[2]) };
+
+    m = url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);        // ?q=13.05,80.25
+    if (m) return { latitude: parseFloat(m[1]), longitude: parseFloat(m[2]) };
+
+    m = url.match(/[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/);       // ?ll=13.05,80.25
+    if (m) return { latitude: parseFloat(m[1]), longitude: parseFloat(m[2]) };
+
+    return null;
+  } catch (e) {
+    return null;
+  }
+};
+
 const LeadCard = ({
   item,
   cardType, // 'unaccepted' | 'accepted' | 'inprogress' | 'completed'
@@ -38,6 +65,10 @@ const LeadCard = ({
   onMarkCompleted,
   navigation,
   formSubmitted,
+  // 👇 புதுசா சேர்த்தது: Complete ஆனப்புறம் Home/Office distance
+  // click பண்ணதும் (அல்லது Skip பண்ணதும்) SurveyerScreen-க்கு
+  // automatic-ஆ navigate பண்ண InProgressScreen கொடுக்கும் callback.
+  onFinishAndReturn,
 }) => {
   const hasLatLong = item.latitude && item.longitude &&
     item.latitude !== '' && item.longitude !== '';
@@ -62,6 +93,13 @@ const LeadCard = ({
 
   // 👇 புதுசா சேர்த்தது: Interested Product popup state
   const [productModalVisible, setProductModalVisible] = useState(false);
+
+  // 👇 புதுசா சேர்த்தது: Home / Office distance state — click பண்ணதும் இதுல
+  // result store ஆகி button-லயே காட்டப்படும்.
+  const [homeDistanceKm, setHomeDistanceKm]     = useState(null);
+  const [officeDistanceKm, setOfficeDistanceKm] = useState(null);
+  const [homeLoading, setHomeLoading]           = useState(false);
+  const [officeLoading, setOfficeLoading]       = useState(false);
 
   useEffect(() => {
     if (cardType !== 'inprogress') return;
@@ -106,6 +144,19 @@ const LeadCard = ({
     }
   }, [withinRange]);
 
+  // 👇 புதுசா சேர்த்தது: backend saveDealDistance-க்கு "mobile" (surveyor
+  // number) mandatory field. AsyncStorage-ல login பண்ணும்போது save ஆன
+  // USER_DATA-ல இருந்து படிக்கிறோம்.
+  const getSurveyorNumber = async () => {
+    try {
+      const userData = await AsyncStorage.getItem(USER_DATA);
+      const parsed = userData ? JSON.parse(userData) : null;
+      return parsed?.UserInfo?.phoneNo || '';
+    } catch (e) {
+      return '';
+    }
+  };
+
   const openMap = () => {
     if (item.latitude || item.address || item.city) {
       navigation?.navigate('MapView', {
@@ -117,6 +168,128 @@ const LeadCard = ({
     } else {
       Alert.alert('Location not available', 'No coordinates or address found.');
     }
+  };
+
+  // 👇 புதுசா சேர்த்தது: "Home" / "Office" icon click handler.
+  // Flow: distance calculate பண்ணு → backend saveDealDistance API-க்கு
+  // அனுப்பு → automatic-ஆ SurveyerScreen-க்கு navigate பண்ணு.
+  // ✅ Map எதுவும் open ஆகாது — click பண்ண உடனே distance மட்டும் send ஆகும்.
+  const handleGoTo = async (type) => {
+    const url = type === 'home' ? item.home_location : item.office_location;
+
+    if (!url) {
+      Alert.alert('Not Available', `${type === 'home' ? 'Home' : 'Office'} location not set for this lead.`);
+      return;
+    }
+
+    const coords = parseLatLngFromUrl(url);
+
+    if (!coords || !currentLocation) {
+      Alert.alert('Note', 'Could not read exact coordinates for distance calculation.');
+      return;
+    }
+
+    type === 'home' ? setHomeLoading(true) : setOfficeLoading(true);
+
+    // Road distance (OSRM) முதல்ல try பண்ணு, fail ஆனா straight-line fallback
+    let distanceKm;
+    try {
+      const road = await getRoadDistanceKm(
+        currentLocation.latitude, currentLocation.longitude,
+        coords.latitude, coords.longitude
+      );
+      distanceKm = road !== null
+        ? road
+        : getDistance(currentLocation.latitude, currentLocation.longitude, coords.latitude, coords.longitude) / 1000;
+    } catch (e) {
+      distanceKm = getDistance(currentLocation.latitude, currentLocation.longitude, coords.latitude, coords.longitude) / 1000;
+    }
+
+    if (type === 'home') {
+      setHomeDistanceKm(distanceKm);
+      setHomeLoading(false);
+    } else {
+      setOfficeDistanceKm(distanceKm);
+      setOfficeLoading(false);
+    }
+
+    // Backend-க்கு save பண்ணு (saveDealDistance controller — route:
+    // locationRoutes.post('/distance', saveDealDistance) => /location/distance)
+    //
+    // 👇 "to_site" — Start பண்ணும்போது SurveyerScreen.js (handleStart)
+    // AsyncStorage-ல store பண்ணி வெச்ச distance-ஐ படிக்கிறோம். அதுவே
+    // சரியான "surveyor -> site" distance, இப்போ (Complete ஆன பிறகு)
+    // இருக்கிற live location distance அல்ல. Stored value கிடைக்கலைன்னா
+    // மட்டும் live roadDistanceKm/distToLead-க்கு fallback பண்றோம்.
+    let toSiteKm = null;
+    try {
+      const raw = await AsyncStorage.getItem(`site_distance_${item.id}`);
+      toSiteKm = raw !== null ? parseFloat(raw) : null;
+    } catch (e) {
+      toSiteKm = null;
+    }
+    if (toSiteKm === null || Number.isNaN(toSiteKm)) {
+      toSiteKm = roadDistanceKm !== null
+        ? roadDistanceKm
+        : (distToLead !== null ? distToLead / 1000 : 0);
+    }
+
+    try {
+      const surveyorNumber = await getSurveyorNumber();
+      await API.post('/location/distance', {
+        deal_id:   item.dealId,
+        deal_name: item.name,
+        mobile:    surveyorNumber,
+        to_site:   toSiteKm,
+        ...(type === 'home' ? { to_home: distanceKm } : { to_office: distanceKm }),
+      });
+    } catch (e) {
+      // fail ஆனாலும் — offline queue வேணும்னா இங்க enqueue() import
+      // பண்ணி சேர்க்கலாம். இப்போ silent fail.
+    }
+
+    // ✅ Distance அனுப்பியாச்சு — இனி map திறக்காம, நேரடியா
+    // SurveyerScreen-க்கு திரும்பி போயிடுவோம்.
+    onFinishAndReturn?.();
+  };
+
+  // 👇 புதுசா சேர்த்தது: Home/Office ரெண்டையும் click பண்ணாம "Skip"
+  // பண்ணா — to_home / to_office அனுப்பாது, ஆனா "to_site" distance-ஐ
+  // (Start பண்ணும்போது AsyncStorage-ல store பண்ண surveyor -> site
+  // distance) இன்னும் backend-க்கு அனுப்பி save பண்ணிடும். இது இல்லாம
+  // Skip பண்ணா to_site backend-ல ஏறவே ஏறாது.
+  const [skipLoading, setSkipLoading] = useState(false);
+
+  const handleSkip = async () => {
+    setSkipLoading(true);
+
+    let toSiteKm = null;
+    try {
+      const raw = await AsyncStorage.getItem(`site_distance_${item.id}`);
+      toSiteKm = raw !== null ? parseFloat(raw) : null;
+    } catch (e) {
+      toSiteKm = null;
+    }
+    if (toSiteKm === null || Number.isNaN(toSiteKm)) {
+      toSiteKm = roadDistanceKm !== null
+        ? roadDistanceKm
+        : (distToLead !== null ? distToLead / 1000 : 0);
+    }
+
+    try {
+      const surveyorNumber = await getSurveyorNumber();
+      await API.post('/location/distance', {
+        deal_id:   item.dealId,
+        deal_name: item.name,
+        mobile:    surveyorNumber,
+        to_site:   toSiteKm,
+      });
+    } catch (e) {
+      // fail ஆனாலும் — silent, user-ஐ block பண்ணக்கூடாது
+    }
+
+    setSkipLoading(false);
+    onFinishAndReturn?.();
   };
 
   // ── Interested Product — data prep ───────────────────────────────────────
@@ -198,7 +371,25 @@ const LeadCard = ({
         );
 
       case 'inprogress':
-        if (item.status === 'completed') return <CompletedPill />;
+        // 👇 Complete button click பண்ணி status "completed" ஆனப்புறம் தான்
+        // Home / Office icon buttons தெரியும் — முன்னாடி வேண்டாம்.
+        if (item.status === 'completed') {
+          return (
+            <View style={{ alignItems: 'center', gap: 6 }}>
+              <CompletedPill />
+              <GoToIcons
+                homeLoading={homeLoading}
+                officeLoading={officeLoading}
+                skipLoading={skipLoading}
+                homeDistanceKm={homeDistanceKm}
+                officeDistanceKm={officeDistanceKm}
+                onHome={() => handleGoTo('home')}
+                onOffice={() => handleGoTo('office')}
+                onSkip={handleSkip}
+              />
+            </View>
+          );
+        }
 
         if (item.manualSiteEnabled || (hasLatLong && withinRange)) {
   return (
@@ -479,6 +670,61 @@ const CompletedPill = () => (
   </View>
 );
 
+// 👇 புதுசா சேர்த்தது: Complete ஆன பிறகு தெரியற Home / Office / Skip
+// round icon buttons. Home/Office tap பண்ணா distance calculate ஆகி backend-க்கு
+// அனுப்பப்பட்டு auto SurveyerScreen-க்கு navigate ஆகும். Skip tap பண்ணா
+// distance எதுவும் அனுப்பாம நேரடியா SurveyerScreen-க்கு navigate ஆகும்.
+const GoToIcons = ({
+  homeLoading, officeLoading, skipLoading, homeDistanceKm, officeDistanceKm, onHome, onOffice, onSkip,
+}) => (
+  <View style={{ flexDirection: 'row', gap: 14 }}>
+    <View style={{ alignItems: 'center' }}>
+      <TouchableOpacity
+        style={[styles.goToRoundBtn, { backgroundColor: '#6366f1' }]}
+        onPress={onHome}
+        disabled={homeLoading}
+      >
+        {homeLoading
+          ? <Ionicons name="hourglass-outline" size={16} color="#fff" />
+          : <Ionicons name="home" size={16} color="#fff" />}
+      </TouchableOpacity>
+      {homeDistanceKm !== null && (
+        <Text style={styles.goToRoundLabel}>{homeDistanceKm.toFixed(1)} km</Text>
+      )}
+    </View>
+
+    <View style={{ alignItems: 'center' }}>
+      <TouchableOpacity
+        style={[styles.goToRoundBtn, { backgroundColor: '#0ea5e9' }]}
+        onPress={onOffice}
+        disabled={officeLoading}
+      >
+        {officeLoading
+          ? <Ionicons name="hourglass-outline" size={16} color="#fff" />
+          : <Ionicons name="business" size={16} color="#fff" />}
+      </TouchableOpacity>
+      {officeDistanceKm !== null && (
+        <Text style={styles.goToRoundLabel}>{officeDistanceKm.toFixed(1)} km</Text>
+      )}
+    </View>
+
+    {/* 👇 புதுசா சேர்த்தது: Skip button — Home/Office click பண்ணாம நேரடியா
+        SurveyerScreen-க்கு போக */}
+    <View style={{ alignItems: 'center' }}>
+      <TouchableOpacity
+        style={[styles.goToRoundBtn, { backgroundColor: '#9ca3af' }]}
+        onPress={onSkip}
+        disabled={skipLoading}
+      >
+        {skipLoading
+          ? <Ionicons name="hourglass-outline" size={16} color="#fff" />
+          : <Ionicons name="arrow-redo" size={16} color="#fff" />}
+      </TouchableOpacity>
+      <Text style={styles.goToRoundLabel}>Skip</Text>
+    </View>
+  </View>
+);
+
 export default LeadCard;
 
 const styles = StyleSheet.create({
@@ -598,4 +844,12 @@ const styles = StyleSheet.create({
     borderRadius: 8, alignItems: 'center',
   },
   modalSaveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+
+  // 👇 புதுசா சேர்த்தது: Complete ஆன பிறகு தெரியற Home / Office / Skip round
+  // icon-only button styles.
+  goToRoundBtn: {
+    width: 34, height: 34, borderRadius: 17,
+    alignItems: 'center', justifyContent: 'center', elevation: 2,
+  },
+  goToRoundLabel: { fontSize: 10, color: '#555', fontWeight: '600', marginTop: 3 },
 });

@@ -99,6 +99,7 @@ async function isOnlineNow() {
 }
 
 // ── ACCEPT — same logic as SurveyerScreen.handleAccept ──────────────────────
+// ── ACCEPT — same logic as SurveyerScreen.handleAccept ──────────────────────
 async function handleNotificationAccept(notifData) {
   const mobile = notifData?.customerMobile;
   const dealId = notifData?.dealId || notifData?.leadId;
@@ -122,12 +123,11 @@ async function handleNotificationAccept(notifData) {
       });
     }
 
-    const payload = { mobile, surveyorNumber };
+    const payload = { mobile, surveyorNumber, dealId, receivedAt: acceptedAt };
+    const online  = await isOnlineNow();
 
-    // ✅ offline-safe, same as screen
-    await enqueue(`accept_${dealId || mobile}`, 'ACCEPT_LEAD', payload);
-
-    if (await isOnlineNow()) {
+    if (online) {
+      // ✅ Online-ல direct calls மட்டும் — queue-ல போடல, duplicate தவிர்க்க
       try {
         const r1 = await API.post('/order/accept', payload);
         console.log('✅ accept:', r1?.data);
@@ -144,8 +144,12 @@ async function handleNotificationAccept(notifData) {
         console.log('✅ sync-status:', r3?.data);
       } catch (apiErr) {
         console.error('[notificationService] Accept API error:', apiErr?.response?.data || apiErr?.message);
+        // ✅ direct call fail ஆனா (network drop, server error) queue-ல fallback
+        await enqueue(`accept_${dealId || mobile}`, 'ACCEPT_LEAD', payload);
       }
     } else {
+      // ✅ Offline-ல மட்டும் queue-ல போடு — net வந்ததும் processSyncQueue இதை pick பண்ணும்
+      await enqueue(`accept_${dealId || mobile}`, 'ACCEPT_LEAD', payload);
       console.log('[notificationService] Offline — queued for later sync');
     }
   } catch (e) {
@@ -156,22 +160,72 @@ async function handleNotificationAccept(notifData) {
 // ── REJECT — same logic/fields as SurveyerScreen.confirmReject ──────────────
 async function handleNotificationReject(notifData) {
   const mobile = notifData?.customerMobile;
+  const dealId = notifData?.dealId || notifData?.leadId;
   if (!mobile) return;
 
   try {
     const surveyorNumber = await getSurveyorNumber();
+    const rejectedAt     = Date.now();
+    const comment         = 'Rejected via notification';
 
-    const r = await API.post('/order/reject', {
+    const rejectPayload = {
+      dealId,
       customerMobile: mobile,
       name:           notifData?.customerName || '',
       address:        notifData?.address      || '',
       surveyorNumber,
-      comment:        'Rejected via notification',
-      receivedAt:     Date.now(),
-    });
-    console.log('❌ reject:', r?.data);
+      comment,
+      receivedAt: rejectedAt,
+    };
+
+    // ✅ reject பண்ணதும் இந்த lead திரும்ப "New Leads"-ல காட்டாம
+    // SurveyerScreen மாதிரியே rejected_lead_ids-ல track பண்றோம்
+    if (dealId) {
+      try {
+        const existing    = await AsyncStorage.getItem('rejected_lead_ids');
+        const rejectedIds = existing ? JSON.parse(existing) : [];
+        if (!rejectedIds.includes(dealId)) {
+          rejectedIds.push(dealId);
+          await AsyncStorage.setItem('rejected_lead_ids', JSON.stringify(rejectedIds));
+        }
+      } catch (storageErr) {
+        console.log('[notificationService] rejected_lead_ids save failed:', storageErr?.message);
+      }
+    }
+
+    const online = await isOnlineNow();
+
+    if (online) {
+      // ✅ Online-ல direct calls மட்டும் — queue-ல போடல், duplicate தவிர்க்க
+      let rejectOk = false;
+      try {
+        const r1 = await API.post('/order/reject', rejectPayload);
+        console.log('❌ reject:', r1?.data);
+        rejectOk = true;
+      } catch (apiErr) {
+        console.error('[notificationService] Reject API error:', apiErr?.response?.data || apiErr?.message);
+      }
+
+      if (dealId) {
+        try {
+          const r2 = await API.delete('/order/delete', { data: { dealId } });
+          console.log('🗑️ delete:', r2?.data);
+        } catch (delErr) {
+          console.log('[notificationService] Delete API error:', delErr?.response?.data || delErr?.message);
+        }
+      }
+
+      // ✅ reject API-யே fail ஆனா (network drop / server error) queue-ல fallback
+      if (!rejectOk) {
+        await enqueue(`reject_${dealId || mobile}`, 'LEAD_REJECT', rejectPayload);
+      }
+    } else {
+      // ✅ Offline-ல மட்டும் queue-ல போடு
+      await enqueue(`reject_${dealId || mobile}`, 'LEAD_REJECT', rejectPayload);
+      console.log('[notificationService] Offline — reject queued for later sync');
+    }
   } catch (e) {
-    console.error('[notificationService] Reject error:', e?.response?.data || e?.message);
+    console.error('[notificationService] Reject error:', e?.message);
   }
 }
 

@@ -2,12 +2,13 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import API from '../api/api1';
+import { deleteSavedFormData } from './Localleadsstorage';
 
 const QUEUE_KEY = 'sync:queue';
 
 // ─────────────────────────────────────────────────────────────────
 // TYPES
-// action: 'STATUS_UPDATE' | 'FORM_SUBMIT' | 'LEAD_EDIT' | 'LEAD_REJECT'
+// action: 'STATUS_UPDATE' | 'FORM_SUBMIT' | 'FORM_UPDATE' | 'LEAD_EDIT' | 'LEAD_REJECT'
 //       | 'ACCEPT_LEAD' | 'INPROGRESS_LEAD' | 'COMPLETED_LEAD'
 //       | 'NOTIFICATION' | 'JOB_COORDINATES' | 'FLOWTRIX_SYNC' | 'ORDER_COMPLETE'
 // payload: depends on action
@@ -119,6 +120,20 @@ const _executeAction = async (item) => {
         mobile: payload.mobile,
         status: 'completed',
       });
+      // ✅ Server-ல submit success ஆன உடனே local draft data (formData + files refs) delete
+      // payload.leadId FormScreen.tsx-ல enqueue() call பண்றப்போ pass ஆகணும்.
+      if (payload.leadId) {
+        await deleteSavedFormData(payload.leadId);
+      }
+      break;
+
+    // Site observation form update (edit mode, offline)
+    case 'FORM_UPDATE':
+      await API.put(payload.url || '/user/update', payload.formData);
+      // ✅ Server-ல update success ஆன உடனே local draft data delete
+      if (payload.leadId) {
+        await deleteSavedFormData(payload.leadId);
+      }
       break;
 
     // Lead field edit
@@ -127,19 +142,42 @@ const _executeAction = async (item) => {
       break;
 
     // Lead accept (with surveyor number)
+    // ✅ SurveyerScreen.handleAccept / notificationService.handleNotificationAccept
+    // ஓட online flow-ஓட same 3 calls — queue-லயும் இதே 3-உம் run ஆகணும்
     case 'ACCEPT_LEAD':
       await API.post('/order/accept', {
         mobile: payload.mobile,
         surveyorNumber: payload.surveyorNumber,
       });
+      if (payload.dealId) {
+        await API.put('/order/updatestatus', {
+          id: payload.dealId,
+          status: 'accepted',
+        });
+      }
+      await API.post('/order/sync-status', {
+        customerMobile: payload.mobile,
+        surveyorNumber: payload.surveyorNumber,
+        status: 'accepted',
+        receivedAt: payload.receivedAt || Date.now(),
+      });
       break;
 
     // Lead reject
+    // ✅ SurveyerScreen.confirmReject / notificationService.handleNotificationReject
+    // ஓட same fields + dealId இருந்தா delete follow-up-உம் இங்கயே run ஆகணும்
     case 'LEAD_REJECT':
       await API.post('/order/reject', {
-        mobile: payload.mobile,
-        reason: payload.reason,
+        customerMobile: payload.customerMobile || payload.mobile,
+        name:           payload.name || '',
+        address:        payload.address || '',
+        surveyorNumber: payload.surveyorNumber,
+        comment:        payload.comment || payload.reason || '',
+        receivedAt:     payload.receivedAt || Date.now(),
       });
+      if (payload.dealId) {
+        await API.delete('/order/delete', { data: { dealId: payload.dealId } });
+      }
       break;
 
     // Lead inprogress (with surveyor number)
@@ -176,9 +214,6 @@ const _executeAction = async (item) => {
       break;
 
     // 👇 புதுசா சேர்த்தது: Flowtrix status sync (accepted / inprogress / completed)
-    // InProgressScreen.js-ல confirmMarkCompleted() offline branch-ல இதை
-    // enqueue பண்றோம், ஆனா முன்பு இங்க handle பண்ணல — அதனால silently
-    // "Unknown action" ஆகி sync ஆகாம போச்சு. இப்போ fix ஆச்சு.
     case 'FLOWTRIX_SYNC':
       await API.post('/order/sync-status', payload);
       break;

@@ -16,11 +16,14 @@ import {
   getAcceptedLeads,
   updateAcceptedLeadStatus,
   mergeWithServerLeads,
+  clearAllLocalData, // ✅ full local wipe helper (leads + template + form drafts)
+  cacheTemplate,      // 👇 புதுசா சேர்த்தது — form template proactive-ஆ cache பண்ண
+  getCachedTemplate,  // 👇 புதுசா சேர்த்தது — already cache ஆகி இருக்கானு தேவைப்பட்டா check பண்ண
 } from '../service/Localleadsstorage';
 import { enqueue, processSyncQueue } from '../service/syncQueue';
 import { NativeModules } from 'react-native';
 import {
-  getDistance, useLocationTracking,
+  getDistance, getRoadDistanceKm, useLocationTracking,
   requestLocationPermissions, requestIOSLocationPermission, isGPSEnabled,
   startHighFrequencyTracking,
   stopHighFrequencyTracking,
@@ -32,9 +35,6 @@ import { PermissionsAndroid } from 'react-native';
 // ─────────────────────────────────────────────────────────────────────────────
 // Scheduled Site-Survey due-check helper
 // ─────────────────────────────────────────────────────────────────────────────
-// Backend "siteSurveyDateTime" field (Zoho -> Site_Survey_Req_Date_Time) வந்தா
-// அந்த date/time-ஐ இப்போதைய நேரத்தோட ஒப்பிட்டு "due" ஆனா true return பண்றது.
-// LeadCard-ல இதை prop-ஆ பாஸ் பண்ணி, true-னா border color red பண்ணலாம்.
 const isSurveyDue = (scheduledAt) => {
   if (!scheduledAt) return false;
   const scheduledTime = new Date(scheduledAt).getTime();
@@ -44,9 +44,7 @@ const isSurveyDue = (scheduledAt) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 👇 புதுசா சேர்த்தது: street + address + district + state-ஐ ஒரே
-// readable address string-ஆ combine பண்ற helper. இது front-end-ல மட்டும்
-// use ஆகும் — backend payload-ஐ தொடல. missing பண்ற parts-ஐ skip பண்ணி,
-// stray commas வராம join பண்ணும்.
+// readable address string-ஆ combine பண்ற helper.
 // ─────────────────────────────────────────────────────────────────────────────
 const buildFullAddress = (item) => {
   const parts = [item.street, item.address, item.District, item.state].filter(
@@ -90,6 +88,9 @@ const SurveyerScreen = () => {
   const acceptedLeadsRef = useRef([]);
   const isCapturingPhoto = useRef(false);
 
+  // 👇 புதுசா சேர்த்தது — ஒரே நேரத்துல template cache 2 தடவை ஓடாம தடுக்க
+  const templateCacheInFlight = useRef(false);
+
   // acceptedLeads set பண்ணும்போது ref-ஐயும் sync பண்ண
   const setAcceptedLeadsSafe = useCallback((updater) => {
     setAcceptedLeads((prev) => {
@@ -97,6 +98,35 @@ const SurveyerScreen = () => {
       acceptedLeadsRef.current = next;
       return next;
     });
+  }, []);
+
+  // ── Proactive template cache ────────────────────────────────────────────
+  // 👇 புதுசா சேர்த்தது: form template-ஐ FormScreen open பண்ணும் வரைக்கும்
+  // காத்திருக்காம, SurveyerScreen mount ஆனதும் / net திரும்ப வந்ததும்
+  // background-ல் தானாக fetch பண்ணி AsyncStorage-ல் cache பண்ணிடுவோம்.
+  // இப்படி பண்ணா, Accept பண்ணதும் odane offline ஆனாலும் Site Observation
+  // form template already local-ல் இருக்கும், "No Connection" error வராது.
+  const ensureTemplateCached = useCallback(async () => {
+    if (templateCacheInFlight.current) return;
+    templateCacheInFlight.current = true;
+    try {
+      const netState = await NetInfo.fetch();
+      const online = !!netState.isConnected && netState.isInternetReachable !== false;
+      if (!online) return; // net இல்லைனா skip, மறுபடி online ஆனப்போ retry ஆகும்
+
+      const res = await API.get('/template/get/solarv1');
+      const templateData = res.data?.data || res.data?.template || res.data;
+      if (templateData?.schema && templateData?.uischema) {
+        await cacheTemplate(templateData);
+        console.log('[SurveyerScreen] Form template cached proactively ✅');
+      }
+    } catch (e) {
+      // fail ஆனா silent — FormScreen open பண்ணும்போது இன்னொரு தடவை
+      // try ஆகும் (அதுவும் fail ஆனா cached version fallback ஆகும்)
+      console.log('[SurveyerScreen] Proactive template cache failed:', e?.message);
+    } finally {
+      templateCacheInFlight.current = false;
+    }
   }, []);
 
   // ── Net watcher ───────────────────────────────────────────────────────────
@@ -110,6 +140,7 @@ const SurveyerScreen = () => {
           await fetchAndMergeLeads();
         }
         setPendingCount(0);
+        ensureTemplateCached(); // 👈 net திரும்ப வந்ததும் template refresh/cache பண்ணு
       }
     });
     return () => unsub();
@@ -119,6 +150,7 @@ const SurveyerScreen = () => {
   useEffect(() => {
     isMounted.current = true;
     restoreState();
+    ensureTemplateCached(); // 👈 app open ஆன உடனே (online-ஆ இருந்தா) template cache பண்ணு
     return () => {
       isMounted.current = false;
       stopTracking();
@@ -148,31 +180,31 @@ const SurveyerScreen = () => {
   }, []);
 
   // useFocusEffect – setState inside setState CRASH FIX + auto refresh on screen focus
-useFocusEffect(
-  useCallback(() => {
-    // ✅ Photo எடுக்கும்போது refresh skip பண்ணு
-    if (!isCapturingPhoto.current) {
-      fetchAndMergeLeads();
-    }
+  useFocusEffect(
+    useCallback(() => {
+      // ✅ Photo எடுக்கும்போது refresh skip பண்ணு
+      if (!isCapturingPhoto.current) {
+        fetchAndMergeLeads();
+      }
 
-    const completedIds = route.params?.completedIds;
-    if (!completedIds || completedIds.length === 0) return;
-    navigation.setParams({ completedIds: null });
+      const completedIds = route.params?.completedIds;
+      if (!completedIds || completedIds.length === 0) return;
+      navigation.setParams({ completedIds: null });
 
-    const toMove = acceptedLeadsRef.current.filter((l) =>
-      completedIds.includes(l.id)
-    );
-    setAcceptedLeadsSafe((prev) =>
-      prev.filter((l) => !completedIds.includes(l.id))
-    );
-    if (toMove.length > 0) {
-      setCompletedLeads((c) => [
-        ...c.filter((cl) => !toMove.some((m) => m.id === cl.id)),
-        ...toMove.map((l) => ({ ...l, status: 'completed' })),
-      ]);
-    }
-  }, [route.params?.completedIds])
-);
+      const toMove = acceptedLeadsRef.current.filter((l) =>
+        completedIds.includes(l.id)
+      );
+      setAcceptedLeadsSafe((prev) =>
+        prev.filter((l) => !completedIds.includes(l.id))
+      );
+      if (toMove.length > 0) {
+        setCompletedLeads((c) => [
+          ...c.filter((cl) => !toMove.some((m) => m.id === cl.id)),
+          ...toMove.map((l) => ({ ...l, status: 'completed' })),
+        ]);
+      }
+    }, [route.params?.completedIds])
+  );
 
   // ── Restore state ─────────────────────────────────────────────────────────
   const restoreState = async () => {
@@ -215,8 +247,6 @@ useFocusEffect(
       const rejectedIds    = storedRejected ? JSON.parse(storedRejected) : [];
 
       const mapped = rawData.map((item) => {
-        // 👇 புதுசா சேர்த்தது: raw fields முதல்ல தனியா prep பண்ணி,
-        // அப்புறம் buildFullAddress()-க்கு கொடுக்கிறோம்.
         const rawStreet   = item.street || null;
         const rawDistrict = item.district || item.District || null;
         const rawState    = item.state || item.State || null;
@@ -241,9 +271,6 @@ useFocusEffect(
           state:      rawState,
 
           referredBy: item.referredBy || item.referred_by || item.Referred_By || null,
-          // ✅ ADDED — already sent by the Zoho webhook (ServiceAgentName /
-          // SubDistrict) but wasn't being picked up here before, so
-          // FormScreen's prefill had nothing to read for these two.
           serviceAgentName: item.ServiceAgentName || item.serviceAgentName || null,
           subDistrict: item.SubDistrict || item.subDistrict || null,
           date:       item.assignedAt,
@@ -252,8 +279,6 @@ useFocusEffect(
           longitude:  item.longitude,
           whatsappNo: item.whatsappNo,
           email:      item.email,
-          // 👇 புதுசா சேர்த்தது: street/district/state சேர்த்த full address.
-          // ஏதாவது missing-னா skip ஆகி, இருக்கிறதை மட்டும் join பண்ணும்.
           address:    fullAddress,
           status:     item.siteSurveyStatus ?? 'notassigned',
 
@@ -271,7 +296,9 @@ useFocusEffect(
           noOfPanels:              item.noOfPanels,
           roofType:                item.roofType,
           country: item.country || null,
-zipCode: item.postalCode || item.zipCode || item.Zip_Postal_Code || null,
+          zipCode: item.postalCode || item.zipCode || item.Zip_Postal_Code || null,
+          home_location:   item.home_location || null,
+          office_location: item.office_location || null,
         };
       });
 
@@ -383,6 +410,12 @@ zipCode: item.postalCode || item.zipCode || item.Zip_Postal_Code || null,
       return [...prev, { ...item, status: 'accepted' }];
     });
 
+    // 👇 புதுசா சேர்த்தது: Accept பண்ணதும் form template இன்னும் cache
+    // ஆகலைனா, ஒரு தடவை (best-effort, silent) try பண்ணிடுவோம்.
+    getCachedTemplate().then((cached) => {
+      if (!cached) ensureTemplateCached();
+    });
+
     const surveyorNumber = await getSurveyorNumber();
     const acceptedAt     = Date.now();
     const payload        = { mobile: item.phone, surveyorNumber };
@@ -408,67 +441,67 @@ zipCode: item.postalCode || item.zipCode || item.Zip_Postal_Code || null,
     setRejectModalVisible(true);
   };
 
-const confirmReject = async () => {
-  if (!rejectComment.trim()) {
-    Alert.alert('Error', 'Please enter a reason for rejection.');
-    return;
-  }
+  const confirmReject = async () => {
+    if (!rejectComment.trim()) {
+      Alert.alert('Error', 'Please enter a reason for rejection.');
+      return;
+    }
 
-  const lead = leads.find((l) => l.id === rejectLeadId);
-  if (!lead) return;
+    const lead = leads.find((l) => l.id === rejectLeadId);
+    if (!lead) return;
 
-  if (!isOnline) {
-    Alert.alert('No Connection', 'Rejecting a lead requires internet connection.');
-    return;
-  }
+    if (!isOnline) {
+      Alert.alert('No Connection', 'Rejecting a lead requires internet connection.');
+      return;
+    }
 
-  const surveyorNumber = await getSurveyorNumber();
+    const surveyorNumber = await getSurveyorNumber();
 
-  try {
-    await API.post('/order/reject', {
-      customerMobile: lead.phone,
-      name:           lead.name,      // 👈 customerName -> name
-      address:        lead.address,   // 👈 customerAddress -> address
-      surveyorNumber,
-      comment:    rejectComment.trim(),
-      receivedAt: Date.now(),
-    });
+    try {
+      await API.post('/order/reject', {
+        customerMobile: lead.phone,
+        name:           lead.name,      // 👈 customerName -> name
+        address:        lead.address,   // 👈 customerAddress -> address
+        surveyorNumber,
+        comment:    rejectComment.trim(),
+        receivedAt: Date.now(),
+      });
 
-    if (lead.dealId) {
-      try {
-        await API.delete('/order/delete', { data: { dealId: lead.dealId } });
-      } catch (delErr) {
-        console.log
+      if (lead.dealId) {
+        try {
+          await API.delete('/order/delete', { data: { dealId: lead.dealId } });
+        } catch (delErr) {
+          console.log
+        }
       }
+
+      setLeads((prev) => prev.filter((l) => l.id !== rejectLeadId));
+
+      const existing    = await AsyncStorage.getItem('rejected_lead_ids');
+      const rejectedIds = existing ? JSON.parse(existing) : [];
+      if (!rejectedIds.includes(rejectLeadId)) {
+        rejectedIds.push(rejectLeadId);
+        await AsyncStorage.setItem('rejected_lead_ids', JSON.stringify(rejectedIds));
+      }
+
+      setRejectModalVisible(false);
+      setRejectLeadId(null);
+      setRejectComment('');
+      Alert.alert('Success', 'Lead rejected successfully.');
+    } catch (err) {
+      Alert.alert('Error', err?.response?.data?.error || 'Failed to reject.');
     }
-
-    setLeads((prev) => prev.filter((l) => l.id !== rejectLeadId));
-
-    const existing    = await AsyncStorage.getItem('rejected_lead_ids');
-    const rejectedIds = existing ? JSON.parse(existing) : [];
-    if (!rejectedIds.includes(rejectLeadId)) {
-      rejectedIds.push(rejectLeadId);
-      await AsyncStorage.setItem('rejected_lead_ids', JSON.stringify(rejectedIds));
-    }
-
-    setRejectModalVisible(false);
-    setRejectLeadId(null);
-    setRejectComment('');
-    Alert.alert('Success', 'Lead rejected successfully.');
-  } catch (err) {
-    Alert.alert('Error', err?.response?.data?.error || 'Failed to reject.');
-  }
-};
+  };
 
 
-// handleToggle-ல:
-const handleToggle = async () => {
-  if (!isOn) {
-    isCapturingPhoto.current = true;        // ← flag set
-    const uploadSuccess = await takeAndUploadPhoto();
-    isCapturingPhoto.current = false;       // ← flag clear
+  // handleToggle-ல:
+  const handleToggle = async () => {
+    if (!isOn) {
+      isCapturingPhoto.current = true;        // ← flag set
+      const uploadSuccess = await takeAndUploadPhoto();
+      isCapturingPhoto.current = false;       // ← flag clear
 
-    if (!uploadSuccess) return;
+      if (!uploadSuccess) return;
       if (Platform.OS === 'android') {
         const gpsOn = await isGPSEnabled();
         if (!gpsOn) {
@@ -498,6 +531,7 @@ const handleToggle = async () => {
       await AsyncStorage.setItem('surveyer_is_on', 'true');
       startTracking();
       fetchAndMergeLeads();
+      ensureTemplateCached(); // 👈 duty ON ஆனதும் கூட ஒரு தடவை template cache try பண்ணு
     } else {
       setIsOn(false);
       await AsyncStorage.setItem('surveyer_is_on', 'false');
@@ -517,7 +551,34 @@ const handleToggle = async () => {
           try {
             stopTracking();
             stopHighFrequencyTracking();
-            await AsyncStorage.removeItem(USER_DATA);
+            if (Platform.OS === 'android') NativeModules.StartStopService?.stopService();
+
+            // ✅ 1. leads:accepted / leads:template / leads:forms clear
+            await clearAllLocalData();
+
+            // ✅ 2. மத்த manual AsyncStorage keys clear
+            await AsyncStorage.multiRemove([
+              USER_DATA,
+              'rejected_lead_ids',
+              'surveyer_is_on',
+            ]);
+
+            // ✅ 3. dynamic site_distance_<leadId> keys ellam scan panni remove pannu
+            const allKeys = await AsyncStorage.getAllKeys();
+            const siteDistanceKeys = allKeys.filter((k) => k.startsWith('site_distance_'));
+            if (siteDistanceKeys.length > 0) {
+              await AsyncStorage.multiRemove(siteDistanceKeys);
+            }
+
+            // ✅ 4. in-memory state ellam reset pannu (next login-la stale UI varakudathu)
+            acceptedLeadsRef.current = [];
+            setLeads([]);
+            setAcceptedLeadsSafe([]);
+            setCompletedLeads([]);
+            setIsOn(false);
+            setUploadedPhoto(null);
+            setActiveFilter('all');
+
             navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
           } catch (e) {
             Alert.alert('Error', 'Failed to logout.');
@@ -528,95 +589,95 @@ const handleToggle = async () => {
   };
 
   // ── Daily toggle photo upload (surveyor check-in) ─────────────────────────
-const takeAndUploadPhoto = async () => {
-  try {
-    const perm = await requestCameraPermission();
+  const takeAndUploadPhoto = async () => {
+    try {
+      const perm = await requestCameraPermission();
 
-    if (perm.neverAskAgain) {
-      Alert.alert('Camera Blocked', 'Enable camera in app settings.', [
-        { text: 'Open Settings', onPress: openAppSettings },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
+      if (perm.neverAskAgain) {
+        Alert.alert('Camera Blocked', 'Enable camera in app settings.', [
+          { text: 'Open Settings', onPress: openAppSettings },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+        return false;
+      }
+      if (!perm.granted) {
+        Alert.alert('Permission Denied', 'Camera permission is required.');
+        return false;
+      }
+
+      // ✅ FIX 1: Camera init-க்கு சிறிய delay கொடு
+      await new Promise((res) => setTimeout(res, 300));
+
+      // ✅ FIX 2: Promise wrap வேண்டாம் — directly await பண்ணு
+      const response = await launchCamera({
+        mediaType: 'photo',
+        cameraType: 'back',
+        quality: 0.3,
+        saveToPhotos: true,
+        maxWidth: 800,
+        maxHeight: 800,
+      });
+
+      if (response.didCancel) return false;
+
+      if (response.errorCode) {
+        Alert.alert('Camera Error', response.errorMessage || 'Failed to open camera');
+        return false;
+      }
+
+      const photo = response.assets?.[0];
+      if (!photo?.uri) {
+        Alert.alert('Error', 'No photo captured. Please try again.');
+        return false;
+      }
+
+      const phoneNo = await getSurveyorNumber();
+      if (!phoneNo) {
+        Alert.alert('Error', 'Surveyor phone number not found.');
+        return false;
+      }
+
+      const filename = photo.uri.split('/').pop();
+      const match    = /\.(\w+)$/.exec(filename);
+      const type     = match ? `image/${match[1]}` : 'image/jpeg';
+
+      const now  = new Date();
+      const time = [
+        String(now.getHours()).padStart(2, '0'),
+        String(now.getMinutes()).padStart(2, '0'),
+        String(now.getSeconds()).padStart(2, '0'),
+      ].join('-');
+
+      const formData = new FormData();
+      formData.append('photo',   { uri: photo.uri, name: filename, type });
+      formData.append('phoneNo', phoneNo);
+      formData.append('time',    time);
+
+      // ✅ FIX 3: timeout கொடு — network slow-ஆ இருந்தா hang ஆகாம
+      const res = await API.post('/notification/daily-photo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 30000,
+      });
+
+      if (res.data?.success) {
+        Alert.alert;
+        return true;
+      } else {
+        throw new Error(res.data?.message || 'Upload failed');
+      }
+
+    } catch (err) {
+      // ✅ FIX 4: user cancel-ஐ error-ஆ காட்டாதே
+      if (err?.message?.includes('cancelled') || err?.code === 'E_PICKER_CANCELLED') {
+        return false;
+      }
+      Alert.alert(
+        'Upload Failed',
+        err?.response?.data?.message || err?.message || 'Could not upload photo. Please try again.'
+      );
       return false;
     }
-    if (!perm.granted) {
-      Alert.alert('Permission Denied', 'Camera permission is required.');
-      return false;
-    }
-
-    // ✅ FIX 1: Camera init-க்கு சிறிய delay கொடு
-    await new Promise((res) => setTimeout(res, 300));
-
-    // ✅ FIX 2: Promise wrap வேண்டாம் — directly await பண்ணு
-    const response = await launchCamera({
-      mediaType: 'photo',
-  cameraType: 'back',
-  quality: 0.3,        
-  saveToPhotos: true,
-  maxWidth: 800,       
-  maxHeight: 800, 
-    });
-
-    if (response.didCancel) return false;
-
-    if (response.errorCode) {
-      Alert.alert('Camera Error', response.errorMessage || 'Failed to open camera');
-      return false;
-    }
-
-    const photo = response.assets?.[0];
-    if (!photo?.uri) {
-      Alert.alert('Error', 'No photo captured. Please try again.');
-      return false;
-    }
-
-    const phoneNo = await getSurveyorNumber();
-    if (!phoneNo) {
-      Alert.alert('Error', 'Surveyor phone number not found.');
-      return false;
-    }
-
-    const filename = photo.uri.split('/').pop();
-    const match    = /\.(\w+)$/.exec(filename);
-    const type     = match ? `image/${match[1]}` : 'image/jpeg';
-
-    const now  = new Date();
-    const time = [
-      String(now.getHours()).padStart(2, '0'),
-      String(now.getMinutes()).padStart(2, '0'),
-      String(now.getSeconds()).padStart(2, '0'),
-    ].join('-');
-
-    const formData = new FormData();
-    formData.append('photo',   { uri: photo.uri, name: filename, type });
-    formData.append('phoneNo', phoneNo);
-    formData.append('time',    time);
-
-    // ✅ FIX 3: timeout கொடு — network slow-ஆ இருந்தா hang ஆகாம
-    const res = await API.post('/notification/daily-photo', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 30000,
-    });
-
-    if (res.data?.success) {
-      Alert.alert;
-      return true;
-    } else {
-      throw new Error(res.data?.message || 'Upload failed');
-    }
-
-  } catch (err) {
-    // ✅ FIX 4: user cancel-ஐ error-ஆ காட்டாதே
-    if (err?.message?.includes('cancelled') || err?.code === 'E_PICKER_CANCELLED') {
-      return false;
-    }
-    Alert.alert(
-      'Upload Failed',
-      err?.response?.data?.message || err?.message || 'Could not upload photo. Please try again.'
-    );
-    return false;
-  }
-};
+  };
 
   // ── Manual camera upload button ───────────────────────────────────────────
   const handleUploadPress = async () => {
@@ -678,7 +739,6 @@ const takeAndUploadPhoto = async () => {
 
 
   // ── Start / Resume ────────────────────────────────────────────────────────
-// ── Start / Resume ────────────────────────────────────────────────────────
   const handleStart = async (id) => {
     const lead = acceptedLeadsRef.current.find((l) => l.id === id);
     if (!lead) return;
@@ -697,10 +757,11 @@ const takeAndUploadPhoto = async () => {
     // STEP 1: ETA + Maps URL calculation
     let etaText  = 'N/A';
     let totalMins = 0;
+    let distMeters = null;             // 👈 outer scope-க்கு தூக்கினோம் — கீழ site-distance store பண்ண இதுவே reuse ஆகும்
     const hasLatLong = lead.latitude && lead.longitude;
 
     if (locationRef.current && hasLatLong) {
-      const distMeters = Math.round(getDistance(
+      distMeters = Math.round(getDistance(
         locationRef.current.latitude, locationRef.current.longitude,
         parseFloat(lead.latitude), parseFloat(lead.longitude)
       ));
@@ -714,6 +775,23 @@ const takeAndUploadPhoto = async () => {
         const hrs  = Math.floor(totalMins / 60);
         const mins = totalMins % 60;
         etaText = mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`;
+      }
+    }
+
+    if (locationRef.current && hasLatLong) {
+      try {
+        const roadKm = await getRoadDistanceKm(
+          locationRef.current.latitude, locationRef.current.longitude,
+          parseFloat(lead.latitude), parseFloat(lead.longitude)
+        );
+        const siteKm = roadKm !== null ? roadKm : (distMeters !== null ? distMeters / 1000 : null);
+        if (siteKm !== null) {
+          await AsyncStorage.setItem(`site_distance_${id}`, String(siteKm));
+        }
+      } catch (e) {
+        if (distMeters !== null) {
+          try { await AsyncStorage.setItem(`site_distance_${id}`, String(distMeters / 1000)); } catch (e2) {}
+        }
       }
     }
 
@@ -753,25 +831,25 @@ const takeAndUploadPhoto = async () => {
       }));
 
       try {
-  await API.post('/notification/trigger', {
-    surveyorNumber,
-    customerMobile: lead.whatsappNo || lead.phone,
-    name:           lead.name,
-    scenarioType:   1,
-    eta:            totalMins,
-    mapsUrl,
-  });
-} catch (e) {
-}
-} else {
-  await enqueue(`notif_start_${id}`, 'NOTIFICATION', {
-    customerMobile: lead.whatsappNo || lead.phone,
-    name:           lead.name,
-    scenarioType:   1,
-    eta:            totalMins,
-    mapsUrl,
-  });
-}
+        await API.post('/notification/trigger', {
+          surveyorNumber,
+          customerMobile: lead.whatsappNo || lead.phone,
+          name:           lead.name,
+          scenarioType:   1,
+          eta:            totalMins,
+          mapsUrl,
+        });
+      } catch (e) {
+      }
+    } else {
+      await enqueue(`notif_start_${id}`, 'NOTIFICATION', {
+        customerMobile: lead.whatsappNo || lead.phone,
+        name:           lead.name,
+        scenarioType:   1,
+        eta:            totalMins,
+        mapsUrl,
+      });
+    }
 
     startHighFrequencyTracking(() => locationRef.current);
 
@@ -852,7 +930,6 @@ const takeAndUploadPhoto = async () => {
                         currentLocation={locationRef.current}
                         onAccept={handleAccept}
                         onReject={handleReject}
-                        // 👇 புதுசா சேர்த்தது: scheduled நேரம் வந்திருந்தா/கடந்திருந்தா true
                         isDue={isSurveyDue(item.scheduledAt)}
                       />
                     ))
@@ -906,7 +983,6 @@ const takeAndUploadPhoto = async () => {
               <LeadCard
                 key={item.id} item={item} currentLocation={locationRef.current}
                 cardType="unaccepted" onAccept={handleAccept} onReject={handleReject}
-                // 👇 புதுசா சேர்த்தது
                 isDue={isSurveyDue(item.scheduledAt)}
               />
             ))}
@@ -960,7 +1036,6 @@ const takeAndUploadPhoto = async () => {
                         cardType="accepted"
                         currentLocation={locationRef.current}
                         onStart={handleStart}
-                        // 👇 புதுசா சேர்த்தது
                         isDue={isSurveyDue(item.scheduledAt)}
                       />
                     ))}
