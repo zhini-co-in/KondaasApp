@@ -292,6 +292,9 @@ await API.post('/notification/trigger', {
     customerMobile: item.phone,
     customerName: item.name,
     customerAddress: item.address,
+    city: item.city,          // ➕ add
+  referredBy: item.referredBy, // ➕ add
+  comment: item.comment,   
     surveyorNumber,
     receivedAt: endAt,
   });

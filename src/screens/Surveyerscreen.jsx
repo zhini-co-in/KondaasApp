@@ -461,7 +461,9 @@ const SurveyerScreen = () => {
       await API.post('/order/reject', {
         customerMobile: lead.phone,
         name:           lead.name,      // 👈 customerName -> name
-        address:        lead.address,   // 👈 customerAddress -> address
+        address:        lead.address, 
+         city: lead.city,          // ➕ add
+  referredBy: lead.referredBy,  // 👈 customerAddress -> address
         surveyorNumber,
         comment:    rejectComment.trim(),
         receivedAt: Date.now(),
