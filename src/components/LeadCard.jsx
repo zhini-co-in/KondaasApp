@@ -101,35 +101,41 @@ const LeadCard = ({
   const [homeLoading, setHomeLoading]           = useState(false);
   const [officeLoading, setOfficeLoading]       = useState(false);
 
-  useEffect(() => {
-    if (cardType !== 'inprogress') return;
-    if (!currentLocation || !hasLatLong || item.status === 'completed') return;
-    if (distToLead === null) return;
+const isFirstDistanceFetchRef = useRef(true);
 
-    const straightKm = distToLead / 1000;
-    const now = Date.now();
-    const movedEnough =
-      lastFetchRef.current.straightKm === null ||
-      Math.abs(straightKm - lastFetchRef.current.straightKm) > 0.5; // 500m change
-    const timeGapOk = now - lastFetchRef.current.time > 30000; // 30s throttle
+useEffect(() => {
+  if (cardType !== 'inprogress') return;
+  if (!currentLocation || !hasLatLong || item.status === 'completed') return;
+  if (distToLead === null) return;
 
-    // முதல் தடவை (straightKm null) கண்டிப்பா fetch ஆகணும்.
-    if (lastFetchRef.current.straightKm !== null && !movedEnough) return;
+  const straightKm = distToLead / 1000;
+  const now = Date.now();
+  const movedEnough =
+    lastFetchRef.current.straightKm === null ||
+    Math.abs(straightKm - lastFetchRef.current.straightKm) > 0.5; // 500m change
 
-    lastFetchRef.current = { time: now, straightKm };
-    setDistanceLoading(true);
+  if (lastFetchRef.current.straightKm !== null && !movedEnough) return;
 
-    getRoadDistanceKm(
-      currentLocation.latitude, currentLocation.longitude,
-      parseFloat(item.latitude), parseFloat(item.longitude)
-    ).then((km) => {
-      setDistanceLoading(false);
-      if (km !== null) setRoadDistanceKm(km);
-      // km null ஆனா (network fail) — roadDistanceKm பழைய value/null ஆவே இருக்கும்,
-      // display JSX தானா Haversine (distToLead) ku fallback ஆகும்.
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [distToLead, cardType, item.status]);
+  lastFetchRef.current = { time: now, straightKm };
+  setDistanceLoading(true);
+
+  getRoadDistanceKm(
+    currentLocation.latitude, currentLocation.longitude,
+    parseFloat(item.latitude), parseFloat(item.longitude)
+  ).then(async (km) => {
+    setDistanceLoading(false);
+    const finalKm = km !== null ? km : straightKm;
+    if (km !== null) setRoadDistanceKm(km);
+
+    if (isFirstDistanceFetchRef.current) {
+      isFirstDistanceFetchRef.current = false;
+      try {
+        await AsyncStorage.setItem(`site_distance_${item.id}`, String(finalKm));
+      } catch (e) {}
+    }
+  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [distToLead, cardType, item.status]);
 
   // 300m auto-notify — only for inprogress
   useEffect(() => {
@@ -156,6 +162,16 @@ const LeadCard = ({
       return '';
     }
   };
+
+  const getSurveyorName = async () => {
+  try {
+    const userData = await AsyncStorage.getItem(USER_DATA);
+    const parsed = userData ? JSON.parse(userData) : null;
+    return parsed?.UserInfo?.name || parsed?.UserInfo?.Name || parsed?.UserInfo?.fullName || '';
+  } catch (e) {
+    return '';
+  }
+};
 
   const openMap = () => {
     if (item.latitude || item.address || item.city) {
@@ -236,10 +252,12 @@ const LeadCard = ({
 
     try {
       const surveyorNumber = await getSurveyorNumber();
+      const surveyorName   = await getSurveyorName(); 
       await API.post('/location/distance', {
         deal_id:   item.dealId,
         deal_name: item.name,
         mobile:    surveyorNumber,
+        surveyor_name: surveyorName,
         to_site:   toSiteKm,
         ...(type === 'home' ? { to_home: distanceKm } : { to_office: distanceKm }),
       });
@@ -278,10 +296,12 @@ const LeadCard = ({
 
     try {
       const surveyorNumber = await getSurveyorNumber();
+      const surveyorName   = await getSurveyorName();
       await API.post('/location/distance', {
         deal_id:   item.dealId,
         deal_name: item.name,
         mobile:    surveyorNumber,
+        surveyor_name: surveyorName,
         to_site:   toSiteKm,
       });
     } catch (e) {

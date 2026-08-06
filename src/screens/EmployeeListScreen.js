@@ -287,6 +287,7 @@ const normaliseDistance = (raw, idx) => ({
   dealId:     raw.deal_id || '—',
   name:       raw.deal_name || '—',
   mobile:     raw.mobile || '—',
+  surveyorName: raw.surveyor_name || '—',
   toSite:     Number(raw.to_site ?? 0),
   toOffice:   Number(raw.to_office ?? 0),
   rawDate:    raw.createdAt || null,
@@ -592,12 +593,12 @@ const EmployeeListScreen = ({ navigation, route }) => {
   };
 
   const buildDistanceCsv = () => {
-    const headers = ['Deal ID', 'Deal Name', 'Mobile', 'To Site (km)', 'To Office (km)', 'Date'];
-    const rows = distResults.map(r => [
-      r.dealId, r.name, r.mobile, r.toSite.toFixed(2), r.toOffice.toFixed(2), r.date,
-    ]);
-    return [headers, ...rows].map(row => row.map(escapeCsv).join(',')).join('\n');
-  };
+  const headers = ['Deal ID', 'Deal Name', 'Surveyor Name', 'Mobile', 'To Site (km)', 'To Office (km)', 'Date'];
+  const rows = distResults.map(r => [
+    r.dealId, r.name, r.surveyorName, r.mobile, r.toSite.toFixed(2), r.toOffice.toFixed(2), r.date,
+  ]);
+  return [headers, ...rows].map(row => row.map(escapeCsv).join(',')).join('\n');
+};
 
   const requestAndroidStoragePermission = async () => {
     if (Platform.OS !== 'android' || Platform.Version >= 29) return true; // scoped storage handles 29+
@@ -989,8 +990,12 @@ const EmployeeListScreen = ({ navigation, route }) => {
                     </View>
 
                     <View style={styles.distFooter}>
-                      <Text style={styles.distFooterText}>{item.mobile}</Text>
-                    </View>
+  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+    <Ionicons name="person-outline" size={12} color="#999" />
+    <Text style={styles.distFooterText}>{item.surveyorName}</Text>
+  </View>
+  <Text style={styles.distFooterText}>{item.mobile}</Text>
+</View>
                   </View>
                 ))}
 

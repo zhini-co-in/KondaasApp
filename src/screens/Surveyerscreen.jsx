@@ -780,23 +780,6 @@ const SurveyerScreen = () => {
       }
     }
 
-    if (locationRef.current && hasLatLong) {
-      try {
-        const roadKm = await getRoadDistanceKm(
-          locationRef.current.latitude, locationRef.current.longitude,
-          parseFloat(lead.latitude), parseFloat(lead.longitude)
-        );
-        const siteKm = roadKm !== null ? roadKm : (distMeters !== null ? distMeters / 1000 : null);
-        if (siteKm !== null) {
-          await AsyncStorage.setItem(`site_distance_${id}`, String(siteKm));
-        }
-      } catch (e) {
-        if (distMeters !== null) {
-          try { await AsyncStorage.setItem(`site_distance_${id}`, String(distMeters / 1000)); } catch (e2) {}
-        }
-      }
-    }
-
     let mapsUrl = '';
     if (locationRef.current && hasLatLong) {
       mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${locationRef.current.latitude},${locationRef.current.longitude}&destination=${lead.latitude},${lead.longitude}`;

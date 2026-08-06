@@ -1413,7 +1413,7 @@ setOriginalValues(flattened);
 
         if (res.status === 201 || res.data?.message) {
   // ✅ Server-ல submit success ஆன உடனே local draft data (formData + files refs) delete
-  await deleteSavedFormData(lead.id);
+  
 
   Alert.alert('✔ Submitted', 'Form submitted successfully!', [
     { text: 'OK', onPress: _navigateBack },
@@ -1571,7 +1571,7 @@ formData.append('data', JSON.stringify(updatePayload));
           },
         });
 
-        await deleteSavedFormData(lead.id);
+        
 
 Alert.alert('✔ Updated', 'Form updated successfully!', [
   { text: 'OK', onPress: () => navigation.goBack() },

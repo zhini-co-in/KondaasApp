@@ -11,7 +11,10 @@ import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/nativ
 import { useLocationTracking, getDistance, stopHighFrequencyTracking } from '../service/locationService';
 import API from '../api/api1';
 import { USER_DATA } from '../service/localStorage';
-import { updateAcceptedLeadStatus } from '../service/Localleadsstorage';
+import {
+  updateAcceptedLeadStatus,
+  deleteSavedFormData,
+} from '../service/Localleadsstorage';
 import { enqueue } from '../service/syncQueue';
 import LeadCard from '../components/LeadCard';
 import { BASE_URL } from '../api/api1';
@@ -234,6 +237,12 @@ await API.post('/notification/trigger', {
 
     // Step 1 — Local update
     await updateAcceptedLeadStatus(leadId, 'completed');
+
+    try {
+    await deleteSavedFormData(leadId);
+  } catch (e) {
+    console.warn('Could not delete local form data:', e);
+  }
 
     setInProgressLeads((prev) => {
       const updated = prev.map((l) =>
