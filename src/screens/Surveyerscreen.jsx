@@ -223,7 +223,7 @@ const SurveyerScreen = () => {
     const local = await getAcceptedLeads();
     if (!isMounted.current) return;
 
-    const accepted  = local.filter((l) => l.status === 'accepted' || l.status === 'inprogress');
+    const accepted  = local.filter((l) => l.status === 'accepted' || l.status === 'inprogress' || l.status === 'hold');
     const completed = local.filter((l) => l.status === 'completed');
 
     acceptedLeadsRef.current = accepted;
@@ -311,7 +311,7 @@ const SurveyerScreen = () => {
       const serverNonNew = mapped.filter((l) => l.status !== 'notassigned');
       const merged       = await mergeWithServerLeads(serverNonNew);
 
-      const accepted  = merged.filter((l) => l.status === 'accepted' || l.status === 'inprogress');
+      const accepted  = merged.filter((l) => l.status === 'accepted' || l.status === 'inprogress' || l.status === 'hold');
       const completed = merged.filter((l) => l.status === 'completed');
 
       acceptedLeadsRef.current = accepted;
@@ -750,7 +750,7 @@ const SurveyerScreen = () => {
     if (alreadyInProgress) {
       Alert.alert(
         'One Lead at a Time!',
-        `Please complete "${alreadyInProgress.name}" before starting a new lead.`,
+        `Please complete or hold "${alreadyInProgress.name}" before starting a new lead.`,
         [{ text: 'OK, Got It' }]
       );
       return;
@@ -842,6 +842,74 @@ const SurveyerScreen = () => {
       lead:            { ...lead, status: 'inprogress', dealId: lead.dealId },
       initialLocation: locationRef.current,
     });
+  };
+
+  // ── Hold / Unhold ────────────────────────────────────────────────────────
+  // 👇 புதுசா சேர்த்தது: "Hold" click பண்ணா antha lead status 'hold'-க்கு
+  // மாறும், card freeze (dim) ஆகி காட்டப்படும், ஆனா "One Lead at a Time"
+  // check-ல இது இனி block பண்ணாது — அதனால வேற lead Start பண்ணலாம்.
+  // "Unhold" click பண்ணா திரும்ப 'inprogress'-க்கு மாறும் (அப்போ வேற
+  // lead already running-ஆ இருந்தா, அந்த lead-ஐ முதல்ல complete/hold
+  // பண்ணனும்னு block பண்ணும் — ஒரே நேரத்துல 2 lead run ஆகக்கூடாது).
+  const handleHold = async (id) => {
+    const lead = acceptedLeadsRef.current.find((l) => l.id === id);
+    if (!lead) return;
+
+    await updateAcceptedLeadStatus(id, 'hold');
+    setAcceptedLeadsSafe((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, status: 'hold' } : l))
+    );
+
+    await enqueue(`status_hold_${id}`, 'STATUS_UPDATE', {
+      mobile: lead.phone, status: 'hold',
+    });
+
+    if (isOnline) {
+  const surveyorNumber = await getSurveyorNumber();
+
+  tryApi(() => API.put('/order/updatestatus', { id: lead.dealId, status: 'hold' }));
+  tryApi(() => API.post('/order/sync-status', {
+    customerMobile: lead.phone,
+    surveyorNumber,
+    status: 'hold',
+    receivedAt: Date.now(),
+  }));
+}
+
+    // Hold ஆனதும் high-frequency GPS tracking இந்த lead-க்கு தேவையில்ல
+    stopHighFrequencyTracking();
+  };
+
+  const handleUnhold = async (id) => {
+    const lead = acceptedLeadsRef.current.find((l) => l.id === id);
+    if (!lead) return;
+
+    const alreadyInProgress = acceptedLeadsRef.current.find(
+      (l) => l.status === 'inprogress' && l.id !== id
+    );
+    if (alreadyInProgress) {
+      Alert.alert(
+        'One Lead at a Time!',
+        `Please complete or hold "${alreadyInProgress.name}" before resuming this lead.`,
+        [{ text: 'OK, Got It' }]
+      );
+      return;
+    }
+
+    await updateAcceptedLeadStatus(id, 'inprogress');
+    setAcceptedLeadsSafe((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, status: 'inprogress' } : l))
+    );
+
+    await enqueue(`status_unhold_${id}`, 'STATUS_UPDATE', {
+      mobile: lead.phone, status: 'inprogress',
+    });
+
+    if (isOnline) {
+      tryApi(() => API.put('/order/updatestatus', { id: lead.dealId, status: 'inprogress' }));
+    }
+
+    startHighFrequencyTracking(() => locationRef.current);
   };
 
   // ── Pull to refresh ──────────────────────────────────────────────────────
@@ -1021,6 +1089,8 @@ const SurveyerScreen = () => {
                         cardType="accepted"
                         currentLocation={locationRef.current}
                         onStart={handleStart}
+                        onHold={handleHold}
+                        onUnhold={handleUnhold}
                         isDue={isSurveyDue(item.scheduledAt)}
                       />
                     ))}

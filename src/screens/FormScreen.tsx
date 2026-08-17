@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, ActivityIndicator,
   StyleSheet, TextInput, TouchableOpacity, Alert, Modal, FlatList, Image,
-  PermissionsAndroid, Platform,
+  PermissionsAndroid, Platform, Keyboard,
 } from 'react-native';
 import API from '../api/api1';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -26,6 +26,7 @@ interface FieldProperty {
   title?: string; description?: string; type?: string;
   enum?: string[]; properties?: Record<string, FieldProperty>; format?: string;
   items?: { type?: string; format?: string };
+  pattern?: string; minLength?: number; maxLength?: number;
 }
 interface SchemaProperties { [key: string]: FieldProperty; }
 interface Schema { properties?: SchemaProperties; required?: string[]; }
@@ -43,7 +44,7 @@ interface UIRule {
 interface UIElement {
   type: string; scope?: string; label?: string;
   elements?: UIElement[];
-  // ✅ ADDED: readOnly — lets uischema mark a field (e.g. Report_Number,
+  // readOnly — lets uischema mark a field (e.g. Report_Number,
   // Plant_Cost_After_Subsidy) as view-only so the field renderer disables
   // editing instead of silently showing an editable text box.
   options?: { multi?: boolean; uploadType?: string; readOnly?: boolean };
@@ -85,6 +86,9 @@ const colorForUploadType = (uploadType?: string): string => {
 
 const multipartFieldName = (fieldKey: string): string => fieldKey;
 
+// Fields that must ALWAYS be sent as text/string to Zoho, even though their
+// values look numeric (leading zeros, fixed-length codes, IDs, etc). These
+// are deliberately excluded from the number coercion below.
 const ZOHO_TEXT_FIELDS = [
   'Report_Number',
   'Zip_Postal_Code',
@@ -102,6 +106,46 @@ const enforceZohoTextFields = (
     }
   });
   return fixed;
+};
+
+// ── Coerce string form values back to their schema type before sending ─────
+// The form UI stores every value as a string in `formValues` (that's what
+// lets TextInput / dropdowns work uniformly and is why the keyboard/typing
+// behaviour never needs to change). But Zoho's schema marks many of these
+// fields as `type: "number"` (Connected_Load, Inverter_Capacity,
+// No_of_Panels, Total_Plant_Cost, Subsidy, AC_Cable, etc). If we send them
+// as strings, Zoho either rejects them or stores them as text instead of a
+// numeric field.
+//
+// This function walks the OUTGOING payload only (never touches formValues,
+// never touches the TextInput/keyboardType rendering) and converts any key
+// whose schema type is "number" into an actual JS number — except fields
+// explicitly listed in ZOHO_TEXT_FIELDS, which must stay text (e.g.
+// Consumer_Number / Zip_Postal_Code can have leading zeros that a number
+// would silently strip).
+const coerceSchemaTypes = (
+  payload: Record<string, any>,
+  properties: SchemaProperties,
+): Record<string, any> => {
+  const coerced: Record<string, any> = { ...payload };
+
+  Object.entries(coerced).forEach(([key, val]) => {
+    if (val === undefined || val === null || val === '') return;
+    if (ZOHO_TEXT_FIELDS.includes(key)) return; // force-kept as text
+
+    const fieldDef = properties[key];
+    if (fieldDef?.type === 'number' && typeof val === 'string') {
+      const num = Number(val);
+      if (!Number.isNaN(num)) {
+        coerced[key] = num;
+      }
+      // if it doesn't parse cleanly, leave the original string in place
+      // rather than silently dropping the field — validation earlier in
+      // the flow should have already caught truly empty/invalid values.
+    }
+  });
+
+  return coerced;
 };
 
 const toZohoDateTime = (date: Date): string => {
@@ -138,17 +182,17 @@ const buildPrefillFromLead = (leadData: Lead & Record<string, any>): Record<stri
   set('Sub_District', leadData.subDistrict);
   set('City', leadData.city);
   set('Street_Address', leadData.street);
-set('Order_Type', leadData.orderType);
-set('Project_Under', leadData.projectType);   // ✅ backend key is "projectType", value holds "Hybrid Subsidy" etc.
-set('Product_Type', leadData.productType);
-set('Inverter_Connection_Type', leadData.inverterConnectionType);
-set('Inverter_Capacity', leadData.inverterCapacity);
-set('Solar_Panel_Model', leadData.solarPanelModel);
-set('Solar_Panel_Brand', leadData.solarPanelBrand);
-set('No_of_Panels', leadData.noOfPanels);
-set('Roof_Type', leadData.roofType);
-set('Country_Region', leadData.country);
-set('Zip_Postal_Code', leadData.zipCode);      // ✅ backend key is "zipCode", not "Code"
+  set('Order_Type', leadData.orderType);
+  set('Project_Under', leadData.projectType);   // backend key is "projectType", value holds "Hybrid Subsidy" etc.
+  set('Product_Type', leadData.productType);
+  set('Inverter_Connection_Type', leadData.inverterConnectionType);
+  set('Inverter_Capacity', leadData.inverterCapacity);
+  set('Solar_Panel_Model', leadData.solarPanelModel);
+  set('Solar_Panel_Brand', leadData.solarPanelBrand);
+  set('No_of_Panels', leadData.noOfPanels);
+  set('Roof_Type', leadData.roofType);
+  set('Country_Region', leadData.country);
+  set('Zip_Postal_Code', leadData.zipCode);      // backend key is "zipCode", not "Code"
 
   return prefill;
 };
@@ -225,6 +269,11 @@ const validateRequiredFields = (
       const field = properties[fieldKey];
       const label = field?.title ?? fieldKey;
 
+      // Photo / video fields (data-url arrays) — mandatory means at least
+      // one file must be attached. This covers all Site Survey Photos,
+      // Roof_Videos, Roof_Surround_Videos, and document uploads (Aadhar,
+      // PAN, Bank Passbook, etc) since they're all schema type "array"
+      // with items format "data-url".
       if (field?.type === 'array' && field.items?.format === 'data-url') {
         const files = filesByField[fieldKey] ?? [];
         if (files.length === 0) {
@@ -246,7 +295,7 @@ const validateRequiredFields = (
 };
 
 // ── Network failure detection ───────────────────────────────────────────────
-// ✅ ADDED — distinguishes a genuine connectivity drop (no response received,
+// Distinguishes a genuine connectivity drop (no response received,
 // timeout, DNS/socket failure) from a real server-side error (4xx/5xx with a
 // response). Used to auto-fallback into the offline save + sync queue flow
 // instead of just showing a dead-end "Network Error" alert.
@@ -256,6 +305,151 @@ const isNetworkFailure = (err: any): boolean => {
   if (err?.code === 'ECONNABORTED') return true; // timeout
   return false;
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ── Keyboard / input restriction helper ─────────────────────────────────────
+// Restricts the mobile keyboard shown AND live-sanitizes every keystroke
+// based on the field's actual schema type/pattern, so users physically
+// cannot type the wrong kind of character into a field (letters in a phone
+// number, symbols in a numeric field, more than 6 digits in a postal code,
+// etc). This only affects what CAN be typed — it never changes what gets
+// sent over the wire (coerceSchemaTypes / enforceZohoTextFields still
+// handle that separately).
+// ─────────────────────────────────────────────────────────────────────────────
+type KeyboardTypeOption =
+  | 'default' | 'numeric' | 'number-pad' | 'decimal-pad'
+  | 'phone-pad' | 'email-address' | 'url';
+
+interface InputRestriction {
+  keyboardType: KeyboardTypeOption;
+  sanitize: (text: string) => string;
+  maxLength?: number;
+}
+
+// Fields that are logically phone numbers even though a couple of them
+// (Site_Engineer_Contact) don't literally end in "_Number".
+const PHONE_FIELD_KEYS = [
+  'Mobile_Number',
+  'Phone_Number',
+  'WhatsApp_Number',
+  'Site_Engineer_Contact',
+  'EB_Section_Office_Contact_Number',
+  'Co_Applicant_Mobile_Number',
+];
+
+// Strips everything except digits, keeping only a single LEADING '+' if present.
+const sanitizePhone = (text: string): string => {
+  const hasLeadingPlus = text.trim().startsWith('+');
+  const digitsOnly = text.replace(/[^0-9]/g, '');
+  return hasLeadingPlus ? `+${digitsOnly}` : digitsOnly;
+};
+
+// Strips everything except digits (for pure numeric-string fields like
+// Zip_Postal_Code / Consumer_Number that must stay type "string" on the
+// wire but should never accept letters/symbols from the keyboard).
+const sanitizeDigitsOnly = (text: string): string => text.replace(/[^0-9]/g, '');
+
+// Strips everything except digits, a single leading '-' and a single '.'
+// (for true schema type "number" fields — quantities, currency, capacities).
+const sanitizeDecimal = (text: string): string => {
+  const hasLeadingMinus = text.trim().startsWith('-');
+  let cleaned = text.replace(/[^0-9.]/g, '');
+  // collapse to a single decimal point
+  const firstDot = cleaned.indexOf('.');
+  if (firstDot !== -1) {
+    cleaned = cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '');
+  }
+  return hasLeadingMinus ? `-${cleaned}` : cleaned;
+};
+
+// Strips everything except letters, spaces and common name punctuation
+// (apostrophe, period, hyphen) — used for pure "Name" fields so digits
+// typed via the keyboard's 123/symbols page get silently rejected.
+const sanitizeAlpha = (text: string): string => text.replace(/[^a-zA-Z\s.'-]/g, '');
+
+const getInputRestriction = (
+  fieldKey: string,
+  field: FieldProperty,
+): InputRestriction => {
+  // 1) True numeric schema fields (Connected_Load, Inverter_Capacity,
+  //    No_of_Panels, Total_Plant_Cost, Subsidy, AC/DC/Earthing/LA/UG Cable,
+  //    Advanced_Paid, Additional_Structure_Cost, Additional_EB_Charges, etc)
+  if (field.type === 'number') {
+    return {
+      keyboardType: Platform.OS === 'ios' ? 'decimal-pad' : 'numeric',
+      sanitize: sanitizeDecimal,
+    };
+  }
+
+  // 2) Phone-style fields — digits (+ optional leading '+'), capped at 15
+  //    digits to match the schema pattern ^\+?[0-9]{10,15}$.
+  if (PHONE_FIELD_KEYS.includes(fieldKey)) {
+    return {
+      keyboardType: 'phone-pad',
+      sanitize: sanitizePhone,
+      maxLength: 16, // 15 digits + optional leading '+'
+    };
+  }
+
+  // 3) Postal code — exactly 6 digits, kept as a STRING on the wire
+  //    (see ZOHO_TEXT_FIELDS) but the keyboard should still be numeric-only.
+  if (fieldKey === 'Zip_Postal_Code') {
+    return {
+      keyboardType: 'number-pad',
+      sanitize: sanitizeDigitsOnly,
+      maxLength: 6,
+    };
+  }
+
+  // 4) Consumer number — digits only, but forced to stay a string
+  //    (leading zeros must survive) so we restrict the keyboard without
+  //    touching its schema type.
+  if (fieldKey === 'Consumer_Number') {
+    return {
+      keyboardType: 'number-pad',
+      sanitize: sanitizeDigitsOnly,
+    };
+  }
+
+  // 5) Pure "Name" fields (Deal_Name, Consumer_Name, etc) — letters/spaces
+  //    only. Digits and symbols typed via the keyboard's 123/symbols page
+  //    get silently stripped, so numbers can never end up in a Name field.
+  if (/name/i.test(fieldKey) || /name/i.test(field.title ?? '')) {
+    return {
+      keyboardType: 'default',
+      sanitize: sanitizeAlpha,
+    };
+  }
+
+  // 6) Email fields, if any ever get rendered through the plain text path.
+  if (field.format === 'email' || /email/i.test(fieldKey)) {
+    return {
+      keyboardType: 'email-address',
+      sanitize: (t: string) => t.trim(),
+    };
+  }
+
+  // 7) URL fields (Google_Map_Location etc).
+  if (field.format === 'uri') {
+    return {
+      keyboardType: 'url',
+      sanitize: (t: string) => t.trim(),
+    };
+  }
+
+  // 8) Default — free text, no restriction.
+  return {
+    keyboardType: 'default',
+    sanitize: (t: string) => t,
+  };
+};
+
+// Tracks which keyboardType was last actively focused, across ALL fields
+// on this screen. Deliberately a plain module-level variable (not React
+// state) — it doesn't need to trigger a re-render, it only needs to be
+// readable/writable from every FieldRenderer instance so we can detect
+// "the previous field used a different keyboard type than this one".
+let globalActiveKeyboardType: KeyboardTypeOption = 'default';
 
 // ── Dropdown ──────────────────────────────────────────────────────────────────
 const DropdownPicker = ({
@@ -997,14 +1191,19 @@ const FieldRenderer = React.memo(({
         <Text style={styles.groupTitle}>{label}</Text>
         {Object.entries(field.properties).map(([subKey, subField]) => {
           const fullKey = `${fieldKey}.${subKey}`;
+          const restriction = getInputRestriction(subKey, subField);
           return (
             <View key={fullKey} style={{ marginBottom: 10 }}>
               <Text style={styles.label}>{subField.title ?? subKey}</Text>
               <TextInput
                 style={styles.input}
-                onChangeText={(val) => onChangeObjectField((prev) => ({ ...prev, [fullKey]: val }))}
+                onChangeText={(val) =>
+                  onChangeObjectField((prev) => ({ ...prev, [fullKey]: restriction.sanitize(val) }))
+                }
                 placeholderTextColor="#aaa"
                 placeholder={subField.title ?? subKey}
+                keyboardType={restriction.keyboardType}
+                maxLength={restriction.maxLength}
               />
             </View>
           );
@@ -1013,16 +1212,45 @@ const FieldRenderer = React.memo(({
     );
   }
 
+  // ── Restricted keyboard + live sanitization based on schema type ──────────
+  const inputRestriction = getInputRestriction(fieldKey, field);
+  const handleRestrictedChange = (val: string) => {
+    onChange(inputRestriction.sanitize(val));
+  };
+
+  const textInputRef = useRef<TextInput>(null);
+
+  // Android's soft keyboard (Gboard especially) sometimes keeps showing the
+  // PREVIOUS field's page (e.g. numbers/symbols from Consumer Number) even
+  // after focus moves to a field whose keyboardType is 'default' — the IME
+  // isn't always restarted just because keyboardType prop differs. Detect
+  // that on focus and force a full dismiss + refocus so Android re-reads
+  // the correct keyboard type for THIS field.
+  const handleRestrictedFocus = () => {
+    const nextType = inputRestriction.keyboardType;
+    if (globalActiveKeyboardType !== nextType) {
+      Keyboard.dismiss();
+      setTimeout(() => {
+        textInputRef.current?.focus();
+      }, 60);
+    }
+    globalActiveKeyboardType = nextType;
+  };
+
   if (isMulti) {
     return (
       <View style={styles.fieldContainer}>
         <Text style={styles.label}>{label} {required && <Text style={{ color: '#ED1C25' }}>*</Text>}</Text>
         <TextInput
+          ref={textInputRef}
           style={[styles.input, styles.textarea, isReadOnly && styles.readOnlyBox]}
           multiline numberOfLines={4} value={value}
-          onChangeText={onChange}
+          onChangeText={handleRestrictedChange}
+          onFocus={handleRestrictedFocus}
           placeholderTextColor="#aaa" placeholder={label}
           editable={!isReadOnly}
+          keyboardType={inputRestriction.keyboardType}
+          maxLength={inputRestriction.maxLength}
         />
       </View>
     );
@@ -1032,11 +1260,14 @@ const FieldRenderer = React.memo(({
     <View style={styles.fieldContainer}>
       <Text style={styles.label}>{label} {required && <Text style={{ color: '#ED1C25' }}>*</Text>}</Text>
       <TextInput
+        ref={textInputRef}
         style={[styles.input, isReadOnly && styles.readOnlyBox]}
         value={value}
-        onChangeText={onChange}
+        onChangeText={handleRestrictedChange}
+        onFocus={handleRestrictedFocus}
         placeholderTextColor="#aaa" placeholder={label}
-        keyboardType={field.type === 'number' ? 'numeric' : 'default'}
+        keyboardType={inputRestriction.keyboardType}
+        maxLength={inputRestriction.maxLength}
         editable={!isReadOnly}
       />
     </View>
@@ -1077,9 +1308,9 @@ const FormScreen = ({
     ? `https://www.google.com/maps?q=${gpsCoords.latitude},${gpsCoords.longitude}`
     : '';
 
-  // ✅ ADDED — real connectivity probe. `isOnline` (from NetInfo listener)
-  // can be a false positive on some devices (Wi-Fi connected but no actual
-  // internet route), so we re-check right before a submit/update attempt.
+  // Real connectivity probe. `isOnline` (from NetInfo listener) can be a
+  // false positive on some devices (Wi-Fi connected but no actual internet
+  // route), so we re-check right before a submit/update attempt.
   const checkRealConnectivity = async (): Promise<boolean> => {
     try {
       const state = await NetInfo.fetch();
@@ -1132,25 +1363,24 @@ const FormScreen = ({
           }
 
           if (attempts >= maxAttempts) {
-  clearInterval(checkLocation);
-  setGpsLoading(false);
+            clearInterval(checkLocation);
+            setGpsLoading(false);
 
-  AsyncStorage.getItem('last_known_location').then((cached) => {
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      setFormValues((prevForm) => ({
-        ...prevForm,
-        Latitude: String(parsed.latitude),
-        Longitude: String(parsed.longitude),
-        Google_Map_Location: `https://www.google.com/maps?q=${parsed.latitude},${parsed.longitude}`,
-      }));
-      setGpsCoords({ latitude: parsed.latitude, longitude: parsed.longitude, accuracy: null });
-      Alert.alert
-    } else {
-      Alert.alert('GPS Error', 'Could not get accurate GPS location.\nPlease tap "Refetch GPS" button again.');
-    }
-  });
-}
+            AsyncStorage.getItem('last_known_location').then((cached) => {
+              if (cached) {
+                const parsed = JSON.parse(cached);
+                setFormValues((prevForm) => ({
+                  ...prevForm,
+                  Latitude: String(parsed.latitude),
+                  Longitude: String(parsed.longitude),
+                  Google_Map_Location: `https://www.google.com/maps?q=${parsed.latitude},${parsed.longitude}`,
+                }));
+                setGpsCoords({ latitude: parsed.latitude, longitude: parsed.longitude, accuracy: null });
+              } else {
+                Alert.alert('GPS Error', 'Could not get accurate GPS location.\nPlease tap "Refetch GPS" button again.');
+              }
+            });
+          }
           return prev;
         });
       }, 600);
@@ -1203,7 +1433,9 @@ const FormScreen = ({
 
   useEffect(() => { fetchTemplate(); }, []);
 
-useEffect(() => {
+  const hasRestoredRef = useRef(false);
+
+  useEffect(() => {
     if (!template) return;
     const restoreData = async () => {
       console.log('🟢 restoreData called, isEditMode:', isEditMode, 'lead:', JSON.stringify(lead));
@@ -1219,43 +1451,43 @@ useEffect(() => {
                 flatten(val, fullKey);
               } else {
                 const strVal = val != null ? String(val) : '';
-flattened[fullKey] = strVal === '-' ? '' : strVal;
+                flattened[fullKey] = strVal === '-' ? '' : strVal;
               }
             });
           };
           flatten(existing);
-console.log('🔎 Flattened existing data:', JSON.stringify(flattened, null, 2));
+          console.log('🔎 Flattened existing data:', JSON.stringify(flattened, null, 2));
 
-Object.entries(flattened).forEach(([k, v]) => {
-  if (v === '-' || (typeof v === 'string' && v.startsWith('-') && !/^-?\d/.test(v.slice(1)))) {
-    console.log('⚠️ Suspicious dash value found:', k, '=', JSON.stringify(v));
-  }
-});
+          Object.entries(flattened).forEach(([k, v]) => {
+            if (v === '-' || (typeof v === 'string' && v.startsWith('-') && !/^-?\d/.test(v.slice(1)))) {
+              console.log('⚠️ Suspicious dash value found:', k, '=', JSON.stringify(v));
+            }
+          });
 
-setFormValues(flattened);
-setOriginalValues(flattened);
+          setFormValues(flattened);
+          setOriginalValues(flattened);
         } catch (err) {
-  const draft = await getSavedFormData(lead.id);
-  if (draft) {
-    setFormValues((prev) => ({ ...prev, ...draft }));
-    setOriginalValues(draft);
-  }
-}
-       } else {
-  const draft = await getSavedFormData(lead.id);
-  const prefill = buildPrefillFromLead(lead);
-  const isDraftUsable = draft && draft.Deal_Name;
-  setFormValues((prev) => ({
-    ...prev,
-    ...prefill,
-    ...(isDraftUsable ? draft : {}),
-  }));
-}
-    hasRestoredRef.current = true;
-    console.log('🟡 restoreData FINISHED');
-  };
-  restoreData();
-}, [template]);
+          const draft = await getSavedFormData(lead.id);
+          if (draft) {
+            setFormValues((prev) => ({ ...prev, ...draft }));
+            setOriginalValues(draft);
+          }
+        }
+      } else {
+        const draft = await getSavedFormData(lead.id);
+        const prefill = buildPrefillFromLead(lead);
+        const isDraftUsable = draft && draft.Deal_Name;
+        setFormValues((prev) => ({
+          ...prev,
+          ...prefill,
+          ...(isDraftUsable ? draft : {}),
+        }));
+      }
+      hasRestoredRef.current = true;
+      console.log('🟡 restoreData FINISHED');
+    };
+    restoreData();
+  }, [template]);
 
   useEffect(() => {
     if (isEditMode) return;
@@ -1269,9 +1501,7 @@ setOriginalValues(flattened);
     })();
   }, [isEditMode]);
 
-  const hasRestoredRef = useRef(false);
-
-  // ✅ ADDED — per-field stable onChange handlers, created ONCE per fieldKey.
+  // Per-field stable onChange handlers, created ONCE per fieldKey.
   const fieldChangeHandlersRef = useRef<Record<string, (val: string) => void>>({});
   const getFieldChangeHandler = (fieldKey: string) => {
     if (!fieldChangeHandlersRef.current[fieldKey]) {
@@ -1282,7 +1512,7 @@ setOriginalValues(flattened);
     return fieldChangeHandlersRef.current[fieldKey];
   };
 
-  // ✅ CHANGED — debounced auto-save.
+  // Debounced auto-save.
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -1364,20 +1594,28 @@ setOriginalValues(flattened);
     const stampedValues = { ...formValues, Site_survey_Completed_Date_Time: nowZoho };
     setFormValues(stampedValues);
 
-    // ✅ CHANGED — re-verify connectivity right before attempting the
-    // network call, instead of trusting the possibly-stale `isOnline` state.
+    // Re-verify connectivity right before attempting the network call,
+    // instead of trusting the possibly-stale `isOnline` state.
     const reallyOnline = await checkRealConnectivity();
 
     if (reallyOnline) {
       try {
         const formData = new FormData();
 
-        const dataPayload = {
+        // ✅ FIX: buildVisiblePayload gives us the correct visible fields
+        // as strings (matches formValues typing) — coerceSchemaTypes then
+        // converts anything whose schema type is "number" into an actual
+        // number before it goes over the wire. Keyboard/typing UX is
+        // completely untouched; only the outgoing payload types change.
+        const visiblePayload = buildVisiblePayload(groups, stampedValues);
+        const typedPayload = coerceSchemaTypes(visiblePayload, schemaProperties);
+        const dataPayload = enforceZohoTextFields({
           mobileNumber: lead.phone,
           deal_id: lead.dealId,
           state: lead.state,
-          ...buildVisiblePayload(groups, stampedValues),
-        };
+          ...typedPayload,
+        });
+
         console.log('🔍 Clean visible payload:', JSON.stringify(dataPayload, null, 2));
         console.log('🆔 [handleSubmit] leadId (local):', lead.id, '| deal_id (backend):', dataPayload.deal_id);
         formData.append('data', JSON.stringify(dataPayload));
@@ -1412,20 +1650,17 @@ setOriginalValues(flattened);
         });
 
         if (res.status === 201 || res.data?.message) {
-  // ✅ Server-ல submit success ஆன உடனே local draft data (formData + files refs) delete
-  
-
-  Alert.alert('✔ Submitted', 'Form submitted successfully!', [
-    { text: 'OK', onPress: _navigateBack },
-  ]);
-  setFormValues({});
-  setFilesByField({});
-}
+          Alert.alert('✔ Submitted', 'Form submitted successfully!', [
+            { text: 'OK', onPress: _navigateBack },
+          ]);
+          setFormValues({});
+          setFilesByField({});
+        }
       } catch (err: any) {
         console.error('Submit error:', err);
 
-        // ✅ ADDED — network drop mid-upload: fall back to offline save +
-        // sync queue instead of showing a dead-end "Network Error" alert.
+        // Network drop mid-upload: fall back to offline save + sync queue
+        // instead of showing a dead-end "Network Error" alert.
         if (isNetworkFailure(err)) {
           try {
             const offlinePayload = {
@@ -1519,34 +1754,40 @@ setOriginalValues(flattened);
     setSubmitting(true);
 
     const changedFields: Record<string, string> = {};
-Object.entries(formValues).forEach(([key, val]) => {
-  if (originalValues[key] !== val) {
-    if (
-      (key === 'Site_Engineer_Signature' || key === 'Customer_Confirmation_Signature') &&
-      val === originalValues[key]
-    ) return;
-    changedFields[key] = val;
-  }
-});
-console.log('✏️ Changed fields (diagnostic only):', JSON.stringify(changedFields, null, 2));
+    Object.entries(formValues).forEach(([key, val]) => {
+      if (originalValues[key] !== val) {
+        if (
+          (key === 'Site_Engineer_Signature' || key === 'Customer_Confirmation_Signature') &&
+          val === originalValues[key]
+        ) return;
+        changedFields[key] = val;
+      }
+    });
+    console.log('✏️ Changed fields (diagnostic only):', JSON.stringify(changedFields, null, 2));
 
-    // ✅ CHANGED — real connectivity re-check before attempting update.
+    // Real connectivity re-check before attempting update.
     const reallyOnline = await checkRealConnectivity();
 
     if (reallyOnline) {
       try {
         const formData = new FormData();
 
-        const updatePayload = {
-  id: lead.dealId,
-  mobileNumber: lead.phone,
-  deal_id: lead.dealId,
-  state: lead.state,
-  ...buildVisiblePayload(groups, changedFields),
-};
-console.log('🆔 [handleUpdate] leadId (local):', lead.id, '| deal_id (backend):', updatePayload.deal_id);
-console.log('📦 updatePayload JSON:', JSON.stringify(updatePayload));
-formData.append('data', JSON.stringify(updatePayload));
+        // ✅ FIX: same coercion applied on update — only changed, visible
+        // fields go out, and anything schema-typed "number" is sent as a
+        // real number instead of a string.
+        const visibleChanged = buildVisiblePayload(groups, changedFields);
+        const typedChanged = coerceSchemaTypes(visibleChanged, schemaProperties);
+        const updatePayload = enforceZohoTextFields({
+          id: lead.dealId,
+          mobileNumber: lead.phone,
+          deal_id: lead.dealId,
+          state: lead.state,
+          ...typedChanged,
+        });
+
+        console.log('🆔 [handleUpdate] leadId (local):', lead.id, '| deal_id (backend):', updatePayload.deal_id);
+        console.log('📦 updatePayload JSON:', JSON.stringify(updatePayload));
+        formData.append('data', JSON.stringify(updatePayload));
 
         Object.entries(filesByField).forEach(([fieldKey, files]) => {
           const partName = multipartFieldName(fieldKey);
@@ -1571,61 +1812,59 @@ formData.append('data', JSON.stringify(updatePayload));
           },
         });
 
-        
-
-Alert.alert('✔ Updated', 'Form updated successfully!', [
-  { text: 'OK', onPress: () => navigation.goBack() },
-]);
-setFormValues({});
-setFilesByField({});
+        Alert.alert('✔ Updated', 'Form updated successfully!', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+        setFormValues({});
+        setFilesByField({});
       } catch (err: any) {
-  console.error('Update error:', err);
-  console.error('Update error response:', JSON.stringify(err?.response?.data));
+        console.error('Update error:', err);
+        console.error('Update error response:', JSON.stringify(err?.response?.data));
 
-  // ✅ ADDED — network drop mid-update: fall back to offline save + sync queue.
-  if (isNetworkFailure(err)) {
-    try {
-      const offlinePayload = {
-        mobileNumber: lead.phone,
-        deal_id: lead.dealId,
-        state: lead.state,
-        ...formValues,
-        _filesByField: filesByField,
-      };
-      console.log('🆔 [handleUpdate/network-fallback] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
-      await saveFormDataLocally(lead.id, offlinePayload);
-      await enqueue(`form_update_${lead.id}`, 'FORM_UPDATE', {
-        formData: offlinePayload,
-        filesByField: filesByField,
-        mobile: lead.phone,
-        url: '/user/update',
-      });
-      Alert.alert(
-        '⚠ Network Issue',
-        'Connection dropped mid-update. Saved locally and will sync automatically when online.',
-        [{ text: 'OK', onPress: () => navigation.goBack() }],
-      );
-      setFormValues({});
-      setFilesByField({});
-    } catch (offlineErr) {
-      console.error('Offline fallback save failed:', offlineErr);
-      Alert.alert(
-        'Error',
-        'Network failed AND could not save offline. Please screenshot this form and contact support.',
-      );
-    }
-  } else if (err?.response?.status === 413) {
-    Alert.alert(
-      'Files Too Large',
-      'The photos/videos attached are too large to upload. Please remove a video or retake photos, then try again.',
-    );
-  } else {
-    Alert.alert(
-      'Error',
-      err?.response?.data?.error || err?.message || 'Update failed.',
-    );
-  }
-} finally {
+        // Network drop mid-update: fall back to offline save + sync queue.
+        if (isNetworkFailure(err)) {
+          try {
+            const offlinePayload = {
+              mobileNumber: lead.phone,
+              deal_id: lead.dealId,
+              state: lead.state,
+              ...formValues,
+              _filesByField: filesByField,
+            };
+            console.log('🆔 [handleUpdate/network-fallback] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
+            await saveFormDataLocally(lead.id, offlinePayload);
+            await enqueue(`form_update_${lead.id}`, 'FORM_UPDATE', {
+              formData: offlinePayload,
+              filesByField: filesByField,
+              mobile: lead.phone,
+              url: '/user/update',
+            });
+            Alert.alert(
+              '⚠ Network Issue',
+              'Connection dropped mid-update. Saved locally and will sync automatically when online.',
+              [{ text: 'OK', onPress: () => navigation.goBack() }],
+            );
+            setFormValues({});
+            setFilesByField({});
+          } catch (offlineErr) {
+            console.error('Offline fallback save failed:', offlineErr);
+            Alert.alert(
+              'Error',
+              'Network failed AND could not save offline. Please screenshot this form and contact support.',
+            );
+          }
+        } else if (err?.response?.status === 413) {
+          Alert.alert(
+            'Files Too Large',
+            'The photos/videos attached are too large to upload. Please remove a video or retake photos, then try again.',
+          );
+        } else {
+          Alert.alert(
+            'Error',
+            err?.response?.data?.error || err?.message || 'Update failed.',
+          );
+        }
+      } finally {
         setSubmitting(false);
       }
     } else {
@@ -1640,11 +1879,11 @@ setFilesByField({});
         console.log('🆔 [handleUpdate/offline] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
         await saveFormDataLocally(lead.id, offlinePayload);
         await enqueue(`form_update_${lead.id}`, 'FORM_UPDATE', {
-  formData: offlinePayload,
-  filesByField: filesByField,
-  mobile: lead.phone,
-  url: '/user/update',
-});
+          formData: offlinePayload,
+          filesByField: filesByField,
+          mobile: lead.phone,
+          url: '/user/update',
+        });
         Alert.alert(
           '✔ Saved Offline',
           'Update saved locally with photos. Will be synced when online.',
@@ -1772,7 +2011,7 @@ setFilesByField({});
               );
             })}
 
-            {/* ✅ QR code shows only inside "Payment Details" group,
+            {/* QR code shows only inside "Payment Details" group,
                 only when Advance Payment Collection Status = "Collected" */}
             {group.label === 'Payment Details' &&
               formValues.Advance_Payment_Collection_Status === 'Collected' && (

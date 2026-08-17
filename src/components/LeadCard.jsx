@@ -58,6 +58,7 @@ const LeadCard = ({
   onAccept,
   onReject,
   onStart,
+  onHold, onUnhold,
   // InProgressScreen handlers
   onSiteObservation,
   onManualEnable,
@@ -375,20 +376,45 @@ useEffect(() => {
         );
 
       case 'accepted':
-        if (item.status === 'completed') {
-          return <CompletedPill />;
-        }
-        return (
-          <TouchableOpacity
-            style={[styles.startBtn, item.status === 'inprogress' && { backgroundColor: '#f97316' }]}
-            onPress={() => onStart?.(item.id)}
-          >
-            <Ionicons name="play-circle-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
-            <Text style={styles.startBtnText}>
-              {item.status === 'inprogress' ? 'Resume' : 'Start'}
-            </Text>
-          </TouchableOpacity>
-        );
+  if (item.status === 'completed') {
+    return <CompletedPill />;
+  }
+
+  if (item.status === 'hold') {
+    return (
+      <TouchableOpacity
+        style={[styles.startBtn, { backgroundColor: '#6b7280' }]}
+        onPress={() => onUnhold?.(item.id)}
+      >
+        <Ionicons name="play-forward-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
+        <Text style={styles.startBtnText}>Unhold</Text>
+      </TouchableOpacity>
+    );
+  }
+
+  return (
+    <View style={{ alignItems: 'center', gap: 6 }}>
+      <TouchableOpacity
+        style={[styles.startBtn, item.status === 'inprogress' && { backgroundColor: '#f97316' }]}
+        onPress={() => onStart?.(item.id)}
+      >
+        <Ionicons name="play-circle-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
+        <Text style={styles.startBtnText}>
+          {item.status === 'inprogress' ? 'Resume' : 'Start'}
+        </Text>
+      </TouchableOpacity>
+
+      {item.status === 'inprogress' && (
+        <TouchableOpacity
+          style={styles.holdBtn}
+          onPress={() => onHold?.(item.id)}
+        >
+          <Ionicons name="pause-circle-outline" size={13} color="#fff" style={{ marginRight: 3 }} />
+          <Text style={styles.holdBtnText}>Hold</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
 
       case 'inprogress':
         // 👇 Complete button click பண்ணி status "completed" ஆனப்புறம் தான்
@@ -486,8 +512,9 @@ useEffect(() => {
   return (
     <View style={[
       styles.card,
-      cardType === 'unaccepted' && { borderLeftWidth: 4, borderLeftColor: '#ED1C25' },
-      cardType === 'completed'  && { borderLeftWidth: 4, borderLeftColor: '#22c55e' },
+  cardType === 'unaccepted' && { borderLeftWidth: 4, borderLeftColor: '#ED1C25' },
+  cardType === 'completed'  && { borderLeftWidth: 4, borderLeftColor: '#22c55e' },
+  cardType === 'accepted' && item.status === 'hold' && { opacity: 0.5, borderLeftWidth: 4, borderLeftColor: '#6b7280' },
     ]}>
       {/* Top row */}
       <View style={styles.rowBetween}>
@@ -872,4 +899,10 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', elevation: 2,
   },
   goToRoundLabel: { fontSize: 10, color: '#555', fontWeight: '600', marginTop: 3 },
+  holdBtn: {
+  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+  backgroundColor: '#eab308', paddingHorizontal: 10, paddingVertical: 6,
+  borderRadius: 8,
+},
+holdBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
 });

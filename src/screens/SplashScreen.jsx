@@ -142,7 +142,7 @@ if (role === "admin") {
         />
       </View>
 
-      <Text style={styles.bottomText}>Powered by Trisentrix | Version 1.0</Text>
+      <Text style={styles.bottomText}>Powered by Atom8 | Version 1.0</Text>
     </LinearGradient>
   );
 };
