@@ -15,7 +15,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { storeData, getStorageData, USER_DATA } from "../service/localStorage";
 import { SCREEN_NAMES } from "../constants/screenNames";
 
-const BASE_URL = "https://crucial-purifier-canopener.ngrok-free.dev";
+const BASE_URL = "https://kondaas.atom8itsolutions.com";
 //const BASE_URL = "https://board.trisentrix.com";
 
 // ─────────────────────────────────────────────────────────────
@@ -216,10 +216,11 @@ const handleChange = (text, index) => {
         }
       }
 
-      const userInfo = existingData?.UserInfo || {};
+      const userInfo = existingData?.UserInfo || existingData || {};
       const role     = userInfo?.role     || "user";
       const email    = userInfo?.email    || null;
       const password = userInfo?.password || null;
+      const provider = userInfo?.provider || null;
 
       // ─── Step 4: accessToken ───
       let accessToken = null;
@@ -281,6 +282,7 @@ const handleChange = (text, index) => {
           ...userInfo,
           phoneNo: cleanPhone,
           role,
+          provider,
         },
         devicelist,
       };
@@ -312,6 +314,7 @@ const handleChange = (text, index) => {
           const freshEmail    = freshData?.UserInfo?.email    || freshData?.email    || null;
           const freshPassword = freshData?.UserInfo?.password || freshData?.password || null;
           const freshRole     = freshData?.UserInfo?.role     || freshData?.role     || role;
+          const freshProvider = freshData?.UserInfo?.provider || freshData?.provider || provider; 
 
           console.log("✅ Fresh email from DB:", freshEmail ? "FOUND" : "MISSING");
 
@@ -322,7 +325,8 @@ const handleChange = (text, index) => {
               ...finalPayload.UserInfo,
               email:    freshEmail || email,
               password: freshPassword || password,
-              role:     freshRole,  // ← USE freshRole!
+              role:     freshRole,
+              provider: freshProvider,  // ← USE freshRole!
             },
             accessToken,
             authToken: workingToken,
@@ -355,6 +359,7 @@ if (freshRole === "admin") {
         UserInfo: {
           ...finalPayload.UserInfo,
           role,
+          provider,
         },
         accessToken,
         authToken: workingToken,

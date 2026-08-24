@@ -38,12 +38,13 @@ export const getSessionInfo = async () => {
     const phoneNo   = parsed?.UserInfo?.phoneNo || null;
     const email     = parsed?.UserInfo?.email   || null;
     const password  = parsed?.UserInfo?.password || null;
+    const provider  = parsed?.UserInfo?.provider || null;   // ✅ FIX: variable name "provider"-ஆ மாத்தினேன்
     const accessToken = parsed?.accessToken     || null;
 
-    return { deviceId, authToken, phoneNo, email, password, accessToken, parsed };
+    return { deviceId, authToken, phoneNo, email, password, provider, accessToken, parsed };
   } catch (e) {
     console.log("getSessionInfo error:", e.message);
-    return { deviceId: null, authToken: null, phoneNo: null, email: null, password: null, accessToken: null, parsed: null };
+    return { deviceId: null, authToken: null, phoneNo: null, email: null, password: null, provider: null, accessToken: null, parsed: null };
   }
 };
 

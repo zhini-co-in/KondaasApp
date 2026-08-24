@@ -113,28 +113,66 @@ const _executeAction = async (item) => {
       break;
 
     // Site observation form submit
-    case 'FORM_SUBMIT':
-      await API.post('/user/add', payload.formData);
+    case 'FORM_SUBMIT': {
+      const fd = new FormData();
+      fd.append('data', JSON.stringify(payload.formData));
+
+      // ✅ files-ஐயும் sync path-ல சேர்க்கணும் — இதுதான் missing piece
+      const files = payload.filesByField || {};
+      Object.entries(files).forEach(([fieldKey, fileList]) => {
+        (fileList || []).forEach((file) => {
+          fd.append(fieldKey, {
+            uri: file.uri,
+            name: file.name,
+            type: file.type,
+          });
+        });
+      });
+
+      await API.post('/user/add', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
       // Status completed also
       await API.put('/order/updatestatus', {
         mobile: payload.mobile,
         status: 'completed',
       });
+
       // ✅ Server-ல submit success ஆன உடனே local draft data (formData + files refs) delete
-      // payload.leadId FormScreen.tsx-ல enqueue() call பண்றப்போ pass ஆகணும்.
       if (payload.leadId) {
         await deleteSavedFormData(payload.leadId);
       }
       break;
+    }
 
-    // Site observation form update (edit mode, offline)
-    case 'FORM_UPDATE':
-      await API.put(payload.url || '/user/update', payload.formData);
+      // Site observation form update (edit mode, offline)
+    case 'FORM_UPDATE': {
+      const fd = new FormData();
+      fd.append('data', JSON.stringify(payload.formData));
+
+      // ✅ files-ஐயும் sync path-ல சேர்க்கணும்
+      const files = payload.filesByField || {};
+      Object.entries(files).forEach(([fieldKey, fileList]) => {
+        (fileList || []).forEach((file) => {
+          fd.append(fieldKey, {
+            uri: file.uri,
+            name: file.name,
+            type: file.type,
+          });
+        });
+      });
+
+      await API.put(payload.url || '/user/update', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
       // ✅ Server-ல update success ஆன உடனே local draft data delete
       if (payload.leadId) {
         await deleteSavedFormData(payload.leadId);
       }
       break;
+    }
 
     // Lead field edit
     case 'LEAD_EDIT':

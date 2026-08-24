@@ -474,7 +474,7 @@ if (isOffline) return;
               <Text style={styles.grayButtonText}>Refer & Earn</Text>
             </TouchableOpacity>
 
-            <Text style={styles.bottomText}>Powered by Atom8 | Version 1.2.26032301</Text>
+            <Text style={styles.bottomText}>Powered by Atom8 | Version 2.0.26082101</Text>
           </View>
 
           <Modal visible={visible} transparent animationType="slide" onRequestClose={() => setVisible(false)}>

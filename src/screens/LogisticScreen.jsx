@@ -40,6 +40,7 @@ import {
 import LogisticDealCard from '../components/LogisticDealCard';
 import LogisticCardTrackingModal from '../components/LogisticCardTrackingModal';
 import { saveScannedProduct, confirmDeliveryToWarehouse, getNewAssignedCards, updateLogisticsStatus } from '../service/logisticProductService';
+import { mergeCardsWithLocalProgress, setLocalDispatchStatus } from '../service/dispatchProgressService';
 
 const LogisticScreen = ({ navigation }) => {
   const isMounted = useRef(true);
@@ -72,8 +73,6 @@ const LogisticScreen = ({ navigation }) => {
   // fire the save/update calls 20-30 times in a row.
   const cardScanLock = useRef(false);
 
-  // 3-column tab state: 'new' | 'inprogress' | 'completed'
-  const [cardTab, setCardTab] = useState('new');
 
   // Per-card tracking modal (kept for "View full details" / completed cards)
   const [trackingModalVisible, setTrackingModalVisible] = useState(false);
@@ -137,7 +136,8 @@ const LogisticScreen = ({ navigation }) => {
   const loadNewAssignedCards = async () => {
     try {
       const cards = await getNewAssignedCards();
-      setNewAssignedCards(cards);
+      const merged = await mergeCardsWithLocalProgress(cards);
+      setNewAssignedCards(merged);
     } catch (e) {
       console.error('loadNewAssignedCards error:', e);
     }
@@ -232,19 +232,10 @@ const LogisticScreen = ({ navigation }) => {
 
           await saveScannedProduct(value, locationRef.current);
 
-          const success = await updateLogisticsStatus(card.deal_id, 'inprogress');
-          if (success) {
-            setNewAssignedCards((prev) =>
-              prev.map((item, i) => (i === index ? { ...item, status: 'inprogress' } : item))
-            );
-            // 🆕 Auto-switch to "In Progress" tab so the card — and its new
-            // "Picked" button — is immediately visible after scanning.
-            // This is why it looked like "nothing happened": the card had
-            // actually moved out of the "New" tab.
-            setCardTab('inprogress');
-          } else {
-            Alert.alert('Error', 'Failed to update status after scan');
-          }
+                              await setLocalDispatchStatus(card.deal_id, 'inprogress');
+          setNewAssignedCards((prev) =>
+            prev.map((item, i) => (i === index ? { ...item, status: 'inprogress' } : item))
+          );
         } catch (e) {
           console.error('[cardCodeScanner] scan handling failed:', e);
           Alert.alert('Error', 'Something went wrong while saving the scan');
@@ -265,33 +256,22 @@ const LogisticScreen = ({ navigation }) => {
     setShowDealModal(true);
   };
 
-  // Accept → Status change + Start Scan button show
-  const acceptAssignedCard = async (card, index) => {
-    const success = await updateLogisticsStatus(card.deal_id, 'accepted');
-
-    if (success) {
-      setNewAssignedCards((prev) =>
-        prev.map((item, i) => (i === index ? { ...item, status: 'accepted' } : item))
-      );
-      Alert.alert('Accepted', 'Status updated. Click "Start Scan"');
-    } else {
-      Alert.alert('Error', 'Failed to update status');
-    }
+    const acceptAssignedCard = async (card, index) => {
+    await setLocalDispatchStatus(card.deal_id, 'accepted');
+    setNewAssignedCards((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, status: 'accepted' } : item))
+    );
+    Alert.alert('Accepted', 'Status updated. Click "Start Scan"');
   };
 
   // Reject Card
-  const rejectAssignedCard = async (card, index) => {
-    const success = await updateLogisticsStatus(card.deal_id, 'rejected');
-
-    if (success) {
-      setNewAssignedCards((prev) => prev.filter((_, i) => i !== index));
-      Alert.alert('Rejected', 'Card removed from assignments');
-    } else {
-      Alert.alert('Error', 'Failed to reject');
-    }
+    const rejectAssignedCard = async (card, index) => {
+    await setLocalDispatchStatus(card.deal_id, 'rejected');
+    setNewAssignedCards((prev) => prev.filter((_, i) => i !== index));
+    Alert.alert('Rejected', 'Card removed from assignments');
   };
 
-  const openScannerForCard = (index) => {
+    const openScannerForCard = (card, index) => {
     cardScanLock.current = false; // 🆕 fresh lock for this new scan session
     setScanningCardIndex(index);
     setCardScanModalVisible(true);
@@ -304,31 +284,21 @@ const LogisticScreen = ({ navigation }) => {
 
   // 🆕 "Picked" button on an in-progress card → status 'picked'
   const markProductPicked = async (card, index) => {
-    const success = await updateLogisticsStatus(card.deal_id, 'picked');
-    if (success) {
-      setNewAssignedCards((prev) =>
-        prev.map((item, i) =>
-          i === index ? { ...item, status: 'picked', pickedAt: new Date().toISOString() } : item
-        )
-      );
-    } else {
-      Alert.alert('Error', 'Failed to update status');
-    }
+    await setLocalDispatchStatus(card.deal_id, 'picked');
+    setNewAssignedCards((prev) =>
+      prev.map((item, i) =>
+        i === index ? { ...item, status: 'picked', pickedAt: new Date().toISOString() } : item
+      )
+    );
   };
 
-  // 🆕 "Delivered" button on a picked card → status 'completed'
   const markAsDropped = async (card, index) => {
-    const success = await updateLogisticsStatus(card.deal_id, 'completed');
-    if (success) {
-      setNewAssignedCards((prev) =>
-        prev.map((item, i) =>
-          i === index ? { ...item, status: 'completed', deliveredAt: new Date().toISOString() } : item
-        )
-      );
-      setCardTab('completed'); // 🆕 jump to Completed tab so the result is visible right away
-    } else {
-      Alert.alert('Error', 'Failed to update status');
-    }
+    await setLocalDispatchStatus(card.deal_id, 'completed');
+    setNewAssignedCards((prev) =>
+      prev.map((item, i) =>
+        i === index ? { ...item, status: 'completed', deliveredAt: new Date().toISOString() } : item
+      )
+    );
   };
 
   // Per-card tracking sheet (used for "View full details" / completed cards)
@@ -383,15 +353,14 @@ const LogisticScreen = ({ navigation }) => {
     return 'new'; // pending / undefined / rejected-filtered-out-already
   };
 
-  const filteredCards = newAssignedCards.filter(
-    (card) => getCardColumn(card.status) === cardTab
-  );
-
   const cardCounts = {
     new: newAssignedCards.filter((c) => getCardColumn(c.status) === 'new').length,
     inprogress: newAssignedCards.filter((c) => getCardColumn(c.status) === 'inprogress').length,
     completed: newAssignedCards.filter((c) => getCardColumn(c.status) === 'completed').length,
   };
+
+  // 🆕 Cards to show on the OFF (offline) screen — "New" status only
+  const newOnlyCards = newAssignedCards.filter((card) => getCardColumn(card.status) === 'new');
 
   if (!isAvailable) {
     return (
@@ -416,8 +385,11 @@ const LogisticScreen = ({ navigation }) => {
         <ScrollView
           contentContainerStyle={{ paddingTop: 60, paddingBottom: 30 }}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" colors={['#fff']} />
+          }
         >
-          <View style={{ alignItems: 'center', paddingTop: 20, marginBottom: 20 }}>
+          <View style={{ alignItems: 'center', paddingTop: 20, marginBottom: 16 }}>
             <Image
               source={require('../../assets/images/kondass.png')}
               style={styles.logo}
@@ -427,8 +399,44 @@ const LogisticScreen = ({ navigation }) => {
 
           <View style={styles.offTextContainer}>
             <Text style={styles.welcome}>Welcome!</Text>
-            <Text style={styles.message}>Let's get started! Turn on availability!</Text>
+            <Text style={styles.message}>
+              {newOnlyCards.length > 0
+                ? "You're offline — but here's what's waiting for you. Turn on availability to start."
+                : "Let's get started! Turn on availability!"}
+            </Text>
           </View>
+
+          {/* 🆕 New deals shown even while offline, inside a frosted panel so
+              they read clearly on top of the red gradient background. */}
+          {newOnlyCards.length > 0 && (
+            <View style={styles.offCardsPanel}>
+              <View style={styles.offCardsPanelHeader}>
+                <View style={styles.offCardsPanelDot} />
+                <Text style={styles.offCardsPanelTitle}>
+                  New Deals ({newOnlyCards.length})
+                </Text>
+              </View>
+
+              {newOnlyCards.map((card) => {
+                const index = newAssignedCards.indexOf(card);
+                return (
+                                    <LogisticDealCard
+                    key={card.deal_id || index}
+                    card={card}
+                    index={index}
+                    onAccept={acceptAssignedCard}
+                    onReject={rejectAssignedCard}
+                    onStartScan={openScannerForCard}
+                    onMarkPicked={markProductPicked}
+                    onMarkDropped={markAsDropped}
+                    onSeeMore={showFullDealDetails}
+                    onCardPress={openCardTracking}
+                    onStartPickup={(card) => navigation.navigate('PackagePickupScreen', { card, onUpdate: loadNewAssignedCards })}
+                  />
+                );
+              })}
+            </View>
+          )}
         </ScrollView>
       </LinearGradient>
     );
@@ -452,6 +460,7 @@ const LogisticScreen = ({ navigation }) => {
             onValueChange={handleToggle}
           />
         </View>
+
         <View style={{ flex: 1, paddingTop: 90 }}>
           <ScrollView
             contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
@@ -459,38 +468,30 @@ const LogisticScreen = ({ navigation }) => {
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#F00001']} />
             }
           >
-            {/* ASSIGNED DEALS — 3 COLUMN TABS: New / In Progress / Completed */}
-            {newAssignedCards.length > 0 && (
-              <View style={styles.card}>
-                <Text style={[styles.sectionLabel, { color: '#8b5cf6' }]}>
-                  🆕 ASSIGNED DEALS
-                </Text>
+                        {/* Reusable per-status section renderer */}
+            {[
+              { key: 'new', label: 'Deals - New', dot: '#ED1C25' },
+              { key: 'inprogress', label: 'In Progress', dot: '#f97316' },
+              { key: 'completed', label: 'Completed', dot: '#22c55e' },
+            ].map((section) => {
+              const sectionCards = newAssignedCards.filter(
+                (card) => getCardColumn(card.status) === section.key
+              );
 
-                {/* Tab Switcher */}
-                <View style={styles.cardTabRow}>
-                  {[
-                    { key: 'new', label: 'New' },
-                    { key: 'inprogress', label: 'In Progress' },
-                    { key: 'completed', label: 'Completed' },
-                  ].map((tab) => (
-                    <TouchableOpacity
-                      key={tab.key}
-                      style={[styles.cardTabBtn, cardTab === tab.key && styles.cardTabBtnActive]}
-                      onPress={() => setCardTab(tab.key)}
-                    >
-                      <Text style={[styles.cardTabText, cardTab === tab.key && styles.cardTabTextActive]}>
-                        {tab.label} ({cardCounts[tab.key]})
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+              return (
+                <View key={section.key} style={{ marginBottom: 20 }}>
+                  <View style={styles.sectionHeader}>
+                    <View style={[styles.sectionDot, { backgroundColor: section.dot }]} />
+                    <Text style={styles.sectionTitle}>
+                      {section.label} ({sectionCards.length})
+                    </Text>
+                  </View>
 
-                {filteredCards.length === 0 ? (
-                  <Text style={{ color: '#94a3b8', textAlign: 'center', paddingVertical: 20 }}>
-                    No {cardTab === 'inprogress' ? 'in progress' : cardTab} deals
-                  </Text>
-                ) : (
-                  filteredCards.map((card) => {
+                  {sectionCards.length === 0 && (
+                    <Text style={styles.emptyText}>No {section.label.toLowerCase()} deals.</Text>
+                  )}
+
+                  {sectionCards.map((card) => {
                     const index = newAssignedCards.indexOf(card); // original array index, for handlers
                     return (
                       <LogisticDealCard
@@ -504,12 +505,13 @@ const LogisticScreen = ({ navigation }) => {
                         onMarkDropped={markAsDropped}
                         onSeeMore={showFullDealDetails}
                         onCardPress={openCardTracking}
+                        onStartPickup={(card) => navigation.navigate('PackagePickupScreen', { card, onUpdate: loadNewAssignedCards })}
                       />
                     );
-                  })
-                )}
-              </View>
-            )}
+                  })}
+                </View>
+              );
+            })}
           </ScrollView>
         </View>
       </SafeAreaView>
@@ -518,36 +520,95 @@ const LogisticScreen = ({ navigation }) => {
       <Modal visible={showDealModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Deal Details</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalTitle}>Deal Details</Text>
 
-            {selectedDeal && (
-              <>
-                <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: 10 }}>
-                  {selectedDeal.products_info?.[1] || selectedDeal.deal_id || 'New Assigned Deal'}
-                </Text>
-                <Text>Address: {selectedDeal.address || 'Chennai'}</Text>
-                <Text>Assigned: {new Date(selectedDeal.assignedAt).toLocaleString()}</Text>
-                <Text>Status: {selectedDeal.status || 'pending'}</Text>
-
-                <Text style={{ marginTop: 20, fontWeight: '700', marginBottom: 8 }}>All Products:</Text>
-                {selectedDeal.products_info?.map((prod, i) => (
-                  <Text key={i} style={{ marginVertical: 4, fontSize: 14, paddingLeft: 8 }}>
-                    • {prod}
+              {selectedDeal && (
+                <>
+                  <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: 2 }}>
+                    {selectedDeal.products_info?.[0] || selectedDeal.deal_id || 'New Assigned Deal'}
                   </Text>
-                ))}
+                  {!!selectedDeal.deal_id && (
+                    <Text style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>
+                      Deal ID: {selectedDeal.deal_id}
+                    </Text>
+                  )}
+                  <Text>Assigned: {selectedDeal.assignedAt ? new Date(selectedDeal.assignedAt).toLocaleString() : '—'}</Text>
+                  <Text>Status: {selectedDeal.status || 'pending'}</Text>
 
-                {selectedDeal.products_info?.length === 0 && (
-                  <Text style={{ color: '#666', fontStyle: 'italic' }}>No products listed</Text>
-                )}
-              </>
-            )}
+                  {/* 🆕 Full address / delivery details block */}
+                  <View style={styles.modalAddressBlock}>
+                    <View style={styles.modalAddrHeaderRow}>
+                      <Ionicons name="location" size={14} color="#3b82f6" />
+                      <Text style={styles.modalAddrHeaderText}>Delivery Details</Text>
+                    </View>
 
-            <TouchableOpacity
-              style={styles.acceptBtn}
-              onPress={() => setShowDealModal(false)}
-            >
-              <Text style={styles.acceptText}>Close</Text>
-            </TouchableOpacity>
+                    <View style={styles.modalAddrRow}>
+                      <Text style={styles.modalAddrLabel}>Address</Text>
+                      <Text style={styles.modalAddrValue}>{selectedDeal.address || 'Not provided'}</Text>
+                    </View>
+
+                    {!!selectedDeal.city && (
+                      <View style={styles.modalAddrRow}>
+                        <Text style={styles.modalAddrLabel}>City</Text>
+                        <Text style={styles.modalAddrValue}>{selectedDeal.city}</Text>
+                      </View>
+                    )}
+
+                    {!!selectedDeal.pincode && (
+                      <View style={styles.modalAddrRow}>
+                        <Text style={styles.modalAddrLabel}>Pincode</Text>
+                        <Text style={styles.modalAddrValue}>{selectedDeal.pincode}</Text>
+                      </View>
+                    )}
+
+                    {!!selectedDeal.landmark && (
+                      <View style={styles.modalAddrRow}>
+                        <Text style={styles.modalAddrLabel}>Landmark</Text>
+                        <Text style={styles.modalAddrValue}>{selectedDeal.landmark}</Text>
+                      </View>
+                    )}
+
+                    {!!selectedDeal.contact_name && (
+                      <View style={styles.modalAddrRow}>
+                        <Text style={styles.modalAddrLabel}>Contact</Text>
+                        <Text style={styles.modalAddrValue}>{selectedDeal.contact_name}</Text>
+                      </View>
+                    )}
+
+                    {!!selectedDeal.contact_number && (
+                      <TouchableOpacity
+                        style={styles.modalAddrRow}
+                        onPress={() => Linking.openURL(`tel:${selectedDeal.contact_number}`)}
+                      >
+                        <Text style={styles.modalAddrLabel}>Phone</Text>
+                        <Text style={[styles.modalAddrValue, { color: '#3b82f6' }]}>
+                          {selectedDeal.contact_number}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  <Text style={{ marginTop: 20, fontWeight: '700', marginBottom: 8 }}>All Products:</Text>
+                  {selectedDeal.products_info?.map((prod, i) => (
+                    <Text key={i} style={{ marginVertical: 4, fontSize: 14, paddingLeft: 8 }}>
+                      • {prod}
+                    </Text>
+                  ))}
+
+                  {(!selectedDeal.products_info || selectedDeal.products_info.length === 0) && (
+                    <Text style={{ color: '#666', fontStyle: 'italic' }}>No products listed</Text>
+                  )}
+                </>
+              )}
+
+              <TouchableOpacity
+                style={styles.acceptBtn}
+                onPress={() => setShowDealModal(false)}
+              >
+                <Text style={styles.acceptText}>Close</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -698,6 +759,33 @@ const styles = StyleSheet.create({
     padding: 20,
     maxHeight: '80%',
   },
+  // 🆕 Delivery-details block inside the full deal modal
+  modalAddressBlock: {
+    marginTop: 16,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#EEF2F7',
+    gap: 8,
+  },
+  modalAddrHeaderRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4,
+  },
+  modalAddrHeaderText: {
+    fontSize: 12, fontWeight: '700', color: '#3b82f6',
+    textTransform: 'uppercase', letterSpacing: 0.3,
+  },
+  modalAddrRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10,
+  },
+  modalAddrLabel: {
+    fontSize: 11, color: '#94a3b8', fontWeight: '700', width: 80,
+    textTransform: 'uppercase', letterSpacing: 0.2,
+  },
+  modalAddrValue: {
+    fontSize: 13, color: '#1e293b', fontWeight: '500', flex: 1, textAlign: 'right',
+  },
   offLogoutBtn: { position: 'absolute', top: 55, left: 20, zIndex: 10 },
   offToggleBtn: {
     backgroundColor: '#fff',
@@ -711,14 +799,48 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     justifyContent: 'center', alignItems: 'center',
   },
-  offTextContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 30 },
+  offTextContainer: { alignItems: 'center', paddingHorizontal: 30 },
   welcome: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
-  message: { marginTop: 10, color: '#ffffffcc', textAlign: 'center', paddingHorizontal: 30 },
+  message: { marginTop: 10, color: '#ffffffcc', textAlign: 'center', paddingHorizontal: 10 },
+
+  // 🆕 Panel that hosts the "new" deal cards on the toggle-off screen
+  offCardsPanel: {
+    marginTop: 24,
+    marginHorizontal: 16,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  offCardsPanelHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 4, paddingBottom: 10,
+  },
+  offCardsPanelDot: {
+    width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff',
+  },
+  offCardsPanelTitle: {
+    fontSize: 12.5, fontWeight: '700', color: '#fff',
+    textTransform: 'uppercase', letterSpacing: 0.4,
+  },
+
   fixedTopBar: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 20, paddingTop: 50, paddingBottom: 12,
     backgroundColor: '#fff', elevation: 6,
+  },
+  // Section header — dot + title, matching SurveyerScreen's design language
+  sectionHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 2, paddingTop: 4, paddingBottom: 10,
+  },
+  sectionDot: { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#333' },
+  emptyText: {
+    textAlign: 'center', marginTop: 30,
+    color: '#999', fontSize: 14, paddingHorizontal: 30,
   },
   modalTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 15 },
   acceptBtn: {

@@ -12,7 +12,7 @@ import { USER_DATA, getStorageData, storeData, getSavingsKey, getHistoryKey } fr
 import LinearGradient from "react-native-linear-gradient";
 import { SCREEN_NAMES } from "../constants/screenNames";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getHistory } from "../api/api1";
+import { getHistory, fetchSavings } from "../api/api1";
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -130,13 +130,7 @@ const PowerGenerationScreen = ({ navigation, route }) => {
             const parsedCache = JSON.parse(cached);
             setMonthlyRecords(parsedCache.monthlyRecords || {});
           } else {
-            const authToken = parsed?.authToken || parsed?.UserInfo?.authToken;
-            const res = await fetch("https://board.trisentrix.com/savings/calculate-savings", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "x-auth-token": authToken },
-              body: JSON.stringify({ phoneNo, stationId }),
-            });
-            const savingsData = await res.json();
+            const savingsData = await fetchSavings(phoneNo, stationId);
             if (savingsData?.success && savingsData?.data?.monthlyRecords) {
               setMonthlyRecords(savingsData.data.monthlyRecords);
               const total = Object.values(savingsData.data.monthlyRecords)
@@ -180,7 +174,11 @@ const PowerGenerationScreen = ({ navigation, route }) => {
     setCurrentDate(newDate);
   };
 
-  const onTabChange = (tab) => { setSelectedTab(tab); setCurrentDate(new Date()); };
+  const onTabChange = (tab) => {
+  setChartData(null);
+  setSelectedTab(tab);
+  setCurrentDate(new Date());
+};
 
   const getDateRange = (tab) => {
     const baseDate = new Date(currentDate);
@@ -312,6 +310,9 @@ if (isOffline) return;
       // ════════════════════════════════════════════════
       // WEEK TAB
       // ════════════════════════════════════════════════
+      // ════════════════════════════════════════════════
+      // WEEK TAB
+      // ════════════════════════════════════════════════
       if (tab === "Week") {
         const { start, end } = getDateRange(tab);
         setWeekStart(start);
@@ -320,10 +321,48 @@ if (isOffline) return;
         const response = await getHistory({ stationId, timeType: 2, startTime: start, endTime: end });
         const items = response?.stationDataItems || [];
 
+        // ✅ FIX: backend Week request-ஐ full month-ஆ collapse பண்ணி
+        // raw readings (multiple items per day) திருப்புது. அதனால
+        // இங்க நாமளே week range-க்குள் இருக்கிற dates மட்டும் filter
+        // பண்ணி, ஒரு நாளுக்கு பல readings இருந்தா MAX-ஐ (cumulative
+        // day total) எடுக்கணும் — sum பண்ணா over-count ஆகிடும்.
+        const dateList = [];
+        for (let d = new Date(start); d <= new Date(end); d.setDate(d.getDate() + 1)) {
+          dateList.push(formatDate(new Date(d)));
+        }
+
+        const dailyTotals = {};
+        items.forEach(item => {
+          if (item.day == null) return;   // day மட்டும் கட்டாயம் (Solarman raw response-க்கு month/year இல்லாமலும் இருக்கலாம்)
+
+          // month/year இல்லைன்னா, item-ஓட dateTime இருந்தா அதை use பண்ணு,
+          // இல்லைன்னா currentDate (இந்த week எந்த month/year-ல இருக்கோ அதை) assume பண்ணு
+          let itemMonth = item.month;
+          let itemYear = item.year;
+          if (itemMonth == null || itemYear == null) {
+            if (item.dateTime != null) {
+              const dObj = new Date(item.dateTime * 1000);
+              itemMonth = dObj.getMonth() + 1;
+              itemYear = dObj.getFullYear();
+            } else {
+              itemMonth = currentDate.getMonth() + 1;
+              itemYear = currentDate.getFullYear();
+            }
+          }
+
+          const itemDateStr = `${itemYear}-${String(itemMonth).padStart(2, "0")}-${String(item.day).padStart(2, "0")}`;
+          if (!dateList.includes(itemDateStr)) return; // week range-க்கு வெளியே உள்ளதை skip பண்ணு
+          const val = Number(item.generationValue) || 0;
+          if (dailyTotals[itemDateStr] == null || val > dailyTotals[itemDateStr]) {
+            dailyTotals[itemDateStr] = val;
+          }
+        });
+
         const labels = [], dataPoints = [];
-        items.forEach((item, index) => {
-          labels.push(item.day || String(index + 1));
-          dataPoints.push(Number(item.generationValue) || 0);
+        dateList.forEach(dateStr => {
+          const d = new Date(dateStr);
+          labels.push(String(d.getDate()));
+          dataPoints.push(dailyTotals[dateStr] || 0);
         });
 
         const total = dataPoints.reduce((a, b) => a + b, 0);
@@ -365,23 +404,35 @@ if (isOffline) return;
         let lastDay = new Date(year, Number(month), 0).getDate();
         if (isCurrentMonth) lastDay = new Date().getDate();
 
-        const response = await getHistory({
-          stationId, timeType: 2,
+                const response = await getHistory({
+          stationId, tab: "Month",
           startTime: `${year}-${month}-01`,
           endTime: `${year}-${month}-${lastDay.toString().padStart(2, "0")}`,
         });
-        const items = response?.stationDataItems || [];
+                const items = response?.stationDataItems || [];
 
-        const dayMap = {};
-        items.forEach(item => {
-          const d = Number(item.day);
-          if (d >= 1 && d <= lastDay) dayMap[d] = Number(item.generationValue) || 0;
-        });
+        // ✅ Solis-க்கு per-day breakdown இல்ல (item.day undefined,
+        // ஒரே aggregate total item தான் வரும்) — அப்போ single total-ஆ
+        // காமிப்போம். Solarman/Deye-க்கு item.day இருந்தா பழைய per-day
+        // bar chart logic அப்படியே வேலை செய்யும்.
+        const hasDailyBreakdown = items.some(it => it.day != null);
 
-        const labels = [], dataPoints = [];
-        for (let d = 1; d <= lastDay; d++) {
-          labels.push(d.toString());
-          dataPoints.push(dayMap[d] ?? 0);
+        let labels, dataPoints;
+        if (hasDailyBreakdown) {
+          const dayMap = {};
+          items.forEach(item => {
+            const d = Number(item.day);
+            if (d >= 1 && d <= lastDay) dayMap[d] = Number(item.generationValue) || 0;
+          });
+          labels = []; dataPoints = [];
+          for (let d = 1; d <= lastDay; d++) {
+            labels.push(d.toString());
+            dataPoints.push(dayMap[d] ?? 0);
+          }
+        } else {
+          const total = items.reduce((sum, it) => sum + (Number(it.generationValue) || 0), 0);
+          labels = [formatMonthYear(currentDate)];
+          dataPoints = [total];
         }
 
         const totalThisMonth = dataPoints.reduce((sum, v) => sum + v, 0);
@@ -421,24 +472,35 @@ if (isOffline) return;
       if (tab === "Year") {
         const y = currentDate.getFullYear();
         const response = await getHistory({
-          stationId, timeType: 3,
-          startTime: `${y}-01`, endTime: `${y}-12`,
+          stationId, tab: "Year",
+          startTime: `${y}-01-01`, endTime: `${y}-12-31`,
         });
-        const items = response?.stationDataItems || [];
+                const items = response?.stationDataItems || [];
 
-        const monthMap = {};
-        items.forEach(item => {
-          const m = Number(item.month);
-          if (m >= 1 && m <= 12) monthMap[m] = Number(item.generationValue) || 0;
-        });
+        // ✅ Solis-க்கு per-month breakdown இல்ல (item.month undefined) —
+        // single total-ஆ காமிப்போம். Solarman/Deye-க்கு item.month
+        // இருந்தா பழைய per-month bar chart logic அப்படியே வேலை செய்யும்.
+        const hasMonthlyBreakdown = items.some(it => it.month != null);
 
-        const labels = [], dataPoints = [];
-        let totalUnits = 0;
-        for (let m = 1; m <= 12; m++) {
-          labels.push(new Date(y, m - 1, 1).toLocaleString("en", { month: "short" }));
-          const val = monthMap[m] ?? 0;
-          dataPoints.push(val);
-          totalUnits += val;
+        let labels, dataPoints, totalUnits;
+        if (hasMonthlyBreakdown) {
+          const monthMap = {};
+          items.forEach(item => {
+            const m = Number(item.month);
+            if (m >= 1 && m <= 12) monthMap[m] = Number(item.generationValue) || 0;
+          });
+          labels = []; dataPoints = []; totalUnits = 0;
+          for (let m = 1; m <= 12; m++) {
+            labels.push(new Date(y, m - 1, 1).toLocaleString("en", { month: "short" }));
+            const val = monthMap[m] ?? 0;
+            dataPoints.push(val);
+            totalUnits += val;
+          }
+        } else {
+          const total = items.reduce((sum, it) => sum + (Number(it.generationValue) || 0), 0);
+          labels = [y.toString()];
+          dataPoints = [total];
+          totalUnits = total;
         }
 
         setTotalGenerated(Number(totalUnits.toFixed(1)));
@@ -446,7 +508,7 @@ if (isOffline) return;
         let yearCost = 0;
         for (let m = 1; m <= 12; m++) {
           const key = `${y}-${String(m).padStart(2, "0")}`;
-          yearCost += monthlyRecords[key]?.cost || (dataPoints[m - 1] * rate);
+                    yearCost += monthlyRecords[key]?.cost || ((dataPoints[m - 1] || 0) * rate);
         }
         setTotalSaved(Number(yearCost.toFixed(0)));
 

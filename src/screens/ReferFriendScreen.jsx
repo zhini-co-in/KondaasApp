@@ -22,7 +22,7 @@ import NetInfo from "@react-native-community/netinfo";
 import LinearGradient from "react-native-linear-gradient";
 import { SCREEN_NAMES } from "../constants/screenNames";
 
-const BASE_URL = "https://crucial-purifier-canopener.ngrok-free.dev";
+const BASE_URL = "https://kondaas.atom8itsolutions.com";
 
 const ReferFriendScreen = ({ navigation }) => {
   const [name, setName] = useState("");

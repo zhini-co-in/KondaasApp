@@ -4,9 +4,11 @@ import CryptoJS from "crypto-js";
 import { getAuth } from "@react-native-firebase/auth";
 import DeviceInfo from "react-native-device-info";
 import { USER_DATA, getSessionInfo } from "../service/localStorage";
+import { fetchDeyeStationList, fetchDeyeHistory, fetchDeyeSavings } from "./api2";
+import { fetchSolisStationList, fetchSolisHistory, fetchSolisSavings } from "./api3";
 
 
-const BASE_URL = "https://crucial-purifier-canopener.ngrok-free.dev";
+const BASE_URL = "https://kondaas.atom8itsolutions.com";
 //const BASE_URL = "https://board.trisentrix.com";
 
 // ─────────────────────────────────────────────────────────────
@@ -60,6 +62,34 @@ const solarmanFetch = async (endpoint, body, authToken, deviceId) => {
 };
 
 // ─────────────────────────────────────────────────────────────
+// HELPER — productType value DB-ல "deye", "Deye-Inverter" etc. எப்படி
+// இருந்தாலும் சரியா detect பண்ணும் (case/format independent)
+// ─────────────────────────────────────────────────────────────
+const isDeyeProduct = (productType) =>
+  typeof productType === "string" && productType.toLowerCase().includes("deye");
+
+// ✅ NEW: productType-ல "solis" இருந்தா (எந்த format-லயும்) Solis APIs-க்கு route பண்ண
+const isSolisProduct = (productType) =>
+  typeof productType === "string" && productType.toLowerCase().includes("solis");
+
+// ─────────────────────────────────────────────────────────────
+// TEMPLATE — Product type options (Solar / Deye / Solaris)
+// ─────────────────────────────────────────────────────────────
+export const getProductTypeOptions = async () => {
+  try {
+    const res = await fetch(`${BASE_URL}/template/get/product_type`);
+    const data = await res.json();
+    if (Array.isArray(data?.options) && data.options.length > 0) {
+      return data.options;
+    }
+    return [];
+  } catch (error) {
+    console.log("❌ getProductTypeOptions error:", error.message);
+    return [];
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
 // 1. GET USER
 // ─────────────────────────────────────────────────────────────
 export const getUser = async (phoneNo) => {
@@ -107,15 +137,20 @@ export const saveUser = async (payload) => {
 };
 
 // ─────────────────────────────────────────────────────────────
+// 3. SAVE MAIL CREDENTIALS
+// ✅ productType (solar / deye / solaris) — password box-க்கு கீழே
+// select பண்ண product, இதுவும் UserInfo-ல சேர்த்து save ஆகும்.
 // ─────────────────────────────────────────────────────────────
-export const saveMailCredentials = async (email, password) => {
+export const saveMailCredentials = async (email, password, productType) => {
   try {
     if (!email || !password) {
       return { success: false, message: "Please enter email and password" };
     }
+    if (!productType) {
+      return { success: false, message: "Please select a product" };
+    }
 
     const { phoneNo, parsed } = await getSessionInfo();
-
     if (!phoneNo) {
       return { success: false, message: "Session expired. Please login again." };
     }
@@ -129,6 +164,7 @@ export const saveMailCredentials = async (email, password) => {
         phoneNo,
         email,
         password: hashedPassword,
+        provider: productType,   // ✅ FIX: backend "provider" field-ஐ expect பண்றது, "productType" இல்ல
       },
     };
 
@@ -163,6 +199,7 @@ export const saveStations = async (stationsList) => {
       return {
         id:                 item.id,
         name:               item.name || "",
+        deviceSn:           item.deviceSn || old?.deviceSn || "",
         installationAmount: old?.installationAmount ?? "",
       };
     });
@@ -208,7 +245,9 @@ export const getInstallationAmount = async (stationId) => {
 // ─────────────────────────────────────────────────────────────
 export const updateDeviceInfo = async ({ fcmToken } = {}) => {
   try {
-    const { deviceId, parsed } = await getSessionInfo();
+    const { deviceId, authToken, parsed } = await getSessionInfo();
+    // ✅ FIX: parsed.authToken (top-level, always undefined) இல்ல —
+    // getSessionInfo() தரும் `authToken` (device session-க்கான correct value) use பண்ணணும்.
     if (!parsed) return;
 
     const now             = new Date().toISOString();
@@ -225,7 +264,7 @@ export const updateDeviceInfo = async ({ fcmToken } = {}) => {
         deviceId,
         os:         DeviceInfo.getSystemName(),
         version:    DeviceInfo.getSystemVersion(),
-        authToken:  parsed.authToken || "",
+        authToken:  authToken || "",   // ✅ FIX: correct session authToken
         fcmToken:   fcmToken || null,
         lastUsedAt: now,
       });
@@ -246,20 +285,63 @@ export const updateDeviceInfo = async ({ fcmToken } = {}) => {
 
 // ─────────────────────────────────────────────────────────────
 // 7. GET HISTORY
-// 
+// ✅ productType-ல "deye" இருந்தா (எந்த format-லயும்) fetchDeyeHistory-க்கு redirect ஆகும்.
+// ✅ productType-ல "solis" இருந்தா (எந்த format-லயும்) fetchSolisHistory-க்கு redirect ஆகும்.
+// ⚠️ Deye history-க்கு deviceSn கட்டாயம் தேவை. devicelist-ல deviceSn
+// இப்போ save ஆகுதில்ல (saveStations-ல id/name/installationAmount தான்
+// save ஆகுது) — Deye stations save ஆகும்போது deviceSn-உம் சேர்த்து
+// save பண்ணணும், இல்லனா இந்த deye history call fail ஆகும்.
 // ─────────────────────────────────────────────────────────────
-export const getHistory = async ({ stationId, timeType, startTime, endTime }) => {
+const TIME_TYPE_MAP = {
+  default: { Day: 1, Week: 2, Month: 2, Year: 3 }, // Solarman & Deye — original working values
+  solis:   { Day: 1, Week: 2, Month: 3, Year: 4 }, // Solis — confirmed spec (see api3.js)
+};
+
+export const getHistory = async ({ stationId, tab, timeType, startTime, endTime }) => {
   try {
-    const { deviceId, authToken, phoneNo } = await getSessionInfo();
+    const { deviceId, authToken, phoneNo, parsed } = await getSessionInfo();
+
+    const productType = parsed?.UserInfo?.provider;
+    const isSolis = isSolisProduct(productType);
+
+    // tab கொடுத்தா அதைவச்சு correct timeType resolve பண்றோம்.
+    // tab இல்லாம பழைய callers timeType கொடுத்தா அதுவே use ஆகும்.
+    const resolvedTimeType = tab ? (isSolis ? TIME_TYPE_MAP.solis : TIME_TYPE_MAP.default)[tab] : timeType;
+
+    // Solis Year-க்கு மட்டும் full "YYYY-MM-DD" தேவை, Solarman/Deye
+    // Year-க்கு partial "YYYY-MM" தேவை (original working format).
+    let finalStart = startTime;
+    let finalEnd = endTime;
+    if (!isSolis && tab === "Year") {
+      finalStart = startTime?.slice(0, 7);
+      finalEnd = endTime?.slice(0, 7);
+    }
+
+    if (isDeyeProduct(productType)) {
+      const device = (parsed?.devicelist || []).find((d) => d.id === stationId);
+      return await fetchDeyeHistory({
+        stationId,
+        deviceSn: device?.deviceSn,
+        timeType: resolvedTimeType,
+        startTime: finalStart,
+        endTime: finalEnd,
+      });
+    }
+
+    // ✅ Solis routing
+    if (isSolis) {
+      console.log("📡 getHistory → routing to Solis | stationId:", stationId, "| timeType:", resolvedTimeType);
+      return await fetchSolisHistory({ stationId, timeType: resolvedTimeType, startTime: finalStart, endTime: finalEnd });
+    }
 
     const data = await solarmanFetch(
       "/solarman/history",
       {
         phoneNo,
         stationId,
-        timeType,
-        startTime,
-        endTime,
+        timeType: resolvedTimeType,
+        startTime: finalStart,
+        endTime: finalEnd,
       },
       authToken,
       deviceId
@@ -279,9 +361,26 @@ export const getHistory = async ({ stationId, timeType, startTime, endTime }) =>
 // 8. FETCH STATION LIST
 
 // ─────────────────────────────────────────────────────────────
+// 8. FETCH STATION LIST
+// ✅ productType-ல "deye" இருந்தா (எந்த format-லயும்) fetchDeyeStationList-க்கு redirect ஆகும்.
+// ✅ productType-ல "solis" இருந்தா (எந்த format-லயும்) fetchSolisStationList-க்கு redirect ஆகும்.
+// ─────────────────────────────────────────────────────────────
 export const fetchStationList = async () => {
   try {
-    const { deviceId, authToken, phoneNo } = await getSessionInfo();
+    const { deviceId, authToken, phoneNo, parsed } = await getSessionInfo();
+
+    const productType = parsed?.UserInfo?.provider;
+
+    if (isDeyeProduct(productType)) {
+      console.log("📡 fetchStationList → routing to Deye | deviceId:", deviceId);
+      return await fetchDeyeStationList();
+    }
+
+    // ✅ NEW: Solis routing
+    if (isSolisProduct(productType)) {
+      console.log("📡 fetchStationList → routing to Solis | deviceId:", deviceId);
+      return await fetchSolisStationList();
+    }
 
     console.log("📡 fetchStationList | deviceId:", deviceId);
 
@@ -340,10 +439,25 @@ export const fetchRealTimeData = async ({ stationId }) => {
 
 // ─────────────────────────────────────────────────────────────
 // 11. FETCH SAVINGS
+// ✅ productType-ல "deye" இருந்தா (எந்த format-லயும்) fetchDeyeSavings-க்கு redirect ஆகும்.
+// ✅ productType-ல "solis" இருந்தா (எந்த format-லயும்) fetchSolisSavings-க்கு redirect ஆகும்.
 // ─────────────────────────────────────────────────────────────
 export const fetchSavings = async (phoneNo, stationId) => {
   try {
-    const { deviceId, authToken } = await getSessionInfo();
+    const { deviceId, authToken, parsed } = await getSessionInfo();
+
+    const productType = parsed?.UserInfo?.provider;
+
+    if (isDeyeProduct(productType)) {
+      console.log("💰 fetchSavings → routing to Deye | phoneNo:", phoneNo, "| stationId:", stationId);
+      return await fetchDeyeSavings({ phoneNo, stationId });
+    }
+
+    // ✅ NEW: Solis routing
+    if (isSolisProduct(productType)) {
+      console.log("💰 fetchSavings → routing to Solis | phoneNo:", phoneNo, "| stationId:", stationId);
+      return await fetchSolisSavings({ phoneNo, stationId });
+    }
 
     console.log("💰 fetchSavings | phoneNo:", phoneNo, "| stationId:", stationId);
 
@@ -387,5 +501,3 @@ export const fetchStationDevices = async (stationId) => {
 };
 
 export default API1;
-
-

@@ -81,13 +81,19 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace "com.trisentrix.kondaas"
+
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+
     defaultConfig {
         applicationId "com.trisentrix.kondaas"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         missingDimensionStrategy 'react-native-camera', 'general'
-        versionCode 26031202
-        versionName "0.1.6"
+        versionCode 26082101
+        versionName "2.0.1"
     }
      signingConfigs {
         debug {

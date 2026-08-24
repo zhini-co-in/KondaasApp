@@ -10,16 +10,15 @@ export const saveScannedProduct = async (rawValue, location = null) => {
       return null;
     }
 
-    // ✅ User phone number எடு
     const userDataStr = await AsyncStorage.getItem(USER_DATA);
     const userData = userDataStr ? JSON.parse(userDataStr) : null;
-    console.log('👤 USER_DATA:', userData); // ← phone key என்னன்னு பாரு
+    console.log('👤 USER_DATA:', userData);
     const phoneNo = userData?.phoneNo || userData?.mobile || userData?.phone || userData?.mobileNo || null;
 
     const payload = {
       rawValue: rawValue.toString().trim(),
       status: 'picked',
-      scannedBy: phoneNo, // ✅ Phone number
+      scannedBy: phoneNo,
       ...(location && {
         deliveryLocation: {
           latitude: location.latitude,
@@ -42,7 +41,6 @@ export const saveScannedProduct = async (rawValue, location = null) => {
 };
 
 // ==================== CONFIRM DELIVERY TO WAREHOUSE ====================
-// ==================== CONFIRM DELIVERY TO WAREHOUSE ====================
 export const confirmDeliveryToWarehouse = async (products) => {
   try {
     if (!products || products.length === 0) {
@@ -62,8 +60,7 @@ export const confirmDeliveryToWarehouse = async (products) => {
     console.log('📤 Confirming Delivery:', payload);
 
     const res = await API.put('/logistic/update-products', payload);
-        console.log('✅ Updated:', id, '→ dropped');
-        return res?.data;
+    return res?.data;
 
   } catch (err) {
     console.error('❌ confirmDeliveryToWarehouse ERROR:', err?.response?.data || err.message);
@@ -71,30 +68,46 @@ export const confirmDeliveryToWarehouse = async (products) => {
   }
 };
 
-// ==================== GET ALL PRODUCTS FROM DB ====================
-// export const getScannedProducts = async () => {
-//   try {
-//     // Same endpoint installer uses — all products in DB
-//     const res = await API.get('/installer/get-products');
-//     console.log('📋 Fetched from DB:', res?.data?.length || 0);
-//     if (Array.isArray(res.data)) return res.data;
-//     if (Array.isArray(res.data?.products)) return res.data.products;
-//     if (Array.isArray(res.data?.data)) return res.data.data;
-//     return [];
-//   } catch (err) {
-//     console.error('❌ getScannedProducts error:', err?.response?.data || err.message);
-//     return [];
-//   }
-// };
+// ==================== NORMALIZE RAW DISPATCH → CARD SHAPE ====================
+// 🆕 Maps the real /dispatches/my-dispatches response shape (dispatch_number,
+// driver_name, vehicle_number, packages[]...) into the flat shape the UI
+// components (LogisticDealCard / LogisticCardTrackingModal) already expect.
+const normaliseDispatch = (raw) => {
+  const packages = raw.packages || [];
 
-// ==================== GET NEW ASSIGNED CARDS FROM ADMIN ====================
+  // All product names across all packages (for chips display)
+  const productNames = packages.flatMap(pkg =>
+    (pkg.package_items || []).map(item => item.product_name)
+  );
+
+  // Address from first package's billing/shipping street
+  const firstPkg = packages[0] || {};
+  const address = firstPkg.shipping_street || firstPkg.billing_street || 'Address not available';
+
+  return {
+    deal_id: raw.dispatch_number || raw._id,   // shown as #DIS-0027
+    _id: raw._id,
+    status: 'pending',                          // ⚠️ dispatch_status "Ready" is backend-side wording;
+                                                 // confirm with backend how accept/pickup/deliver map here
+    dispatch_status: raw.dispatch_status,        // keep raw value too, for reference/debugging
+    address,
+    assignedAt: raw.createdAt,
+    driverName: raw.driver_name,
+    vehicleNumber: raw.vehicle_number,
+    deliveryMethod: raw.delivery_method,
+    products_info: productNames,                 // used by chips in LogisticDealCard
+    packages,                                     // full package breakdown for "View details"
+  };
+};
+
+// ==================== GET NEW ASSIGNED CARDS FROM ADMIN (dispatches) ====================
 export const getNewAssignedCards = async () => {
   try {
     const userDataStr = await AsyncStorage.getItem(USER_DATA);
     const userData = userDataStr ? JSON.parse(userDataStr) : {};
-    const mobile = userData?.UserInfo?.phoneNo || 
-                   userData?.phoneNo || 
-                   userData?.mobile || 
+    const mobile = userData?.UserInfo?.phoneNo ||
+                   userData?.phoneNo ||
+                   userData?.mobile ||
                    userData?.phone || '';
 
     if (!mobile) {
@@ -102,15 +115,26 @@ export const getNewAssignedCards = async () => {
       return [];
     }
 
-    console.log('📱 Fetching deals for mobile:', mobile);
+    console.log('📱 Fetching dispatches for driver_mobile:', mobile);
 
-    const res = await API.get(`/logistic/deals?mobile=${mobile}`);
+    const res = await API.get(`/logistic/my-dispatches?driver_mobile=${mobile}`);
 
-    const deals = Array.isArray(res.data?.data) ? res.data.data : 
-                  Array.isArray(res.data) ? res.data : [];
+    // 🆕 add here — check raw response shape first
+    console.log('🔍 RAW RES:', JSON.stringify(res, null, 2));
 
-    console.log('🆕 New Assigned Cards Loaded:', deals.length);
-    return deals;
+    const rawDeals = Array.isArray(res.data?.data) ? res.data.data : [];
+
+    // 🆕 add here — check if rawDeals actually has packages before normalising
+    console.log('🔍 rawDeals[0]:', JSON.stringify(rawDeals[0], null, 2));
+
+    console.log('🆕 New Assigned Cards Loaded:', rawDeals.length);
+
+    const normalised = rawDeals.map(normaliseDispatch);
+
+    // 🆕 add here — check output AFTER normalising, this is what UI actually gets
+    console.log('🔍 Sample normalised card:', JSON.stringify(normalised[0], null, 2));
+
+    return normalised;
 
   } catch (err) {
     console.error('❌ getNewAssignedCards ERROR:', err?.response?.data || err.message);
@@ -126,9 +150,9 @@ export const acceptAssignedDeal = async (dealId) => {
       return null;
     }
 
-    const payload = { 
-      id: dealId.toString(), 
-      status: 'accepted' 
+    const payload = {
+      id: dealId.toString(),
+      status: 'accepted'
     };
 
     console.log('📤 Accepting Deal:', payload);
@@ -152,38 +176,20 @@ export const updateLogisticsStatus = async (deal_id, status) => {
     }
 
     const payload = { deal_id, status };
-
     console.log('📤 Updating status:', payload);
 
-    // Try all possible paths
-    const urls = [
-      '/update-status',
-      '/logistic/update-status',
-      '/logistic/deals/update-status',
-      '/api/update-status'
-    ];
-
-    let res = null;
-    for (const url of urls) {
-      try {
-        res = await API.put(url, payload);
-        console.log(`✅ SUCCESS with URL: ${url}`);
-        break;
-      } catch (e) {
-        console.log(`❌ Failed: ${url}`);
-      }
-    }
-
-    if (res) {
-      console.log('✅ Status Updated:', status);
-      return res?.data;
-    } else {
-      console.error('❌ All URLs failed - Check backend router');
-      return null;
-    }
+    const res = await API.put('/logistic/update-status', payload);
+    console.log('✅ Status Updated:', status);
+    return res?.data;
 
   } catch (err) {
-    console.error('❌ updateLogisticsStatus ERROR:', err?.response?.data || err.message);
+    // 🆕 print the REAL server error — status code + body — instead of
+    // silently trying more URLs. This is what tells us auth vs validation vs 404.
+    console.error(
+      '❌ updateLogisticsStatus ERROR:',
+      err?.response?.status,
+      err?.response?.data || err.message
+    );
     return null;
   }
 };

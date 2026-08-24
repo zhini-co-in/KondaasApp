@@ -37,6 +37,7 @@ import LogisticStatusScreen from '../screens/LogisticStatusScreen';
 import InstallerStatusScreen from '../screens/InstallerStatusScreen';
 import CreateEmployeeScreen from '../screens/CreateEmployeeScreen';
 import EmployeeListScreen from '../screens/EmployeeListScreen';
+import PackagePickupScreen from '../screens/PackagePickupScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -87,6 +88,7 @@ export default function RootStack() {
      options={{ headerShown: false }}
    />
    <Stack.Screen name="EmployeeListScreen" component={EmployeeListScreen} options={{ headerShown: false }} />
+   <Stack.Screen name="PackagePickupScreen" component={PackagePickupScreen} />
     </Stack.Navigator>
   );
 }

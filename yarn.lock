@@ -3704,6 +3704,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@react-native-ml-kit/text-recognition@npm:^2.0.0":
+  version: 2.0.0
+  resolution: "@react-native-ml-kit/text-recognition@npm:2.0.0"
+  peerDependencies:
+    react: ">=16.8.1"
+    react-native: ">=0.60.0-rc.0 <1.0.x"
+  checksum: 10c0/345a972524c3a9c0f62cb5219431f02126a25a94219e18b294c16ba22aa8df5cc5e99d4274338cefdeef40aeb61f47f7dd66aa97e66ec58ab6fe72d0d416d151
+  languageName: node
+  linkType: hard
+
 "@react-native-picker/picker@npm:^2.11.4":
   version: 2.11.4
   resolution: "@react-native-picker/picker@npm:2.11.4"
@@ -4578,6 +4588,7 @@ __metadata:
     "@react-native-firebase/auth": "npm:^23.8.6"
     "@react-native-firebase/firestore": "npm:23.8.8"
     "@react-native-firebase/messaging": "npm:^23.8.6"
+    "@react-native-ml-kit/text-recognition": "npm:^2.0.0"
     "@react-native-picker/picker": "npm:^2.11.4"
     "@react-native/babel-preset": "npm:0.85.3"
     "@react-native/eslint-config": "npm:0.85.3"

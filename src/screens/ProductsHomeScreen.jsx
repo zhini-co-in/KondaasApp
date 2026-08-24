@@ -22,6 +22,16 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SCREEN_NAMES } from '../constants/screenNames';
 import { getStorageData, USER_DATA, IsLackCallsShown } from "../service/localStorage";
 
+// ✅ Product-type template API — dropdown options இதுல இருந்து வரும்
+const PRODUCT_TYPE_API = "https://kondaas.atom8itsolutions.com/template/get/product_type";
+
+// ✅ API fail ஆனா / tunnel down ஆனா காட்ட fallback options
+const FALLBACK_PRODUCT_OPTIONS = [
+  { label: "Solar", value: "solar" },
+  { label: "Deye", value: "deye" },
+  { label: "Solaris", value: "solaris" },
+];
+
 const ProductsHomeScreen = () => {
   const navigation = useNavigation();
   const [products, setProducts] = useState([]);
@@ -32,6 +42,12 @@ const ProductsHomeScreen = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+
+  // ─── Product type (new) ───────────────────────────────────────────────────
+  const [productType, setProductType] = useState("");
+  const [productOptions, setProductOptions] = useState(FALLBACK_PRODUCT_OPTIONS);
+  const [loadingProductTypes, setLoadingProductTypes] = useState(false);
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
 
   // ─── Phone call ───────────────────────────────────────────────────────────
   const handleCall = () => {
@@ -119,12 +135,40 @@ const handleLogout = async () => {
     fetchProducts();
   }, []);
 
+  // ─── Fetch product-type options (new) ─────────────────────────────────────
+  // Credential popup திறக்கும்போது ஒரு தடவை fetch பண்ணுவோம்.
+  // API fail ஆனா FALLBACK_PRODUCT_OPTIONS-ஐயே வச்சு continue பண்ணும்.
+  useEffect(() => {
+    if (!showCredentialPopup) return;
+
+    const fetchProductTypes = async () => {
+      try {
+        setLoadingProductTypes(true);
+        const res = await fetch(PRODUCT_TYPE_API);
+        if (!res.ok) throw new Error("Bad response");
+        const json = await res.json();
+        if (Array.isArray(json?.options) && json.options.length > 0) {
+          setProductOptions(json.options);
+        }
+      } catch (error) {
+        console.log("⚠️ Product type fetch failed, using fallback:", error.message);
+        setProductOptions(FALLBACK_PRODUCT_OPTIONS);
+      } finally {
+        setLoadingProductTypes(false);
+      }
+    };
+
+    fetchProductTypes();
+  }, [showCredentialPopup]);
+
   // ─── Close credential popup ───────────────────────────────────────────────
   const closeCredentialPopup = () => {
     setShowCredentialPopup(false);
     setEmail("");
     setPassword("");
     setShowPassword(false);
+    setProductType("");
+    setShowProductDropdown(false);
   };
 
   // ─── Save credentials — ✅ FIX: 300ms delay after save ──────────────────
@@ -142,7 +186,12 @@ const handleLogout = async () => {
       return;
     }
 
-    const result = await saveMailCredentials(email.trim(), password);
+    if (!productType) {
+      Alert.alert("Error", "Please select a product");
+      return;
+    }
+
+    const result = await saveMailCredentials(email.trim(), password, productType);
 
     if (result.success) {
       Alert.alert("Success", result.message, [
@@ -306,6 +355,64 @@ const handleLogout = async () => {
                 </TouchableOpacity>
               </View>
 
+              {/* ─── Product Type Selector (NEW — dropdown box, email/password box மாதிரியே) ─── */}
+              <View style={styles.productTypeWrapper}>
+                <TouchableOpacity
+                  style={styles.inputContainer}
+                  activeOpacity={0.7}
+                  onPress={() => setShowProductDropdown((prev) => !prev)}
+                >
+                  <Ionicons name="cube-outline" size={18} color="#999" />
+                  <Text
+                    style={[
+                      styles.dropdownValueText,
+                      !productType && styles.dropdownPlaceholderText,
+                    ]}
+                  >
+                    {loadingProductTypes
+                      ? "Loading products..."
+                      : productType
+                      ? productOptions.find((o) => o.value === productType)?.label
+                      : "Select Product"}
+                  </Text>
+                  <Ionicons
+                    name={showProductDropdown ? "chevron-up-outline" : "chevron-down-outline"}
+                    size={18}
+                    color="#666"
+                  />
+                </TouchableOpacity>
+
+                {showProductDropdown && (
+                  <View style={styles.dropdownList}>
+                    {productOptions.map((opt) => {
+                      const selected = productType === opt.value;
+                      return (
+                        <TouchableOpacity
+                          key={opt.value}
+                          style={styles.dropdownItem}
+                          onPress={() => {
+                            setProductType(opt.value);
+                            setShowProductDropdown(false);
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.dropdownItemText,
+                              selected && styles.dropdownItemTextSelected,
+                            ]}
+                          >
+                            {opt.label}
+                          </Text>
+                          {selected && (
+                            <Ionicons name="checkmark" size={16} color="#4A90E2" />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+
               <View style={styles.popupButtons}>
                 <TouchableOpacity style={styles.noButton} onPress={closeCredentialPopup}>
                   <Text style={styles.noText}>Cancel</Text>
@@ -455,6 +562,56 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     marginTop: 12,
     width: "100%",
+    height: 50,
   },
-  input: { flex: 1, height: 45, marginLeft: 8 },
+  input: { flex: 1, height: "100%", marginLeft: 8 },
+
+  // ─── Product Type Dropdown styles (NEW) ──────────────────────────────────
+  productTypeWrapper: {
+    width: "100%",
+    position: "relative",
+    zIndex: 10,
+  },
+  dropdownValueText: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
+    color: "#000",
+    height: "100%",
+    textAlignVertical: "center",
+    includeFontPadding: false,
+  },
+  dropdownPlaceholderText: {
+    color: "#999",
+  },
+  dropdownList: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    backgroundColor: "#fff",
+    overflow: "hidden",
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+  },
+  dropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    color: "#333",
+  },
+  dropdownItemTextSelected: {
+    color: "#4A90E2",
+    fontWeight: "700",
+  },
 });

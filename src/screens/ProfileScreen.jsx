@@ -21,6 +21,17 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import LinearGradient from "react-native-linear-gradient";
 import { saveUser, fetchStationList } from "../api/api1"; // ← FIX: saveUser import (fetch + headers already fixed in api1.js)
 
+// ✅ Product-type template API — dropdown options இதுல இருந்து வரும்
+// (ProductsHomeScreen.js-ல உள்ள அதே API, அதே fallback pattern)
+const PRODUCT_TYPE_API = "https://kondaas.atom8itsolutions.com/template/get/product_type";
+
+// ✅ API fail ஆனா / tunnel down ஆனா காட்ட fallback options
+const FALLBACK_PRODUCT_OPTIONS = [
+  { label: "Solar", value: "solar" },
+  { label: "Deye", value: "deye" },
+  { label: "Solaris", value: "solaris" },
+];
+
 const ProfileScreen = ({ route, navigation }) => {
   const { stationId } = route.params || {};
 
@@ -33,17 +44,70 @@ const ProfileScreen = ({ route, navigation }) => {
   const [password, setPassword]                     = useState("");
   const [showPassword, setShowPassword]             = useState(false);
 
+  // ─── Product type (NEW — ProductsHomeScreen.js-உடன் identical pattern) ────
+  const [productType, setProductType]               = useState("");
+  const [productOptions, setProductOptions]         = useState(FALLBACK_PRODUCT_OPTIONS);
+  const [loadingProductTypes, setLoadingProductTypes] = useState(false);
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
+
+  // ─────────────────────────────────────────────────────────────
+  // FETCH PRODUCT TYPE OPTIONS (NEW)
+  // Credential popup திறக்கும்போது ஒரு தடவை fetch பண்ணுவோம்.
+  // API fail ஆனா FALLBACK_PRODUCT_OPTIONS-ஐயே வச்சு continue பண்ணும்.
+  // ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!showCredentialPopup) return;
+
+    const fetchProductTypes = async () => {
+      try {
+        setLoadingProductTypes(true);
+        const res = await fetch(PRODUCT_TYPE_API);
+        if (!res.ok) throw new Error("Bad response");
+        const json = await res.json();
+        if (Array.isArray(json?.options) && json.options.length > 0) {
+          setProductOptions(json.options);
+        }
+      } catch (error) {
+        console.log("⚠️ Product type fetch failed, using fallback:", error.message);
+        setProductOptions(FALLBACK_PRODUCT_OPTIONS);
+      } finally {
+        setLoadingProductTypes(false);
+      }
+    };
+
+    fetchProductTypes();
+  }, [showCredentialPopup]);
+
+  // ─────────────────────────────────────────────────────────────
+  // CLOSE CREDENTIAL POPUP (NEW helper — email/password/productType அனைத்தையும் reset)
+  // ─────────────────────────────────────────────────────────────
+  const closeCredentialPopup = () => {
+    setShowCredentialPopup(false);
+    setEmail("");
+    setPassword("");
+    setShowPassword(false);
+    setProductType("");
+    setShowProductDropdown(false);
+  };
+
   // ─────────────────────────────────────────────────────────────
   // HANDLE UPDATE CREDENTIALS
   // FIX 1: நேரடி fetch → api1.js-ல் உள்ள saveUser() use பண்றோம்
   //         (x-auth-token + x-device-id header auto போகுது)
   // FIX 2: password plain text → CryptoJS SHA256 hash
   // FIX 3: AsyncStorage-லயும் hashed password save பண்றோம்
+  // FIX 4 (NEW): provider (solar/deye/solis) dropdown-ல select பண்ண value-ஐ
+  //              UserInfo.provider-ல சேர்த்து அனுப்புறோம்
   // ─────────────────────────────────────────────────────────────
   const handleUpdateCredentials = async () => {
     try {
       if (!email.trim() || !password) {
         Alert.alert("Error", "Please enter both email and password.");
+        return;
+      }
+
+      if (!productType) {
+        Alert.alert("Error", "Please select a product");
         return;
       }
 
@@ -65,6 +129,7 @@ const ProfileScreen = ({ route, navigation }) => {
           ...parsed.UserInfo,
           email:    email.trim(),
           password: hashedPassword, // ← FIX: plain text இல்லை
+          provider: productType,    // ✅ NEW: backend "UserInfo.provider" field-ஐ expect பண்றது
         },
       };
 
@@ -72,14 +137,12 @@ const ProfileScreen = ({ route, navigation }) => {
       const result = await saveUser(updatedPayload);
 
       if (result?.success) {
-        // AsyncStorage-லயும் hashed password save
+        // AsyncStorage-லயும் hashed password + provider save
         await storeData(USER_DATA, JSON.stringify(updatedPayload));
         setUserData(updatedPayload);
 
         Alert.alert("Success", "Credentials updated successfully!");
-        setShowCredentialPopup(false);
-        setEmail("");
-        setPassword("");
+        closeCredentialPopup();
       } else {
         Alert.alert("Error", result?.data?.error || "Update failed. Try again.");
       }
@@ -109,7 +172,7 @@ const ProfileScreen = ({ route, navigation }) => {
 
   // ─────────────────────────────────────────────────────────────
   // LOAD STATIONS
-  // மாற்றம் இல்லை — fetchStationList() api1.js-ல் already fixed
+  // மாற்றம் இல்லை — fetchStationList() api1.js-ல already fixed
   // ─────────────────────────────────────────────────────────────
   useEffect(() => {
     loadStations();
@@ -134,8 +197,8 @@ const ProfileScreen = ({ route, navigation }) => {
 
       // Offline-ல return
       const net = await NetInfo.fetch();
-const isOffline = net.isConnected === false || net.isInternetReachable === false;
-if (isOffline) return;
+      const isOffline = net.isConnected === false || net.isInternetReachable === false;
+      if (isOffline) return;
       if (!net.isConnected) { setLoading(false); return; }
 
       const response = await fetchStationList();
@@ -282,7 +345,11 @@ if (isOffline) return;
         {/* Modify Credentials Button */}
         <TouchableOpacity
           style={styles.modifyButton}
-          onPress={() => setShowCredentialPopup(true)}
+          onPress={() => {
+            // ✅ NEW — existing provider-ஐ dropdown-ல pre-fill பண்றோம்
+            setProductType(userData?.UserInfo?.provider || "");
+            setShowCredentialPopup(true);
+          }}
         >
           <Text style={styles.modifyText}>Modify Credentials</Text>
         </TouchableOpacity>
@@ -332,13 +399,14 @@ if (isOffline) return;
         transparent
         visible={showCredentialPopup}
         animationType="fade"
-        onRequestClose={() => setShowCredentialPopup(false)}
+        onRequestClose={closeCredentialPopup}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.popupBox}>
             <Ionicons name="mail-outline" size={40} color="#4A90E2" />
             <Text style={styles.popupTitle}>Modify Credentials</Text>
 
+            {/* Email Input */}
             <View style={styles.inputContainer}>
               <Ionicons name="mail-outline" size={18} color="#999" />
               <TextInput
@@ -351,6 +419,7 @@ if (isOffline) return;
               />
             </View>
 
+            {/* Password Input */}
             <View style={styles.inputContainer}>
               <Ionicons name="lock-closed-outline" size={18} color="#999" />
               <TextInput
@@ -369,14 +438,68 @@ if (isOffline) return;
               </TouchableOpacity>
             </View>
 
+            {/* ─── Product Type Selector (NEW — ProductsHomeScreen.js-உடன் identical UI) ─── */}
+            <View style={styles.productTypeWrapper}>
+              <TouchableOpacity
+                style={styles.inputContainer}
+                activeOpacity={0.7}
+                onPress={() => setShowProductDropdown((prev) => !prev)}
+              >
+                <Ionicons name="cube-outline" size={18} color="#999" />
+                <Text
+                  style={[
+                    styles.dropdownValueText,
+                    !productType && styles.dropdownPlaceholderText,
+                  ]}
+                >
+                  {loadingProductTypes
+                    ? "Loading products..."
+                    : productType
+                    ? productOptions.find((o) => o.value === productType)?.label || productType
+                    : "Select Product"}
+                </Text>
+                <Ionicons
+                  name={showProductDropdown ? "chevron-up-outline" : "chevron-down-outline"}
+                  size={18}
+                  color="#666"
+                />
+              </TouchableOpacity>
+
+              {showProductDropdown && (
+                <View style={styles.dropdownList}>
+                  {productOptions.map((opt) => {
+                    const selected = productType === opt.value;
+                    return (
+                      <TouchableOpacity
+                        key={opt.value}
+                        style={styles.dropdownItem}
+                        onPress={() => {
+                          setProductType(opt.value);
+                          setShowProductDropdown(false);
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.dropdownItemText,
+                            selected && styles.dropdownItemTextSelected,
+                          ]}
+                        >
+                          {opt.label}
+                        </Text>
+                        {selected && (
+                          <Ionicons name="checkmark" size={16} color="#4A90E2" />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+
             <View style={styles.popupButtons}>
               <TouchableOpacity
                 style={styles.noButton}
-                onPress={() => {
-                  setShowCredentialPopup(false);
-                  setEmail("");
-                  setPassword("");
-                }}
+                onPress={closeCredentialPopup}
               >
                 <Text style={styles.noText}>Cancel</Text>
               </TouchableOpacity>
@@ -436,4 +559,53 @@ const styles = StyleSheet.create({
   noButton:         { flex: 1, backgroundColor: "#666", paddingVertical: 12, borderRadius: 8, alignItems: "center", marginHorizontal: 5 },
   yesText:          { color: "#fff", fontWeight: "700", fontSize: 15 },
   noText:           { color: "#fff", fontWeight: "700", fontSize: 15 },
+
+  // ─── Product Type Dropdown styles (NEW — ProductsHomeScreen.js-ல் இருந்து அப்படியே) ──
+  productTypeWrapper: {
+    width: "100%",
+    position: "relative",
+    zIndex: 10,
+  },
+  dropdownValueText: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
+    color: "#000",
+    height: "100%",
+    textAlignVertical: "center",
+    includeFontPadding: false,
+  },
+  dropdownPlaceholderText: {
+    color: "#999",
+  },
+  dropdownList: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    backgroundColor: "#fff",
+    overflow: "hidden",
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+  },
+  dropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    color: "#333",
+  },
+  dropdownItemTextSelected: {
+    color: "#4A90E2",
+    fontWeight: "700",
+  },
 });
