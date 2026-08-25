@@ -55,7 +55,9 @@ const PackagePickupScreen = ({ navigation, route }) => {
   const [packages, setPackages] = useState(card?.packages || []);
   const [stages, setStages] = useState({}); // { [package_number]: stage }
 
-  const [scanModal, setScanModal] = useState({ visible: false, pkg: null, mode: 'pickup' });
+  // 🆕 initialMode: 'scan' | 'manual' — controls whether the modal opens on
+  // the camera or jumps straight into the manual entry form.
+  const [scanModal, setScanModal] = useState({ visible: false, pkg: null, mode: 'pickup', initialMode: 'scan' });
 
   useEffect(() => {
     (async () => {
@@ -76,22 +78,27 @@ const PackagePickupScreen = ({ navigation, route }) => {
   }, [card]);
 
   // ── Actions ────────────────────────────────────────────────────────────
-  const openScan = (pkg, mode) => setScanModal({ visible: true, pkg, mode });
-  const closeScan = () => setScanModal({ visible: false, pkg: null, mode: 'pickup' });
+  // mode: 'pickup' | 'delivery'  |  entryMode: 'scan' | 'manual'
+  const openScan = (pkg, mode, entryMode = 'scan') =>
+    setScanModal({ visible: true, pkg, mode, initialMode: entryMode });
+  const closeScan = () => setScanModal({ visible: false, pkg: null, mode: 'pickup', initialMode: 'scan' });
 
-  const handleVerified = async (matched, pkg, mode) => {
+  const handleVerified = async (matched, pkg, mode, meta) => {
     if (!matched) return; // stay on the result screen so driver can rescan/override
     if (mode === 'pickup') {
       await advanceStage(pkg, 'pickup_verified');
     } else {
       await advanceStage(pkg, 'delivery_verified');
     }
+    if (meta?.manual) {
+      console.log('📝 Package confirmed manually:', pkg.package_number, meta);
+    }
   };
 
-    const confirmPickup = async (pkg) => {
+  const confirmPickup = async (pkg) => {
     await updatePackageStatusRemote(card.deal_id, pkg.package_number, 'shipped');
     await advanceStage(pkg, 'picked');
-    await setLocalDispatchStatus(card.deal_id, 'inprogress'); // 🆕 always advance — no dead condition
+    await setLocalDispatchStatus(card.deal_id, 'inprogress');
   };
 
   const markReached = async (pkg) => {
@@ -101,14 +108,12 @@ const PackagePickupScreen = ({ navigation, route }) => {
   const markDelivered = async (pkg) => {
     await updatePackageStatusRemote(card.deal_id, pkg.package_number, 'delivered');
     await advanceStage(pkg, 'delivered');
-    await setLocalDispatchStatus(card.deal_id, 'picked'); // still "picked" overall until ALL delivered
+    await setLocalDispatchStatus(card.deal_id, 'picked');
   };
 
   const allDelivered = packages.length > 0 && packages.every((p) => stageOf(p) === 'delivered');
 
   const completeDispatch = async () => {
-    // Backend already auto-marks the dispatch Delivered once every package is
-    // Delivered — this call just confirms/keeps it in sync.
     await updateDispatchStatusRemote(card.deal_id, 'delivered');
     await setLocalDispatchStatus(card.deal_id, 'completed');
     onUpdate?.();
@@ -117,60 +122,38 @@ const PackagePickupScreen = ({ navigation, route }) => {
     ]);
   };
 
-  // ── Per-package action button, driven by current stage ───────────────────
-  const renderPackageAction = (pkg) => {
+  const getPackageActions = (pkg) => {
     const stage = stageOf(pkg);
     switch (stage) {
       case 'pending':
-        return (
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#4f46e5' }]} onPress={() => openScan(pkg, 'pickup')}>
-            <Ionicons name="scan-outline" size={16} color="#fff" />
-            <Text style={styles.actionBtnText}>Scan Package</Text>
-          </TouchableOpacity>
-        );
+        return [
+          { key: 'scan', icon: 'scan-outline', label: 'Scan', bg: '#4f46e5', onPress: () => openScan(pkg, 'pickup', 'scan') },
+          { key: 'manual', icon: 'create-outline', label: 'Manual', bg: '#fff', border: '#4f46e5', iconColor: '#4f46e5', textColor: '#4f46e5', onPress: () => openScan(pkg, 'pickup', 'manual') },
+        ];
       case 'pickup_verified':
-        return (
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#0ea5e9' }]} onPress={() => confirmPickup(pkg)}>
-            <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
-            <Text style={styles.actionBtnText}>Confirm Pickup</Text>
-          </TouchableOpacity>
-        );
+        return [
+          { key: 'confirm', icon: 'checkmark-circle-outline', label: 'Confirm', bg: '#0ea5e9', onPress: () => confirmPickup(pkg) },
+        ];
       case 'picked':
-        return (
-          <View style={styles.dualBtnRow}>
-            <TouchableOpacity style={[styles.actionBtn, styles.flex1, { backgroundColor: '#f97316' }]} onPress={() => openDirections(pkg, card.address)}>
-              <Ionicons name="navigate-outline" size={16} color="#fff" />
-              <Text style={styles.actionBtnText}>Navigate</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionBtn, styles.flex1, { backgroundColor: '#334155' }]} onPress={() => markReached(pkg)}>
-              <Ionicons name="location" size={16} color="#fff" />
-              <Text style={styles.actionBtnText}>Reached</Text>
-            </TouchableOpacity>
-          </View>
-        );
+        return [
+          { key: 'navigate', icon: 'navigate-outline', label: 'Navigate', bg: '#f97316', onPress: () => openDirections(pkg, card.address) },
+          { key: 'reached', icon: 'location', label: 'Reached', bg: '#334155', onPress: () => markReached(pkg) },
+        ];
       case 'reached':
-        return (
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#8b5cf6' }]} onPress={() => openScan(pkg, 'delivery')}>
-            <Ionicons name="scan-outline" size={16} color="#fff" />
-            <Text style={styles.actionBtnText}>Scan Delivery</Text>
-          </TouchableOpacity>
-        );
+        return [
+          { key: 'scan-delivery', icon: 'scan-outline', label: 'Scan', bg: '#8b5cf6', onPress: () => openScan(pkg, 'delivery', 'scan') },
+          { key: 'manual-delivery', icon: 'create-outline', label: 'Manual', bg: '#fff', border: '#8b5cf6', iconColor: '#8b5cf6', textColor: '#8b5cf6', onPress: () => openScan(pkg, 'delivery', 'manual') },
+        ];
       case 'delivery_verified':
-        return (
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#22c55e' }]} onPress={() => markDelivered(pkg)}>
-            <Ionicons name="checkmark-done" size={16} color="#fff" />
-            <Text style={styles.actionBtnText}>Mark Delivered</Text>
-          </TouchableOpacity>
-        );
+        return [
+          { key: 'delivered', icon: 'checkmark-done', label: 'Delivered', bg: '#22c55e', onPress: () => markDelivered(pkg) },
+        ];
       case 'delivered':
-        return (
-          <View style={styles.deliveredPill}>
-            <Ionicons name="checkmark-done-circle" size={14} color="#3B6D11" />
-            <Text style={styles.deliveredPillText}>Delivered</Text>
-          </View>
-        );
+        return [
+          { key: 'done', icon: 'checkmark-done-circle', label: 'Done', bg: '#EAF3DE', iconColor: '#3B6D11', textColor: '#3B6D11', disabled: true },
+        ];
       default:
-        return null;
+        return [];
     }
   };
 
@@ -192,25 +175,70 @@ const PackagePickupScreen = ({ navigation, route }) => {
             const stage = stageOf(pkg);
             const cfg = STAGE_CONFIG[stage];
             const itemCount = (pkg.package_items || []).length;
+            const actions = getPackageActions(pkg);
 
             return (
               <View key={pkg.package_number || idx} style={styles.pkgCard}>
-                <View style={styles.pkgTopRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.pkgTitle}>{pkg.package_number || `Package ${idx + 1}`}</Text>
+                <View style={styles.pkgRow}>
+                  {/* Left side — info */}
+                  <View style={styles.pkgInfoCol}>
+                    <View style={styles.pkgTopRow}>
+                      <Text style={styles.pkgTitle} numberOfLines={1}>{pkg.package_number || `Package ${idx + 1}`}</Text>
+                    </View>
                     <Text style={styles.pkgMeta}>{itemCount} item{itemCount !== 1 ? 's' : ''}</Text>
+
+                    {/* 🆕 Product details — name + quantity (+ serial numbers if present)
+                        pulled straight from pkg.package_items, so the driver can see
+                        exactly what's in this package right on this screen. */}
+                    {itemCount > 0 && (
+                      <View style={styles.productsList}>
+                        {(pkg.package_items || []).map((item, i) => (
+                          <View key={i} style={styles.productRow}>
+                            <Ionicons name="cube-outline" size={12} color="#64748b" style={{ marginTop: 1 }} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.productName} numberOfLines={2}>
+                                {item.product_name || 'Unnamed product'}
+                                {item.quantity ? `  ×${item.quantity}` : ''}
+                              </Text>
+                              {Array.isArray(item.serial_number) && item.serial_number.length > 0 && (
+                                <Text style={styles.productSerial} numberOfLines={1}>
+                                  SN: {item.serial_number.join(', ')}
+                                </Text>
+                              )}
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    <View style={[styles.stagePill, { backgroundColor: cfg.color + '1A' }]}>
+                      <Ionicons name={cfg.icon} size={11} color={cfg.color} />
+                      <Text style={[styles.stagePillText, { color: cfg.color }]}>{cfg.label}</Text>
+                    </View>
                   </View>
-                  <View style={[styles.stagePill, { backgroundColor: cfg.color + '1A' }]}>
-                    <Ionicons name={cfg.icon} size={12} color={cfg.color} />
-                    <Text style={[styles.stagePillText, { color: cfg.color }]}>{cfg.label}</Text>
+
+                  {/* Right side — LeadCard-style rectangle action buttons, stacked vertically */}
+                  <View style={styles.pkgActionCol}>
+                    {actions.map((a) => (
+                      <TouchableOpacity
+                        key={a.key}
+                        disabled={a.disabled}
+                        activeOpacity={0.7}
+                        onPress={a.onPress}
+                        style={[
+                          styles.commonBtn,
+                          { backgroundColor: a.bg },
+                          a.border && { borderWidth: 1.4, borderColor: a.border },
+                        ]}
+                      >
+                        <Ionicons name={a.icon} size={13} color={a.iconColor || '#fff'} style={{ marginRight: 4 }} />
+                        <Text style={[styles.commonBtnText, { color: a.textColor || '#fff' }]} numberOfLines={1}>
+                          {a.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
                   </View>
                 </View>
-
-                <Text style={styles.pkgAddress} numberOfLines={2}>
-                  {pkg.shipping_street || pkg.billing_street || card.address || 'No address'}
-                </Text>
-
-                <View style={{ marginTop: 12 }}>{renderPackageAction(pkg)}</View>
               </View>
             );
           })}
@@ -234,7 +262,8 @@ const PackagePickupScreen = ({ navigation, route }) => {
         visible={scanModal.visible}
         pkg={scanModal.pkg}
         mode={scanModal.mode}
-        onVerified={(matched, rawText) => handleVerified(matched, scanModal.pkg, scanModal.mode)}
+        initialMode={scanModal.initialMode}
+        onVerified={(matched, rawText, meta) => handleVerified(matched, scanModal.pkg, scanModal.mode, meta)}
         onClose={closeScan}
       />
     </View>
@@ -257,30 +286,31 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#eef2f7',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
   },
-  pkgTopRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  pkgRow: { flexDirection: 'row', alignItems: 'stretch', gap: 12 },
+  pkgInfoCol: { flex: 1 },
+  pkgTopRow: { flexDirection: 'row', alignItems: 'flex-start' },
   pkgTitle: { fontSize: 14, fontWeight: '700', color: '#1a1a1a' },
   pkgMeta: { fontSize: 11, color: '#94a3b8', marginTop: 2 },
-  pkgAddress: { fontSize: 12, color: '#475569', marginTop: 8, lineHeight: 17 },
+
+  // 🆕 Product details block inside each package card
+  productsList: { marginTop: 8, gap: 6 },
+  productRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  productName: { fontSize: 12.5, fontWeight: '600', color: '#334155', lineHeight: 17 },
+  productSerial: { fontSize: 10.5, color: '#94a3b8', marginTop: 1 },
 
   stagePill: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20,
+    flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start',
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, marginTop: 8,
   },
   stagePillText: { fontSize: 10.5, fontWeight: '700' },
 
-  actionBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    paddingVertical: 11, borderRadius: 10,
+  // 🆕 Right-side action column — LeadCard-style rectangle buttons, stacked
+  pkgActionCol: { justifyContent: 'flex-start', gap: 6 },
+  commonBtn: {
+    width: 98, height: 34, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center', borderRadius: 8,
   },
-  actionBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  dualBtnRow: { flexDirection: 'row', gap: 8 },
-  flex1: { flex: 1 },
-
-  deliveredPill: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    backgroundColor: '#EAF3DE', paddingVertical: 10, borderRadius: 10,
-  },
-  deliveredPillText: { color: '#3B6D11', fontWeight: '700', fontSize: 13 },
+  commonBtnText: { fontSize: 11, fontWeight: 'bold' },
 
   emptyText: { textAlign: 'center', color: '#999', marginTop: 40 },
 

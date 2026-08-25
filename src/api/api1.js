@@ -10,6 +10,7 @@ import { fetchSolisStationList, fetchSolisHistory, fetchSolisSavings } from "./a
 
 const BASE_URL = "https://kondaas.atom8itsolutions.com";
 //const BASE_URL = "https://board.trisentrix.com";
+//const BASE_URL = "https://crucial-purifier-canopener.ngrok-free.dev";
 
 // ─────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────

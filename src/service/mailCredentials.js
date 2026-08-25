@@ -37,7 +37,7 @@ export const saveMailCredentials = async (email, password) => {
 
     console.log("📤 Payload:", JSON.stringify(payload, null, 2));
 
-    const response = await fetch("https://board.trisentrix.com/solarman/user", {
+    const response = await fetch("https://kondaas.atom8itsolutions.com/solarman/user", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

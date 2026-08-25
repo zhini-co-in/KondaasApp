@@ -12,6 +12,8 @@ import RootStack from './navigation';
 import codePush from "@revopush/react-native-code-push";
 // @ts-ignore
 import { createNotificationChannel } from './utils/notificationService';
+// @ts-ignore
+import { initSyncQueue, teardownSyncQueue } from './service/syncQueueService';
 
 const queryClient = new QueryClient();
 
@@ -24,7 +26,15 @@ let App = () => {
       updateDialog: true,
       installMode: codePush.InstallMode.IMMEDIATE,
     });
-  createNotificationChannel();
+    createNotificationChannel();
+
+    // 🆕 Offline sync queue: replays any queued dispatch/scan/pickup/deliver
+    // actions the moment the device is back online.
+    initSyncQueue();
+
+    return () => {
+      teardownSyncQueue();
+    };
   }, []);
   
 

@@ -124,7 +124,7 @@ if (isOffline) return;
         type: selectedIssue,
       };
 
-      const response = await fetch("https://board.trisentrix.com/ticket/create", {
+      const response = await fetch("https://kondaas.atom8itsolutions.com/ticket/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

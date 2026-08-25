@@ -93,7 +93,7 @@ const isOffline = net.isConnected === false || net.isInternetReachable === false
 if (isOffline) return;
       if (!net.isConnected) return;
 
-      const res = await fetch("https://board.trisentrix.com/savings/calculate-savings", {
+      const res = await fetch("https://kondaas.atom8itsolutions.com/savings/calculate-savings", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

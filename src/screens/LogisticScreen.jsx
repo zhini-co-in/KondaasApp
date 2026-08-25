@@ -14,6 +14,8 @@ import {
   Alert,
   Platform,
   RefreshControl,
+  TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -39,8 +41,9 @@ import {
 } from '../service/logisticService';
 import LogisticDealCard from '../components/LogisticDealCard';
 import LogisticCardTrackingModal from '../components/LogisticCardTrackingModal';
+import PackageScanVerifyModal from '../components/PackageScanVerifyModal';
 import { saveScannedProduct, confirmDeliveryToWarehouse, getNewAssignedCards, updateLogisticsStatus } from '../service/logisticProductService';
-import { mergeCardsWithLocalProgress, setLocalDispatchStatus } from '../service/dispatchProgressService';
+import { mergeCardsWithLocalProgress, setLocalDispatchStatus, acceptDealLocalFirst } from '../service/dispatchProgressService';
 
 const LogisticScreen = ({ navigation }) => {
   const isMounted = useRef(true);
@@ -77,6 +80,27 @@ const LogisticScreen = ({ navigation }) => {
   // Per-card tracking modal (kept for "View full details" / completed cards)
   const [trackingModalVisible, setTrackingModalVisible] = useState(false);
   const [trackingModalCard, setTrackingModalCard] = useState(null);
+
+  // 🆕 Picked/Delivered no longer flip a card's status directly. Both go
+  // through this scan+verify gate first — driver has to scan/OCR/manual-enter
+  // the package and confirm every item's quantity before the status actually
+  // changes. verifyTarget remembers WHICH card+index+action (pickup/delivery)
+  // triggered the modal so we know what to update once verified.
+  const [verifyModalVisible, setVerifyModalVisible] = useState(false);
+  const [verifyTarget, setVerifyTarget] = useState(null); // { card, index, action: 'pickup' | 'delivery', pkg?, key? }
+
+  // 🆕 Reject-reason popup — mirrors the Deal Details modal's design
+  // (dark overlay + white rounded card). rejectTarget remembers WHICH
+  // card+index triggered it so confirmRejectCard knows what to remove.
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [rejectTarget, setRejectTarget] = useState(null); // { card, index }
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectError, setRejectError] = useState('');
+
+  // 🆕 Handle onto each rendered LogisticDealCard, keyed by deal_id, so the
+  // package-level advancePackage() can be triggered only from
+  // handleVerifyConfirmed below — never directly from the card's buttons.
+  const cardRefs = useRef({});
 
   const device = useCameraDevice('back');
   const lastScanTime = useRef(0);
@@ -192,7 +216,26 @@ const LogisticScreen = ({ navigation }) => {
   // camera modal immediately (before async work), and only releases its
   // lock once the whole save/update cycle has finished.
   const cardCodeScanner = useCodeScanner({
-    codeTypes: ['qr', 'ean-13', 'ean-8', 'code-128', 'code-39', 'data-matrix', 'aztec'],
+    // Covers both QR and every common barcode symbology (UPC/EAN retail
+    // barcodes, Code 128/39/93, Codabar, ITF, PDF417, Data Matrix, Aztec)
+    // so scanning works regardless of which code type is printed on the
+    // product/package.
+    codeTypes: [
+      'qr',
+      'ean-13',
+      'ean-8',
+      'upc-a',
+      'upc-e',
+      'code-128',
+      'code-39',
+      'code-93',
+      'codabar',
+      'itf',
+      'itf-14',
+      'pdf-417',
+      'data-matrix',
+      'aztec',
+    ],
     onCodeScanned: (codes) => {
       if (codes.length === 0 || scanningCardIndex === null) return;
 
@@ -256,18 +299,55 @@ const LogisticScreen = ({ navigation }) => {
     setShowDealModal(true);
   };
 
-    const acceptAssignedCard = async (card, index) => {
-    await setLocalDispatchStatus(card.deal_id, 'accepted');
+  // 🆕 Accept — local-first. Flips AsyncStorage + the UI to "accepted"
+  // instantly; acceptDealLocalFirst() fires the backend call in the
+  // background and never blocks/reverts this on failure (see
+  // dispatchProgressService.js for details).
+  const acceptAssignedCard = async (card, index) => {
+    const { localStatus } = await acceptDealLocalFirst(card.deal_id);
     setNewAssignedCards((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, status: 'accepted' } : item))
+      prev.map((item, i) => (i === index ? { ...item, status: localStatus } : item))
     );
-    Alert.alert('Accepted', 'Status updated. Click "Start Scan"');
   };
 
-  // Reject Card
-    const rejectAssignedCard = async (card, index) => {
-    await setLocalDispatchStatus(card.deal_id, 'rejected');
-    setNewAssignedCards((prev) => prev.filter((_, i) => i !== index));
+  // 🆕 Reject — opens the reason popup instead of removing the card
+  // immediately. The actual removal + API/local status update only
+  // happens once the driver types a reason and taps "Submit" in
+  // confirmRejectCard below.
+  const rejectAssignedCard = (card, index) => {
+    setRejectTarget({ card, index });
+    setRejectReason('');
+    setRejectError('');
+    setRejectModalVisible(true);
+  };
+
+  const closeRejectModal = () => {
+    setRejectModalVisible(false);
+    setRejectTarget(null);
+    setRejectReason('');
+    setRejectError('');
+  };
+
+  // 🆕 Only place a card is actually removed + marked rejected — fires
+  // once the driver has typed a reason and confirmed.
+  const confirmRejectCard = async () => {
+    if (!rejectReason.trim()) {
+      setRejectError('Reject reason podunga');
+      return;
+    }
+    const target = rejectTarget;
+    if (!target) return;
+
+    try {
+      await setLocalDispatchStatus(target.card.deal_id, 'rejected', {
+        reason: rejectReason.trim(),
+      });
+    } catch (e) {
+      console.error('[confirmRejectCard] failed:', e);
+    }
+
+    setNewAssignedCards((prev) => prev.filter((_, i) => i !== target.index));
+    closeRejectModal();
     Alert.alert('Rejected', 'Card removed from assignments');
   };
 
@@ -302,6 +382,73 @@ const LogisticScreen = ({ navigation }) => {
   };
 
   // Per-card tracking sheet (used for "View full details" / completed cards)
+  // 🆕 Opens the scan+verify modal instead of changing status directly.
+  // `action` is 'pickup' (→ Picked) or 'delivery' (→ Dropped/Delivered).
+  // Pass `pkg`/`key` for a PACKAGE-level action (from LogisticDealCard's
+  // inline Mark Picked/Delivered buttons) — omit them for a deal-level action.
+  const openScanVerify = (card, index, action, pkg, key) => {
+    setVerifyTarget({ card, index, action, pkg, key });
+    setVerifyModalVisible(true);
+  };
+
+  const closeScanVerify = () => {
+    setVerifyModalVisible(false);
+    setVerifyTarget(null);
+  };
+
+  // Only place a card/package's status is actually allowed to change to
+  // Picked/Delivered — fires only after the driver explicitly confirms on
+  // the PackageScanVerifyModal result screen (Continue / Override).
+  const handleVerifyConfirmed = async (matched, rawText, meta) => {
+    const target = verifyTarget;
+    closeScanVerify();
+    if (!target) return;
+
+    // Package-level: delegate to the specific card's own local stage state,
+    // reached through the ref — this is the ONLY path that ever calls
+    // advancePackage on a card.
+    if (target.pkg && target.key) {
+      const nextStage = target.action === 'pickup' ? 'picked' : 'delivered';
+      const remoteStatus = target.action === 'pickup' ? 'shipped' : 'delivered';
+      cardRefs.current[target.card?.deal_id]?.advancePackage(target.pkg, target.key, nextStage, remoteStatus);
+      return;
+    }
+
+    // Deal-level (legacy path, kept for the top-of-card actions).
+    if (target.action === 'pickup') {
+      await markProductPicked(target.card, target.index);
+    } else if (target.action === 'delivery') {
+      await markAsDropped(target.card, target.index);
+    }
+  };
+
+  // PackageScanVerifyModal expects { package_number, package_items }.
+  // If this is a package-level target, the real package object already has
+  // that exact shape — use it directly.
+  //
+  // 🆕 Otherwise (deal-level target — e.g. Confirm Pickup/Mark Delivered from
+  // LogisticCardTrackingModal, no specific package chosen) build the items
+  // list from card.packages[].package_items — that's where product data
+  // actually lives on current records. card.products_info is a legacy
+  // fallback field only populated on old pre-packages[] records, so relying
+  // on it here left "Products Verified" empty for every normal dispatch.
+  const buildDealLevelItems = (card) => {
+    const fromPackages = (card?.packages || []).flatMap(
+      (pkg) => pkg.package_items || []
+    );
+    if (fromPackages.length > 0) return fromPackages;
+
+    // Old-record fallback: no packages[] at all, only a flat products_info list.
+    return (card?.products_info || []).map((name) => ({ product_name: name }));
+  };
+
+  const verifyPkg = verifyTarget
+    ? verifyTarget.pkg || {
+        package_number: verifyTarget.card?.deal_id,
+        package_items: buildDealLevelItems(verifyTarget.card),
+      }
+    : null;
+
   const openCardTracking = (card) => {
     setTrackingModalCard(card);
     setTrackingModalVisible(true);
@@ -312,18 +459,18 @@ const LogisticScreen = ({ navigation }) => {
     setTrackingModalCard(null);
   };
 
-  const handleConfirmPickupFromModal = async (card) => {
+  const handleConfirmPickupFromModal = (card) => {
     const index = newAssignedCards.findIndex((c) => c.deal_id === card.deal_id);
     if (index === -1) return;
-    await markProductPicked(card, index);
     closeCardTracking();
+    openScanVerify(card, index, 'pickup');
   };
 
-  const handleMarkDeliveredFromModal = async (card) => {
+  const handleMarkDeliveredFromModal = (card) => {
     const index = newAssignedCards.findIndex((c) => c.deal_id === card.deal_id);
     if (index === -1) return;
-    await markAsDropped(card, index);
     closeCardTracking();
+    openScanVerify(card, index, 'delivery');
   };
 
   const handleLogout = () => {
@@ -421,14 +568,15 @@ const LogisticScreen = ({ navigation }) => {
                 const index = newAssignedCards.indexOf(card);
                 return (
                                     <LogisticDealCard
+                    ref={(r) => { cardRefs.current[card.deal_id] = r; }}
                     key={card.deal_id || index}
                     card={card}
                     index={index}
                     onAccept={acceptAssignedCard}
                     onReject={rejectAssignedCard}
                     onStartScan={openScannerForCard}
-                    onMarkPicked={markProductPicked}
-                    onMarkDropped={markAsDropped}
+                    onMarkPicked={(c, pkg, key) => openScanVerify(c, index, 'pickup', pkg, key)}
+                    onMarkDropped={(c, pkg, key) => openScanVerify(c, index, 'delivery', pkg, key)}
                     onSeeMore={showFullDealDetails}
                     onCardPress={openCardTracking}
                     onStartPickup={(card) => navigation.navigate('PackagePickupScreen', { card, onUpdate: loadNewAssignedCards })}
@@ -495,14 +643,15 @@ const LogisticScreen = ({ navigation }) => {
                     const index = newAssignedCards.indexOf(card); // original array index, for handlers
                     return (
                       <LogisticDealCard
+                        ref={(r) => { cardRefs.current[card.deal_id] = r; }}
                         key={card.deal_id || index}
                         card={card}
                         index={index}
                         onAccept={acceptAssignedCard}
                         onReject={rejectAssignedCard}
                         onStartScan={openScannerForCard}
-                        onMarkPicked={markProductPicked}
-                        onMarkDropped={markAsDropped}
+                        onMarkPicked={(c, pkg, key) => openScanVerify(c, index, 'pickup', pkg, key)}
+                        onMarkDropped={(c, pkg, key) => openScanVerify(c, index, 'delivery', pkg, key)}
                         onSeeMore={showFullDealDetails}
                         onCardPress={openCardTracking}
                         onStartPickup={(card) => navigation.navigate('PackagePickupScreen', { card, onUpdate: loadNewAssignedCards })}
@@ -613,6 +762,66 @@ const LogisticScreen = ({ navigation }) => {
         </View>
       </Modal>
 
+      {/* 🆕 REJECT REASON MODAL — same visual language as the Deal Details
+          modal above (dark overlay + white rounded card, icon header).
+          Pressing "Submit" is the only path that actually removes the
+          card + marks it rejected (see confirmRejectCard). */}
+      <Modal visible={rejectModalVisible} transparent animationType="slide" onRequestClose={closeRejectModal}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.rejectHeaderRow}>
+                <View style={styles.rejectHeaderIconWrap}>
+                  <Ionicons name="close-circle-outline" size={22} color="#ef4444" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rejectHeaderTitle}>Reject Deal</Text>
+                  {!!rejectTarget?.card?.deal_id && (
+                    <Text style={styles.rejectHeaderSub}>
+                      {rejectTarget.card.deal_id}
+                    </Text>
+                  )}
+                </View>
+              </View>
+
+              <Text style={styles.rejectLabel}>Reason for rejection</Text>
+              <TextInput
+                style={styles.rejectInput}
+                placeholder="Type the reason here..."
+                placeholderTextColor="#94a3b8"
+                multiline
+                numberOfLines={4}
+                value={rejectReason}
+                onChangeText={(v) => {
+                  setRejectReason(v);
+                  if (rejectError) setRejectError('');
+                }}
+              />
+              {!!rejectError && <Text style={styles.rejectErrorText}>{rejectError}</Text>}
+
+              <View style={styles.rejectBtnRow}>
+                <TouchableOpacity
+                  style={styles.rejectCancelBtn}
+                  onPress={closeRejectModal}
+                >
+                  <Text style={styles.rejectCancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.rejectSubmitBtn}
+                  onPress={confirmRejectCard}
+                >
+                  <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
+                  <Text style={styles.rejectSubmitBtnText}>Submit</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       {/* PER-CARD TRACKING MODAL */}
       <LogisticCardTrackingModal
         visible={trackingModalVisible}
@@ -620,6 +829,17 @@ const LogisticScreen = ({ navigation }) => {
         onClose={closeCardTracking}
         onConfirmPickup={handleConfirmPickupFromModal}
         onMarkDelivered={handleMarkDeliveredFromModal}
+      />
+
+      {/* 🆕 SCAN + VERIFY GATE — the only path that can flip a card to
+          Picked/Delivered. Status changes only once the driver explicitly
+          confirms here (see handleVerifyConfirmed). */}
+      <PackageScanVerifyModal
+        visible={verifyModalVisible}
+        pkg={verifyPkg}
+        mode={verifyTarget?.action === 'delivery' ? 'delivery' : 'pickup'}
+        onVerified={handleVerifyConfirmed}
+        onClose={closeScanVerify}
       />
 
       {/* PRODUCT SCAN MODAL - per card */}
@@ -786,6 +1006,41 @@ const styles = StyleSheet.create({
   modalAddrValue: {
     fontSize: 13, color: '#1e293b', fontWeight: '500', flex: 1, textAlign: 'right',
   },
+
+  // 🆕 Reject-reason popup — same modalOverlay/modalContent shell as the
+  // Deal Details modal, plus its own header/input/button styling.
+  rejectHeaderRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18,
+  },
+  rejectHeaderIconWrap: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: '#FEE2E2',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  rejectHeaderTitle: { fontSize: 17, fontWeight: '700', color: '#1a1a1a' },
+  rejectHeaderSub: { fontSize: 12, color: '#94a3b8', marginTop: 2 },
+  rejectLabel: {
+    fontSize: 12, fontWeight: '700', color: '#64748b',
+    textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8,
+  },
+  rejectInput: {
+    borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10,
+    padding: 12, fontSize: 14, color: '#1e293b',
+    textAlignVertical: 'top', minHeight: 90, backgroundColor: '#F8FAFC',
+  },
+  rejectErrorText: { color: '#ef4444', fontSize: 12, fontWeight: '600', marginTop: 8 },
+  rejectBtnRow: { flexDirection: 'row', gap: 10, marginTop: 20 },
+  rejectCancelBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#f1f5f9', paddingVertical: 13, borderRadius: 10,
+  },
+  rejectCancelBtnText: { color: '#475569', fontWeight: '700', fontSize: 14 },
+  rejectSubmitBtn: {
+    flex: 1.3, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: '#ef4444', paddingVertical: 13, borderRadius: 10,
+  },
+  rejectSubmitBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+
   offLogoutBtn: { position: 'absolute', top: 55, left: 20, zIndex: 10 },
   offToggleBtn: {
     backgroundColor: '#fff',

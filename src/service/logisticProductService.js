@@ -101,6 +101,31 @@ const normaliseDispatch = (raw) => {
 };
 
 // ==================== GET NEW ASSIGNED CARDS FROM ADMIN (dispatches) ====================
+// 🆕 OFFLINE-SAFE CACHE
+// Every successful fetch is mirrored into AsyncStorage. If a later fetch
+// fails (no network, server down, etc.), we return the last known-good list
+// from cache instead of an empty array — so a pull-to-refresh while offline
+// can no longer wipe cards that are already showing on screen.
+const ASSIGNED_CARDS_CACHE_KEY = 'cached_assigned_cards';
+
+const cacheAssignedCards = async (cards) => {
+  try {
+    await AsyncStorage.setItem(ASSIGNED_CARDS_CACHE_KEY, JSON.stringify(cards));
+  } catch (e) {
+    console.warn('[getNewAssignedCards] cacheAssignedCards error:', e.message);
+  }
+};
+
+const getCachedAssignedCards = async () => {
+  try {
+    const raw = await AsyncStorage.getItem(ASSIGNED_CARDS_CACHE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    console.warn('[getNewAssignedCards] getCachedAssignedCards error:', e.message);
+    return [];
+  }
+};
+
 export const getNewAssignedCards = async () => {
   try {
     const userDataStr = await AsyncStorage.getItem(USER_DATA);
@@ -112,33 +137,32 @@ export const getNewAssignedCards = async () => {
 
     if (!mobile) {
       console.warn('⚠️ Mobile number not found');
-      return [];
+      // 🆕 still fall back to cache rather than wiping the screen
+      return await getCachedAssignedCards();
     }
 
     console.log('📱 Fetching dispatches for driver_mobile:', mobile);
 
     const res = await API.get(`/logistic/my-dispatches?driver_mobile=${mobile}`);
 
-    // 🆕 add here — check raw response shape first
-    console.log('🔍 RAW RES:', JSON.stringify(res, null, 2));
-
     const rawDeals = Array.isArray(res.data?.data) ? res.data.data : [];
-
-    // 🆕 add here — check if rawDeals actually has packages before normalising
-    console.log('🔍 rawDeals[0]:', JSON.stringify(rawDeals[0], null, 2));
 
     console.log('🆕 New Assigned Cards Loaded:', rawDeals.length);
 
     const normalised = rawDeals.map(normaliseDispatch);
 
-    // 🆕 add here — check output AFTER normalising, this is what UI actually gets
-    console.log('🔍 Sample normalised card:', JSON.stringify(normalised[0], null, 2));
+    // 🆕 fetch succeeded — refresh the offline cache for next time
+    await cacheAssignedCards(normalised);
 
     return normalised;
 
   } catch (err) {
     console.error('❌ getNewAssignedCards ERROR:', err?.response?.data || err.message);
-    return [];
+    // 🆕 network/server failure — DON'T return [] (that wipes the screen).
+    // Return whatever we last successfully fetched instead.
+    const cached = await getCachedAssignedCards();
+    console.log('📦 getNewAssignedCards: serving', cached.length, 'card(s) from offline cache');
+    return cached;
   }
 };
 
@@ -183,8 +207,6 @@ export const updateLogisticsStatus = async (deal_id, status) => {
     return res?.data;
 
   } catch (err) {
-    // 🆕 print the REAL server error — status code + body — instead of
-    // silently trying more URLs. This is what tells us auth vs validation vs 404.
     console.error(
       '❌ updateLogisticsStatus ERROR:',
       err?.response?.status,

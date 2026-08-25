@@ -67,7 +67,7 @@ const fetchTickets = async () => {
         }
 
         const response = await fetch(
-            `https://board.trisentrix.com/ticket/user?PhoneNo=${phoneNo}`,
+            `https://kondaas.atom8itsolutions.com/ticket/user?PhoneNo=${phoneNo}`,
             {
                 method: "GET",
                 headers: {
