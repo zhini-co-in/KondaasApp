@@ -170,11 +170,11 @@ const SurveyerScreen = () => {
         ]);
       }
       await PermissionsAndroid.requestMultiple([
-        PermissionsAndroid.PERMISSIONS.CAMERA,
-        Platform.Version >= 33
-          ? PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES
-          : PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
-      ]);
+  PermissionsAndroid.PERMISSIONS.CAMERA,
+  ...(Platform.Version < 33
+    ? [PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE]
+    : []),
+]);
     };
     autoSetup();
   }, []);
@@ -379,10 +379,33 @@ const SurveyerScreen = () => {
   const requestGalleryPermission = async () => {
     if (Platform.OS !== 'android') return { granted: true, neverAskAgain: false };
     try {
-      const permission =
-        Platform.Version >= 33
-          ? PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES
-          : PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
+      const requestGalleryPermission = async () => {
+  if (Platform.OS !== 'android') return { granted: true, neverAskAgain: false };
+
+  // Android 13+ (API 33+) → Photo Picker use பண்றோம், permission தேவையில்லை
+  if (Platform.Version >= 33) {
+    return { granted: true, neverAskAgain: false };
+  }
+
+  try {
+    const granted = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+      {
+        title: 'Gallery Permission Required',
+        message: 'We need access to your gallery to select photos for surveys.',
+        buttonNegative: 'Cancel',
+        buttonPositive: 'Allow',
+      }
+    );
+    return {
+      granted: granted === PermissionsAndroid.RESULTS.GRANTED,
+      neverAskAgain: granted === 'never_ask_again',
+      status: granted,
+    };
+  } catch (err) {
+    return { granted: false, neverAskAgain: false, status: 'error' };
+  }
+};
 
       const granted = await PermissionsAndroid.request(permission, {
         title:           'Gallery Permission Required',

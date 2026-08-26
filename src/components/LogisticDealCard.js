@@ -31,7 +31,7 @@ const PACKAGE_STATUS_COLORS = {
 const getPackageAccent = (pkgStatus) =>
   PACKAGE_STATUS_COLORS[(pkgStatus || '').toLowerCase()] || '#94a3b8';
 
-// 🆕 Local package "stage" pill (independent of the server's pkg.status text) —
+// Local package "stage" pill (independent of the server's pkg.status text) —
 // mirrors the stage machine used in PackagePickupScreen (pending → picked → delivered)
 const LOCAL_STAGE_CONFIG = {
   pending:   { label: 'Not Picked', color: '#94a3b8' },
@@ -49,7 +49,7 @@ const mapServerStatusToStage = (serverStatus) => {
   return 'pending';
 };
 
-// 🆕 forwardRef — the parent (LogisticScreen) needs a handle onto this card's
+// forwardRef — the parent (LogisticScreen) needs a handle onto this card's
 // advancePackage() so it can trigger the ACTUAL stage change only after a
 // scan+verify confirmation has happened outside this component. The card
 // itself never advances a package's stage off a bare button tap anymore.
@@ -68,7 +68,7 @@ const LogisticDealCard = forwardRef(({
   // so tapping a package shows ONLY that package's address, nothing else).
   const [openPackageKey, setOpenPackageKey] = useState(null);
 
-  // 🆕 Per-package local stage, keyed by package_number. Seeded from
+  // Per-package local stage, keyed by package_number. Seeded from
   // card.packages[i].stage/localStage (set by mergeCardsWithLocalProgress)
   // when local progress already exists, otherwise derived from the
   // server's raw pkg.status the first time we see it.
@@ -104,13 +104,13 @@ const LogisticDealCard = forwardRef(({
   const KNOWN_FLOW_STATUSES = ['accepted', 'inprogress', 'picked', 'completed'];
   const normalizedStatus = KNOWN_FLOW_STATUSES.includes(status) ? status : 'pending';
 
-  // 🆕 REMOVED: tapping the card no longer opens the "Order Tracking" modal
+  // REMOVED: tapping the card no longer opens the "Order Tracking" modal
   // at all — the top summary row below is now a plain, non-touchable View.
   // The "Start" button remains the only way to open a dispatch (it goes to
   // PackagePickupScreen), and each package row expands inline on the card.
 
   // Tap a single package row → toggle ONLY that package's details open/closed.
-  // 🆕 This TouchableOpacity is now structurally OUTSIDE the deal-level
+  // This TouchableOpacity is now structurally OUTSIDE the deal-level
   // tracking TouchableOpacity (see render below), so a tap here can never
   // reach handleCardBodyPress / open the Order Tracking modal.
   const togglePackage = (key) => {
@@ -118,7 +118,7 @@ const LogisticDealCard = forwardRef(({
     setOpenPackageKey((prev) => (prev === key ? null : key));
   };
 
-  // 🆕 The ONLY function that actually mutates a package's stage. It is no
+  // The ONLY function that actually mutates a package's stage. It is no
   // longer wired to a button's onPress directly — it only runs when the
   // parent calls it through the ref, which the parent does exclusively from
   // its scan+verify confirmation handler. Local-first: flips local stage +
@@ -138,7 +138,7 @@ const LogisticDealCard = forwardRef(({
     }
   };
 
-  // 🆕 Expose advancePackage to the parent so it can be invoked ONLY after
+  // Expose advancePackage to the parent so it can be invoked ONLY after
   // a successful scan+verify confirmation (see LogisticScreen).
   useImperativeHandle(ref, () => ({ advancePackage }), [card]);
 
@@ -184,10 +184,10 @@ const LogisticDealCard = forwardRef(({
   };
 
   return (
-    // 🆕 Plain View now — no longer a card-wide TouchableOpacity, so nothing
+    // Plain View now — no longer a card-wide TouchableOpacity, so nothing
     // inside packagesWrap can ever trigger the deal-level tracking modal.
     <View style={[styles.card, { borderLeftColor: color, borderLeftWidth: 4 }]}>
-      {/* 🆕 Plain View now — no press behavior at all. Tracking modal removed
+      {/* Plain View now — no press behavior at all. Tracking modal removed
           entirely; "Start" button below is the only tap action here. */}
       <View>
         {/* Top row: status badge + date */}
@@ -208,7 +208,7 @@ const LogisticDealCard = forwardRef(({
           <View style={{ flex: 1, marginRight: 8 }}>
             <Text style={styles.dispatchLabel}>Dispatch</Text>
             <Text style={styles.dispatchNumber} numberOfLines={1}>{dealTitle}</Text>
-            {/* 🆕 Address intentionally removed from the dashboard card view */}
+            {/* Address intentionally removed from the dashboard card view */}
           </View>
 
           {renderActions()}
@@ -229,13 +229,19 @@ const LogisticDealCard = forwardRef(({
           </View>
 
           {packages.map((pkg, pIdx) => {
-            console.log('PKG DATA:', JSON.stringify(pkg, null, 2));
             const key = pkg.package_number || String(pIdx);
             const isOpen = openPackageKey === key;
             const accent = getPackageAccent(pkg.status);
             const itemCount = (pkg.package_items || []).length;
             const stage = packageStages[key] || 'pending';
-            const stageCfg = LOCAL_STAGE_CONFIG[stage];
+            // FIX: LOCAL_STAGE_CONFIG[stage] was undefined whenever `stage`
+            // held anything outside pending/picked/delivered (e.g. before
+            // packageStages finished populating, or a stray server status
+            // value slipping through). That undefined then crashed on
+            // stageCfg.color below — "Cannot read property 'color' of
+            // undefined". Falling back to the 'pending' config keeps the
+            // pill safe to render no matter what `stage` is.
+            const stageCfg = LOCAL_STAGE_CONFIG[stage] || LOCAL_STAGE_CONFIG.pending;
             const isBusy = busyPackageKey === key;
 
             return (
@@ -261,7 +267,7 @@ const LogisticDealCard = forwardRef(({
                     </Text>
                   </View>
 
-                  {/* 🆕 Small stage pill on the collapsed package row */}
+                  {/* Small stage pill on the collapsed package row */}
                   <View style={[styles.stagePillSmall, { backgroundColor: stageCfg.color + '1A' }]}>
                     <Text style={[styles.stagePillSmallText, { color: stageCfg.color }]}>{stageCfg.label}</Text>
                   </View>
@@ -317,7 +323,7 @@ const LogisticDealCard = forwardRef(({
                       </View>
                     )}
 
-                    {/* 🆕 Inline stage actions — these NO LONGER call
+                    {/* Inline stage actions — these NO LONGER call
                         advancePackage directly. They notify the parent
                         (onMarkPicked/onMarkDropped), which opens the
                         scan+verify modal. The status only actually changes
@@ -396,7 +402,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center', marginRight: 10,
   },
   dealTitle: { fontSize: 15, fontWeight: '700', color: '#1a1a1a' },
-  // 🆕 Label above + lighter-weight dispatch number below it
+  // Label above + lighter-weight dispatch number below it
   dispatchLabel: { fontSize: 10.5, color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 },
   dispatchNumber: { fontSize: 15, fontWeight: '500', color: '#334155' },
 
@@ -443,7 +449,7 @@ const styles = StyleSheet.create({
   pkgMetaText: {
     fontSize: 11, color: '#94a3b8', marginLeft: 10, marginTop: 1, textTransform: 'capitalize',
   },
-  // 🆕 Small stage pill on the collapsed package row
+  // Small stage pill on the collapsed package row
   stagePillSmall: {
     paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, marginRight: 8,
   },
@@ -499,7 +505,7 @@ pkgAddressText: {
     fontSize: 12.5, color: '#334155', fontWeight: '500', flex: 1,
   },
 
-  // 🆕 Inline package action buttons
+  // Inline package action buttons
   pkgActionsRow: {
     flexDirection: 'row', gap: 8, marginTop: 10,
   },

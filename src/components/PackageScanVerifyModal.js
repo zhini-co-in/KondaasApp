@@ -39,7 +39,7 @@ const textMatchesPackage = (recognisedText, pkg) => {
   return hasProduct;
 };
 
-// 🆕 How often (ms) the OCR auto-capture loop takes a photo while the scan
+// How often (ms) the OCR auto-capture loop takes a photo while the scan
 // phase is active. QR/barcode scanning (via useCodeScanner) runs
 // continuously and independently — whichever resolves first wins.
 const AUTO_CAPTURE_INTERVAL_MS = 2000;
@@ -66,7 +66,7 @@ const AUTO_CAPTURE_INTERVAL_MS = 2000;
  *                  manual number entry).
  *  onClose()
  *
- * 🆕 SCAN PHASE BEHAVIOUR: both QR/barcode scanning AND OCR run
+ * SCAN PHASE BEHAVIOUR: both QR/barcode scanning AND OCR run
  * automatically and in parallel while phase === 'scan' — no button tap
  * needed. QR/barcode resolves instantly on a code hit. OCR runs on a
  * fixed interval (AUTO_CAPTURE_INTERVAL_MS), silently retrying every
@@ -88,11 +88,11 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
   const [manualPackageNumber, setManualPackageNumber] = useState('');
   const [manualError, setManualError] = useState('');
 
-  // 🆕 Auto-OCR loop bookkeeping
+  // Auto-OCR loop bookkeeping
   const autoCaptureIntervalRef = useRef(null);
   const capturingRef = useRef(false); // guards overlapping capture cycles
 
-  // 🆕 Per-item visual-verify checkboxes for the manual entry screen —
+  // Per-item visual-verify checkboxes for the manual entry screen —
   // { [itemIndex]: true }. The driver taps each product row to confirm
   // they physically checked it before Confirm is allowed. This is
   // separate from QR/OCR auto-verify (those still auto-check every item
@@ -154,7 +154,7 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
     if (lockRef.current) return;
     lockRef.current = true;
 
-    // 🆕 Stop the auto-OCR interval immediately — don't wait for the
+    // Stop the auto-OCR interval immediately — don't wait for the
     // cleanup effect to run on next render. This closes the race where an
     // in-flight captureAndReadLabel() call hits a camera that's already
     // been torn down after a QR/manual match resolved first (was showing
@@ -196,7 +196,7 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
     },
   });
 
-  // 🆕 OCR capture cycle — runs automatically on an interval while
+  // OCR capture cycle — runs automatically on an interval while
   // phase === 'scan' (see the effect below). Silently no-ops (lets the
   // next cycle try again) if OCR reads nothing useful or doesn't match yet.
   const captureAndReadLabel = useCallback(async () => {
@@ -206,7 +206,7 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
     try {
       const photo = await cameraRef.current.takePhoto({ flash: 'off' });
 
-      // 🆕 A QR/manual match may have resolved (and torn down the camera)
+      // A QR/manual match may have resolved (and torn down the camera)
       // while takePhoto() was in flight — bail out before touching OCR.
       if (lockRef.current) return;
 
@@ -227,7 +227,7 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
         }
       }
     } catch (e) {
-      // 🆕 "Camera is closed." is an expected race — a QR/manual match
+      // "Camera is closed." is an expected race — a QR/manual match
       // already resolved and camera teardown started mid-capture. Skip
       // logging it as an error; log anything else as before.
       if (e.message !== 'Camera is closed.' && !lockRef.current) {
@@ -240,7 +240,7 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, pkg]);
 
-  // 🆕 Drives the auto-OCR loop: while the modal is visible and we're on
+  // Drives the auto-OCR loop: while the modal is visible and we're on
   // the scan phase, fire captureAndReadLabel() on a fixed interval.
   // Cleared whenever visibility/phase changes or the component unmounts.
   useEffect(() => {
@@ -291,7 +291,7 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
     setPhase('manualNumber');
   };
 
-  // 🆕 Package number + every product row must be checked (visually
+  // Package number + every product row must be checked (visually
   // verified by the driver) before this can submit.
   const submitManualNumber = () => {
     if (!manualPackageNumber.trim()) {
@@ -351,14 +351,6 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
                   </View>
                 )}
 
-                <View style={styles.scanFrameContainer}>
-                  <View style={styles.scanFrame}>
-                    <View style={[styles.corner, styles.cornerTL]} />
-                    <View style={[styles.corner, styles.cornerTR]} />
-                    <View style={[styles.corner, styles.cornerBL]} />
-                    <View style={[styles.corner, styles.cornerBR]} />
-                  </View>
-                </View>
                 <Text style={styles.hint}>
                   Point at the QR / barcode or label — verifies automatically
                 </Text>
@@ -408,7 +400,7 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
                     autoCapitalize="characters"
                   />
 
-                  {/* 🆕 Product checklist — driver taps each row after
+                  {/* Product checklist — driver taps each row after
                       physically checking it against the package. Submit
                       stays disabled until every row is checked. */}
                   {items.length > 0 && (
@@ -496,23 +488,35 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
                         : `Expected ${pkg.package_number}. Scanned text didn't match.`}
                   </Text>
 
+                  {/* FIX: this block used to be a plain View wrapping the
+                      whole item list — with 50+ items that pushed the
+                      Rescan/Continue buttons off-screen with no way to
+                      scroll down to them. Now the list itself scrolls
+                      inside a fixed-height box, and the buttons stay
+                      pinned below it, always reachable. */}
                   {items.length > 0 && (
                     <View style={styles.resultItemsBox}>
                       <Text style={styles.resultItemsTitle}>
                         Products Verified ({result.itemsVerified?.length || 0}/{items.length})
                       </Text>
-                      {result.itemsVerified?.map((it, i) => (
-                        <View key={i} style={styles.resultItemRow}>
-                          <Ionicons
-                            name={it.matched ? 'checkmark-circle' : 'close-circle'}
-                            size={14}
-                            color={it.matched ? '#22c55e' : '#ef4444'}
-                          />
-                          <Text style={styles.resultItemText} numberOfLines={1}>
-                            {it.product_name}{it.expectedQty != null ? ` — Qty: ${it.expectedQty}` : ''}
-                          </Text>
-                        </View>
-                      ))}
+                      <ScrollView
+                        style={styles.resultItemsScroll}
+                        nestedScrollEnabled
+                        showsVerticalScrollIndicator
+                      >
+                        {result.itemsVerified?.map((it, i) => (
+                          <View key={i} style={styles.resultItemRow}>
+                            <Ionicons
+                              name={it.matched ? 'checkmark-circle' : 'close-circle'}
+                              size={14}
+                              color={it.matched ? '#22c55e' : '#ef4444'}
+                            />
+                            <Text style={styles.resultItemText} numberOfLines={1}>
+                              {it.product_name}{it.expectedQty != null ? ` — Qty: ${it.expectedQty}` : ''}
+                            </Text>
+                          </View>
+                        ))}
+                      </ScrollView>
                     </View>
                   )}
 
@@ -554,16 +558,6 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#fff', fontWeight: '700', fontSize: 16 },
   headerSub: { color: '#94a3b8', fontSize: 12, marginTop: 2 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scanFrameContainer: {
-    position: 'absolute', top: '30%', left: '50%',
-    transform: [{ translateX: -90 }],
-  },
-  scanFrame: { width: 180, height: 180 },
-  corner: { position: 'absolute', width: 30, height: 30, borderColor: '#fff', borderWidth: 4 },
-  cornerTL: { top: 0, left: 0, borderRightWidth: 0, borderBottomWidth: 0 },
-  cornerTR: { top: 0, right: 0, borderLeftWidth: 0, borderBottomWidth: 0 },
-  cornerBL: { bottom: 0, left: 0, borderRightWidth: 0, borderTopWidth: 0 },
-  cornerBR: { bottom: 0, right: 0, borderLeftWidth: 0, borderTopWidth: 0 },
   hint: {
     position: 'absolute', bottom: 130, alignSelf: 'center',
     color: '#fff', fontSize: 12, backgroundColor: 'rgba(0,0,0,0.6)',
@@ -595,7 +589,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#111827', borderRadius: 10, borderWidth: 1, borderColor: '#1f2937',
     paddingHorizontal: 14, paddingVertical: 12, color: '#fff', fontSize: 14, fontWeight: '600',
   },
-  // 🆕 Manual-entry product checklist rows
+  // Manual-entry product checklist rows
   itemCheckRow: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#111827', borderRadius: 10, borderWidth: 1, borderColor: '#1f2937',
@@ -626,14 +620,19 @@ const styles = StyleSheet.create({
   resultCard: {
     backgroundColor: '#111827', borderRadius: 16, borderWidth: 2,
     padding: 24, alignItems: 'center', width: '100%',
+    maxHeight: '90%', // FIX: cap card height so it never overflows the screen
   },
   resultTitle: { fontSize: 17, fontWeight: '800', marginTop: 10 },
   resultSub: { color: '#cbd5e1', fontSize: 12, textAlign: 'center', marginTop: 6 },
   resultItemsBox: {
     width: '100%', marginTop: 16, backgroundColor: '#0b1220', borderRadius: 10,
     padding: 12, borderWidth: 1, borderColor: '#1f2937',
+    maxHeight: 260, // FIX: bound the whole box so it can't push buttons offscreen
   },
   resultItemsTitle: { color: '#94a3b8', fontSize: 11, fontWeight: '700', marginBottom: 8, textTransform: 'uppercase' },
+  resultItemsScroll: {
+    maxHeight: 210, // FIX: only the list scrolls; title stays put above it
+  },
   resultItemRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 5 },
   resultItemText: { color: '#e2e8f0', fontSize: 12, flex: 1 },
   resultBtnRow: { flexDirection: 'row', gap: 10, marginTop: 20 },

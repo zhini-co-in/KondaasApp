@@ -43,7 +43,12 @@ import LogisticDealCard from '../components/LogisticDealCard';
 import LogisticCardTrackingModal from '../components/LogisticCardTrackingModal';
 import PackageScanVerifyModal from '../components/PackageScanVerifyModal';
 import { saveScannedProduct, confirmDeliveryToWarehouse, getNewAssignedCards, updateLogisticsStatus } from '../service/logisticProductService';
-import { mergeCardsWithLocalProgress, setLocalDispatchStatus, acceptDealLocalFirst } from '../service/dispatchProgressService';
+import {
+  mergeCardsWithLocalProgress,
+  setLocalDispatchStatus,
+  acceptDealLocalFirst,
+  updateDispatchStatusRemote, // FIX: needed to actually push 'inprogress' to the backend
+} from '../service/dispatchProgressService';
 
 const LogisticScreen = ({ navigation }) => {
   const isMounted = useRef(true);
@@ -69,7 +74,7 @@ const LogisticScreen = ({ navigation }) => {
   const [cardScanModalVisible, setCardScanModalVisible] = useState(false);
   const [scanningCardIndex, setScanningCardIndex] = useState(null);
 
-  // 🆕 Hard boolean lock (was timestamp-based). Set synchronously the
+  // Hard boolean lock (was timestamp-based). Set synchronously the
   // instant a code is detected, BEFORE any async work starts, so every
   // extra camera frame that fires while we're still processing the first
   // one is dropped instantly. This is what was letting the same QR code
@@ -81,7 +86,7 @@ const LogisticScreen = ({ navigation }) => {
   const [trackingModalVisible, setTrackingModalVisible] = useState(false);
   const [trackingModalCard, setTrackingModalCard] = useState(null);
 
-  // 🆕 Picked/Delivered no longer flip a card's status directly. Both go
+  // Picked/Delivered no longer flip a card's status directly. Both go
   // through this scan+verify gate first — driver has to scan/OCR/manual-enter
   // the package and confirm every item's quantity before the status actually
   // changes. verifyTarget remembers WHICH card+index+action (pickup/delivery)
@@ -89,7 +94,7 @@ const LogisticScreen = ({ navigation }) => {
   const [verifyModalVisible, setVerifyModalVisible] = useState(false);
   const [verifyTarget, setVerifyTarget] = useState(null); // { card, index, action: 'pickup' | 'delivery', pkg?, key? }
 
-  // 🆕 Reject-reason popup — mirrors the Deal Details modal's design
+  // Reject-reason popup — mirrors the Deal Details modal's design
   // (dark overlay + white rounded card). rejectTarget remembers WHICH
   // card+index triggered it so confirmRejectCard knows what to remove.
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
@@ -97,7 +102,7 @@ const LogisticScreen = ({ navigation }) => {
   const [rejectReason, setRejectReason] = useState('');
   const [rejectError, setRejectError] = useState('');
 
-  // 🆕 Handle onto each rendered LogisticDealCard, keyed by deal_id, so the
+  // Handle onto each rendered LogisticDealCard, keyed by deal_id, so the
   // package-level advancePackage() can be triggered only from
   // handleVerifyConfirmed below — never directly from the card's buttons.
   const cardRefs = useRef({});
@@ -212,7 +217,7 @@ const LogisticScreen = ({ navigation }) => {
     }
   };
 
-  // 🆕 Hardened per-card scanner. Fires once per scan session, closes the
+  // Hardened per-card scanner. Fires once per scan session, closes the
   // camera modal immediately (before async work), and only releases its
   // lock once the whole save/update cycle has finished.
   const cardCodeScanner = useCodeScanner({
@@ -275,7 +280,16 @@ const LogisticScreen = ({ navigation }) => {
 
           await saveScannedProduct(value, locationRef.current);
 
-                              await setLocalDispatchStatus(card.deal_id, 'inprogress');
+          await setLocalDispatchStatus(card.deal_id, 'inprogress');
+
+          // FIX: setLocalDispatchStatus only ever wrote to AsyncStorage —
+          // it never told the backend, which is why dispatch_status stayed
+          // null on the server after scanning. Push it through the same
+          // remote path the (already-working) delivered flow uses.
+          updateDispatchStatusRemote(card.deal_id, 'inprogress').catch((e) => {
+            console.warn('⚠️ inprogress dispatch_status push failed:', e?.message);
+          });
+
           setNewAssignedCards((prev) =>
             prev.map((item, i) => (i === index ? { ...item, status: 'inprogress' } : item))
           );
@@ -299,10 +313,11 @@ const LogisticScreen = ({ navigation }) => {
     setShowDealModal(true);
   };
 
-  // 🆕 Accept — local-first. Flips AsyncStorage + the UI to "accepted"
+  // Accept — local-first. Flips AsyncStorage + the UI to "accepted"
   // instantly; acceptDealLocalFirst() fires the backend call in the
   // background and never blocks/reverts this on failure (see
-  // dispatchProgressService.js for details).
+  // dispatchProgressService.js for details — it now also pushes the real
+  // dispatch_status via updateDispatchStatusRemote).
   const acceptAssignedCard = async (card, index) => {
     const { localStatus } = await acceptDealLocalFirst(card.deal_id);
     setNewAssignedCards((prev) =>
@@ -310,7 +325,7 @@ const LogisticScreen = ({ navigation }) => {
     );
   };
 
-  // 🆕 Reject — opens the reason popup instead of removing the card
+  // Reject — opens the reason popup instead of removing the card
   // immediately. The actual removal + API/local status update only
   // happens once the driver types a reason and taps "Submit" in
   // confirmRejectCard below.
@@ -328,7 +343,7 @@ const LogisticScreen = ({ navigation }) => {
     setRejectError('');
   };
 
-  // 🆕 Only place a card is actually removed + marked rejected — fires
+  // Only place a card is actually removed + marked rejected — fires
   // once the driver has typed a reason and confirmed.
   const confirmRejectCard = async () => {
     if (!rejectReason.trim()) {
@@ -342,6 +357,9 @@ const LogisticScreen = ({ navigation }) => {
       await setLocalDispatchStatus(target.card.deal_id, 'rejected', {
         reason: rejectReason.trim(),
       });
+      updateDispatchStatusRemote(target.card.deal_id, 'rejected').catch((e) => {
+        console.warn('⚠️ rejected dispatch_status push failed:', e?.message);
+      });
     } catch (e) {
       console.error('[confirmRejectCard] failed:', e);
     }
@@ -352,7 +370,7 @@ const LogisticScreen = ({ navigation }) => {
   };
 
     const openScannerForCard = (card, index) => {
-    cardScanLock.current = false; // 🆕 fresh lock for this new scan session
+    cardScanLock.current = false; // fresh lock for this new scan session
     setScanningCardIndex(index);
     setCardScanModalVisible(true);
   };
@@ -362,9 +380,12 @@ const LogisticScreen = ({ navigation }) => {
     setScanningCardIndex(null);
   };
 
-  // 🆕 "Picked" button on an in-progress card → status 'picked'
+  // "Picked" button on an in-progress card → status 'picked'
   const markProductPicked = async (card, index) => {
     await setLocalDispatchStatus(card.deal_id, 'picked');
+    updateDispatchStatusRemote(card.deal_id, 'picked').catch((e) => {
+      console.warn('⚠️ picked dispatch_status push failed:', e?.message);
+    });
     setNewAssignedCards((prev) =>
       prev.map((item, i) =>
         i === index ? { ...item, status: 'picked', pickedAt: new Date().toISOString() } : item
@@ -374,6 +395,9 @@ const LogisticScreen = ({ navigation }) => {
 
   const markAsDropped = async (card, index) => {
     await setLocalDispatchStatus(card.deal_id, 'completed');
+    updateDispatchStatusRemote(card.deal_id, 'delivered').catch((e) => {
+      console.warn('⚠️ delivered dispatch_status push failed:', e?.message);
+    });
     setNewAssignedCards((prev) =>
       prev.map((item, i) =>
         i === index ? { ...item, status: 'completed', deliveredAt: new Date().toISOString() } : item
@@ -382,7 +406,7 @@ const LogisticScreen = ({ navigation }) => {
   };
 
   // Per-card tracking sheet (used for "View full details" / completed cards)
-  // 🆕 Opens the scan+verify modal instead of changing status directly.
+  // Opens the scan+verify modal instead of changing status directly.
   // `action` is 'pickup' (→ Picked) or 'delivery' (→ Dropped/Delivered).
   // Pass `pkg`/`key` for a PACKAGE-level action (from LogisticDealCard's
   // inline Mark Picked/Delivered buttons) — omit them for a deal-level action.
@@ -426,7 +450,7 @@ const LogisticScreen = ({ navigation }) => {
   // If this is a package-level target, the real package object already has
   // that exact shape — use it directly.
   //
-  // 🆕 Otherwise (deal-level target — e.g. Confirm Pickup/Mark Delivered from
+  // Otherwise (deal-level target — e.g. Confirm Pickup/Mark Delivered from
   // LogisticCardTrackingModal, no specific package chosen) build the items
   // list from card.packages[].package_items — that's where product data
   // actually lives on current records. card.products_info is a legacy
@@ -506,7 +530,7 @@ const LogisticScreen = ({ navigation }) => {
     completed: newAssignedCards.filter((c) => getCardColumn(c.status) === 'completed').length,
   };
 
-  // 🆕 Cards to show on the OFF (offline) screen — "New" status only
+  // Cards to show on the OFF (offline) screen — "New" status only
   const newOnlyCards = newAssignedCards.filter((card) => getCardColumn(card.status) === 'new');
 
   if (!isAvailable) {
@@ -553,7 +577,7 @@ const LogisticScreen = ({ navigation }) => {
             </Text>
           </View>
 
-          {/* 🆕 New deals shown even while offline, inside a frosted panel so
+          {/* New deals shown even while offline, inside a frosted panel so
               they read clearly on top of the red gradient background. */}
           {newOnlyCards.length > 0 && (
             <View style={styles.offCardsPanel}>
@@ -685,7 +709,7 @@ const LogisticScreen = ({ navigation }) => {
                   <Text>Assigned: {selectedDeal.assignedAt ? new Date(selectedDeal.assignedAt).toLocaleString() : '—'}</Text>
                   <Text>Status: {selectedDeal.status || 'pending'}</Text>
 
-                  {/* 🆕 Full address / delivery details block */}
+                  {/* Full address / delivery details block */}
                   <View style={styles.modalAddressBlock}>
                     <View style={styles.modalAddrHeaderRow}>
                       <Ionicons name="location" size={14} color="#3b82f6" />
@@ -762,7 +786,7 @@ const LogisticScreen = ({ navigation }) => {
         </View>
       </Modal>
 
-      {/* 🆕 REJECT REASON MODAL — same visual language as the Deal Details
+      {/* REJECT REASON MODAL — same visual language as the Deal Details
           modal above (dark overlay + white rounded card, icon header).
           Pressing "Submit" is the only path that actually removes the
           card + marks it rejected (see confirmRejectCard). */}
@@ -831,7 +855,7 @@ const LogisticScreen = ({ navigation }) => {
         onMarkDelivered={handleMarkDeliveredFromModal}
       />
 
-      {/* 🆕 SCAN + VERIFY GATE — the only path that can flip a card to
+      {/* SCAN + VERIFY GATE — the only path that can flip a card to
           Picked/Delivered. Status changes only once the driver explicitly
           confirms here (see handleVerifyConfirmed). */}
       <PackageScanVerifyModal
@@ -979,7 +1003,7 @@ const styles = StyleSheet.create({
     padding: 20,
     maxHeight: '80%',
   },
-  // 🆕 Delivery-details block inside the full deal modal
+  // Delivery-details block inside the full deal modal
   modalAddressBlock: {
     marginTop: 16,
     backgroundColor: '#F8FAFC',
@@ -1007,7 +1031,7 @@ const styles = StyleSheet.create({
     fontSize: 13, color: '#1e293b', fontWeight: '500', flex: 1, textAlign: 'right',
   },
 
-  // 🆕 Reject-reason popup — same modalOverlay/modalContent shell as the
+  // Reject-reason popup — same modalOverlay/modalContent shell as the
   // Deal Details modal, plus its own header/input/button styling.
   rejectHeaderRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18,
@@ -1058,7 +1082,7 @@ const styles = StyleSheet.create({
   welcome: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
   message: { marginTop: 10, color: '#ffffffcc', textAlign: 'center', paddingHorizontal: 10 },
 
-  // 🆕 Panel that hosts the "new" deal cards on the toggle-off screen
+  // Panel that hosts the "new" deal cards on the toggle-off screen
   offCardsPanel: {
     marginTop: 24,
     marginHorizontal: 16,
