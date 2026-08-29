@@ -102,7 +102,7 @@ if (isOffline) return;
     }
 
     // ✅ FIX: verifyPhoneNumber → signInWithPhoneNumber (forceResend: true)
-    const confirmation = await auth().signInWithPhoneNumber(fullNumber, true);
+    const confirmation = await auth().signInWithPhoneNumber(fullNumber);
 
     setLoading(false);
     navigation.navigate(SCREEN_NAMES.OTP, {

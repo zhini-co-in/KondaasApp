@@ -1,8 +1,16 @@
 import React, { useState, useRef, useEffect } from "react";
 import {
-  View, Text, TextInput, TouchableOpacity, Image,
-  StyleSheet, ScrollView, Alert, StatusBar,
-  Platform, PermissionsAndroid,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Image,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  StatusBar,
+  Platform,
+  PermissionsAndroid,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import DeviceInfo from "react-native-device-info";
@@ -12,19 +20,17 @@ import LinearGradient from "react-native-linear-gradient";
 import NetInfo from "@react-native-community/netinfo";
 import Loader from "../components/Loader";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { storeData, getStorageData, USER_DATA } from "../service/localStorage";
+import { getStorageData, USER_DATA } from "../service/localStorage";
 import { SCREEN_NAMES } from "../constants/screenNames";
 
 const BASE_URL = "https://kondaas.atom8itsolutions.com";
-//const BASE_URL = "https://board.trisentrix.com";
-//const BASE_URL = "https://crucial-purifier-canopener.ngrok-free.dev";
 
 // ─────────────────────────────────────────────────────────────
 const safeApiCall = async (url, body, authToken = null, deviceId = null) => {
   try {
     const headers = { "Content-Type": "application/json" };
     if (authToken) headers["x-auth-token"] = authToken;
-    if (deviceId)  headers["x-device-id"]  = deviceId;
+    if (deviceId) headers["x-device-id"] = deviceId;
 
     const res = await fetch(url, {
       method: "POST",
@@ -52,56 +58,73 @@ const safeApiCall = async (url, body, authToken = null, deviceId = null) => {
 
 // ─────────────────────────────────────────────────────────────
 const generateAuthToken = () => {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   return Array.from({ length: 64 }, () =>
     chars[Math.floor(Math.random() * chars.length)]
   ).join("");
 };
 
 const OtpScreen = ({ navigation, route }) => {
-  const [loading, setLoading]           = useState(false);
-  const [otp, setOtp]                   = useState(["", "", "", "", "", ""]);
+  const [loading, setLoading] = useState(false);
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [errorMessage, setErrorMessage] = useState("");
-  const [timer, setTimer]               = useState(30);
-  const [canResend, setCanResend]       = useState(false);
-  const [confirmation, setConfirmation] = useState(route.params.confirmation);
+  const [timer, setTimer] = useState(30);
+  const [canResend, setCanResend] = useState(false);
+  const [confirmation, setConfirmation] = useState(
+    route.params?.confirmation || null
+  );
 
   const inputs = useRef([]);
   const { phoneNumber } = route.params;
 
+  // Resend countdown timer
   useEffect(() => {
-    if (timer <= 0) { setCanResend(true); return; }
+    if (timer <= 0) {
+      setCanResend(true);
+      return;
+    }
     const id = setInterval(() => setTimer((t) => t - 1), 1000);
     return () => clearInterval(id);
   }, [timer]);
 
-const handleChange = (text, index) => {
-  // ✅ Paste detect — 1-ஐ விட அதிகமான characters வந்தால்
-  if (text.length > 1) {
-    const digits = text.replace(/\D/g, "").slice(0, 6); // numbers மட்டும் எடு
-    if (digits.length > 1) {
-      // Paste — எல்லா boxes-லயும் fill பண்ணு
-      const newOtp = ["", "", "", "", "", ""];
-      digits.split("").forEach((d, i) => {
-        if (i < 6) newOtp[i] = d;
-      });
-      setOtp(newOtp);
-      setErrorMessage("");
-      // Last filled box-க்கு focus போகட்டும்
-      const lastIndex = Math.min(digits.length - 1, 5);
-      inputs.current[lastIndex]?.focus();
-      return;
-    }
-    // Single char — normal flow
-    text = text.slice(-1);
-  }
+  // Firebase session expiry warning (≈ 4 minutes)
+  useEffect(() => {
+    const expireTimer = setTimeout(() => {
+      setErrorMessage("OTP session may have expired. Please resend if needed.");
+      setCanResend(true);
+    }, 4 * 60 * 1000);
 
-  const newOtp = [...otp];
-  newOtp[index] = text;
-  setOtp(newOtp);
-  setErrorMessage("");
-  if (text && index < otp.length - 1) inputs.current[index + 1]?.focus();
-};
+    return () => clearTimeout(expireTimer);
+  }, []);
+
+  // ─── OTP Input Handlers ────────────────────────────────────
+  const handleChange = (text, index) => {
+    // Paste support
+    if (text.length > 1) {
+      const digits = text.replace(/\D/g, "").slice(0, 6);
+      if (digits.length > 1) {
+        const newOtp = ["", "", "", "", "", ""];
+        digits.split("").forEach((d, i) => {
+          if (i < 6) newOtp[i] = d;
+        });
+        setOtp(newOtp);
+        setErrorMessage("");
+        const lastIndex = Math.min(digits.length - 1, 5);
+        inputs.current[lastIndex]?.focus();
+        return;
+      }
+      text = text.slice(-1);
+    }
+
+    const newOtp = [...otp];
+    newOtp[index] = text;
+    setOtp(newOtp);
+    setErrorMessage("");
+    if (text && index < otp.length - 1) {
+      inputs.current[index + 1]?.focus();
+    }
+  };
 
   const handleBackspace = (key, index) => {
     if (key === "Backspace" && otp[index] === "" && index > 0) {
@@ -112,6 +135,7 @@ const handleChange = (text, index) => {
     }
   };
 
+  // ─── FCM Token ─────────────────────────────────────────────
   const getFcmToken = async () => {
     try {
       if (Platform.OS === "ios") {
@@ -122,7 +146,7 @@ const handleChange = (text, index) => {
         while (!apnsToken && retries < 5) {
           apnsToken = await messaging().getAPNSToken();
           if (!apnsToken) {
-            await new Promise(res => setTimeout(res, 1000));
+            await new Promise((res) => setTimeout(res, 1000));
             retries++;
           }
         }
@@ -131,7 +155,7 @@ const handleChange = (text, index) => {
           console.log("⚠️ APNs token not available after retries");
           return null;
         }
-        console.log("✅ APNs token ready:", apnsToken);
+        console.log("✅ APNs token ready");
       }
 
       if (Platform.OS === "android" && Platform.Version >= 33) {
@@ -153,54 +177,48 @@ const handleChange = (text, index) => {
       const fcmToken = await messaging().getToken();
       console.log("✅ FCM Token:", fcmToken ? "RECEIVED" : "MISSING");
       return fcmToken;
-
     } catch (e) {
       console.log("❌ FCM error:", e.message);
       return null;
     }
   };
 
-  // ✅ FIX: userCredential param — confirm() already signed in,
-  //         signInWithCredential() call நீக்கப்பட்டது
+  // ─── Auto Login after OTP success ──────────────────────────
   const handleAutoLogin = async (userCredential, phone) => {
     try {
       setLoading(true);
-      // ❌ REMOVED: await auth().signInWithCredential(credential);
-      // confirm() call already Firebase-ல் sign in பண்ணிவிடும்
 
       const cleanPhone = phone?.replace("+91", "").trim();
 
-      const fcmToken  = await getFcmToken();
-      const deviceId  = await DeviceInfo.getUniqueId();
-      const osName    = DeviceInfo.getSystemName();
+      const fcmToken = await getFcmToken();
+      const deviceId = await DeviceInfo.getUniqueId();
+      const osName = DeviceInfo.getSystemName();
       const osVersion = DeviceInfo.getSystemVersion();
-      const now       = new Date().toISOString();
+      const now = new Date().toISOString();
 
-      // ─── Step 1: AsyncStorage-ல் stored token read ───
+      // Step 1: Read stored token
       let storedToken = null;
       try {
         const raw = await getStorageData(USER_DATA);
-        console.log("📦 Raw:", raw ? "HAS DATA ✅" : "EMPTY ❌");
         if (raw) {
           const parsed = JSON.parse(raw);
-          const device = (parsed?.PlatformInfo?.devices || [])
-            .find(d => d.deviceId === deviceId);
+          const device = (parsed?.PlatformInfo?.devices || []).find(
+            (d) => d.deviceId === deviceId
+          );
           storedToken = device?.authToken || parsed?.authToken || null;
-          console.log("🔑 Token:", storedToken ? "FOUND ✅" : "MISSING ❌");
         }
       } catch (e) {
         console.log("⚠️ Read error:", e.message);
       }
 
-      // ─── Step 2: Token decide ───
+      // Step 2: Decide token
       const workingToken = storedToken || generateAuthToken();
-      const isReturning  = !!storedToken;
+      const isReturning = !!storedToken;
 
       console.log(isReturning ? "🔄 Returning user" : "🆕 New user");
 
-      // ─── Step 3: GET user (storedToken இருந்தால் மட்டும்) ───
+      // Step 3: Get existing user (only if returning)
       let existingData = {};
-
       if (isReturning) {
         const getResult = await safeApiCall(
           `${BASE_URL}/solarman/get`,
@@ -218,12 +236,12 @@ const handleChange = (text, index) => {
       }
 
       const userInfo = existingData?.UserInfo || existingData || {};
-      const role     = userInfo?.role     || "user";
-      const email    = userInfo?.email    || null;
+      const role = userInfo?.role || "user";
+      const email = userInfo?.email || null;
       const password = userInfo?.password || null;
       const provider = userInfo?.provider || null;
 
-      // ─── Step 4: accessToken ───
+      // Step 4: accessToken
       let accessToken = null;
       if (email && password) {
         const tokenResult = await safeApiCall(
@@ -235,7 +253,7 @@ const handleChange = (text, index) => {
         accessToken = tokenResult.data?.access_token || null;
       }
 
-      // ─── Step 5: Stations ───
+      // Step 5: Stations
       let devicelist = existingData.devicelist || [];
       if (accessToken) {
         const stationsResult = await safeApiCall(
@@ -244,40 +262,43 @@ const handleChange = (text, index) => {
           workingToken,
           deviceId
         );
-        const rawList = stationsResult.data?.stations || stationsResult.data?.stationList || [];
+        const rawList =
+          stationsResult.data?.stations ||
+          stationsResult.data?.stationList ||
+          [];
         if (rawList.length > 0) {
           devicelist = rawList.map((station) => ({
-            id:   station.id,
+            id: station.id,
             name: station.name || "",
             installationAmount:
-              (existingData.devicelist || []).find(d => d.id === station.id)
+              (existingData.devicelist || []).find((d) => d.id === station.id)
                 ?.installationAmount ?? "",
           }));
         }
       }
 
-      // ─── Step 6: Final payload build ───
+      // Step 6: Final payload
       const currentDevice = {
         deviceId,
-        os:             osName,
-        version:        osVersion,
-        authToken:      workingToken,
-        fcmToken:       fcmToken || null,
-        lastUsedAt:     now,
+        os: osName,
+        version: osVersion,
+        authToken: workingToken,
+        fcmToken: fcmToken || null,
+        lastUsedAt: now,
         isLastLoggedIn: true,
       };
 
       const existingDevices = existingData?.PlatformInfo?.devices || [];
       const mergedDevices = [
         ...existingDevices
-          .filter(d => d.deviceId !== deviceId)
-          .map(d => ({ ...d, isLastLoggedIn: false })),
+          .filter((d) => d.deviceId !== deviceId)
+          .map((d) => ({ ...d, isLastLoggedIn: false })),
         currentDevice,
       ];
 
       const finalPayload = {
         ...existingData,
-        AppInfo:      { ...(existingData.AppInfo || {}), lastLogin: now },
+        AppInfo: { ...(existingData.AppInfo || {}), lastLogin: now },
         PlatformInfo: { devices: mergedDevices },
         UserInfo: {
           ...userInfo,
@@ -288,7 +309,7 @@ const handleChange = (text, index) => {
         devicelist,
       };
 
-      // ─── Step 7: Save to backend ───
+      // Step 7: Save to backend
       const saveResult = await safeApiCall(
         `${BASE_URL}/solarman/user`,
         finalPayload,
@@ -300,7 +321,7 @@ const handleChange = (text, index) => {
         console.log("⚠️ Backend save failed:", JSON.stringify(saveResult.data));
       }
 
-      // ─── Step 7b: email இல்லன்னா — save பண்ணி DB-இல் இருந்து fetch ───
+      // Step 7b: If email missing → fetch fresh from DB
       if (!email) {
         console.log("📧 Email missing — fetching from DB after save...");
         const getUserResult = await safeApiCall(
@@ -310,85 +331,123 @@ const handleChange = (text, index) => {
           deviceId
         );
 
-        if (getUserResult.ok && getUserResult.data?.success && getUserResult.data?.data) {
-          const freshData     = getUserResult.data.data;
-          const freshEmail    = freshData?.UserInfo?.email    || freshData?.email    || null;
-          const freshPassword = freshData?.UserInfo?.password || freshData?.password || null;
-          const freshRole     = freshData?.UserInfo?.role     || freshData?.role     || role;
-          const freshProvider = freshData?.UserInfo?.provider || freshData?.provider || provider; 
+        if (
+          getUserResult.ok &&
+          getUserResult.data?.success &&
+          getUserResult.data?.data
+        ) {
+          const freshData = getUserResult.data.data;
+          const freshEmail =
+            freshData?.UserInfo?.email || freshData?.email || null;
+          const freshPassword =
+            freshData?.UserInfo?.password || freshData?.password || null;
+          const freshRole =
+            freshData?.UserInfo?.role || freshData?.role || role;
+          const freshProvider =
+            freshData?.UserInfo?.provider || freshData?.provider || provider;
 
-          console.log("✅ Fresh email from DB:", freshEmail ? "FOUND" : "MISSING");
-
-          // ✅ FIX: Always update with fresh data, even if email is empty!
           const updatedPayload = {
             ...finalPayload,
             UserInfo: {
               ...finalPayload.UserInfo,
-              email:    freshEmail || email,
+              email: freshEmail || email,
               password: freshPassword || password,
-              role:     freshRole,
-              provider: freshProvider,  // ← USE freshRole!
+              role: freshRole,
+              provider: freshProvider,
             },
             accessToken,
             authToken: workingToken,
           };
 
-          await AsyncStorage.setItem(USER_DATA, JSON.stringify(updatedPayload));
-          console.log("💾 Updated storage with fresh data from DB");
+          await AsyncStorage.setItem(
+            USER_DATA,
+            JSON.stringify(updatedPayload)
+          );
 
-          // ✅ Navigate with freshRole (not old role!)
-if (freshRole === "admin") {
-  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.ADMIN_SCREEN }] });
-} else if (freshRole === "logistic") {
-  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.LOGISTIC_SCREEN }] });
-} else if (freshRole === "surveyor") {
-  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }] });
-} else if (freshRole === "installer") {
-  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.INSTALLER_SCREEN }] });
-} else if (freshEmail?.trim()) {
-  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.MAIN }] });
-} else {
-  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }] });
-}
+          // Navigate with fresh role
+          if (freshRole === "admin") {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: SCREEN_NAMES.ADMIN_SCREEN }],
+            });
+          } else if (freshRole === "logistic") {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: SCREEN_NAMES.LOGISTIC_SCREEN }],
+            });
+          } else if (freshRole === "surveyor") {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }],
+            });
+          } else if (freshRole === "installer") {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: SCREEN_NAMES.INSTALLER_SCREEN }],
+            });
+          } else if (freshEmail?.trim()) {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: SCREEN_NAMES.MAIN }],
+            });
+          } else {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }],
+            });
+          }
           return;
         }
       }
 
-      // ─── Step 8: AsyncStorage save ───
-      await AsyncStorage.setItem(USER_DATA, JSON.stringify({
-        ...finalPayload,
-        UserInfo: {
-          ...finalPayload.UserInfo,
-          role,
-          provider,
-        },
-        accessToken,
-        authToken: workingToken,
-      }));
+      // Step 8: Save to AsyncStorage
+      await AsyncStorage.setItem(
+        USER_DATA,
+        JSON.stringify({
+          ...finalPayload,
+          UserInfo: {
+            ...finalPayload.UserInfo,
+            role,
+            provider,
+          },
+          accessToken,
+          authToken: workingToken,
+        })
+      );
       console.log("💾 Write verify: SUCCESS ✅");
 
-      // ─── Step 9: Navigate ───
-      // புதுசு
-// ─── Step 9: Navigate ───
-      // ✅ FIXED: Role-based check first, regardless of email/password
-// ─── Step 9: Navigate ───
-      // ✅ FIXED: Role-based check first, regardless of email/password
-if (role === "admin") {
-  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.ADMIN_SCREEN }] });
-} else if (role === "logistic") {
-  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.LOGISTIC_SCREEN }] });
-} else if (role === "surveyor") {
-  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }] });
-} else if (role === "installer") {
-  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.INSTALLER_SCREEN }] });
-} else if (email?.trim()) {
-  // Regular user role with email
-  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.MAIN }] });
-} else {
-  // Regular user role without email → PRODUCTS_HOME only
-  navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }] });
-}
-
+      // Step 9: Navigate
+      if (role === "admin") {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: SCREEN_NAMES.ADMIN_SCREEN }],
+        });
+      } else if (role === "logistic") {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: SCREEN_NAMES.LOGISTIC_SCREEN }],
+        });
+      } else if (role === "surveyor") {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }],
+        });
+      } else if (role === "installer") {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: SCREEN_NAMES.INSTALLER_SCREEN }],
+        });
+      } else if (email?.trim()) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: SCREEN_NAMES.MAIN }],
+        });
+      } else {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }],
+        });
+      }
     } catch (err) {
       console.log("❌ Login error:", err.message);
       Alert.alert("Login Failed", err.message || "Something went wrong");
@@ -397,10 +456,18 @@ if (role === "admin") {
     }
   };
 
-  // ✅ FIX: confirm() ஒரே ஒரு முறை — credential தனியா உருவாக்கவில்லை
+  // ─── Confirm OTP ───────────────────────────────────────────
   const handleConfirm = async () => {
+    if (!confirmation) {
+      setErrorMessage("Session expired. Please resend OTP.");
+      setCanResend(true);
+      setTimer(0);
+      return;
+    }
+
     const net = await NetInfo.fetch();
-    const isOffline = net.isConnected === false || net.isInternetReachable === false;
+    const isOffline =
+      net.isConnected === false || net.isInternetReachable === false;
     if (isOffline) {
       Alert.alert("No Internet", "No network connection available");
       return;
@@ -416,17 +483,22 @@ if (role === "admin") {
       setLoading(true);
       setErrorMessage("");
 
-      // ✅ confirm() மட்டும் — இதுவே Firebase sign in பண்ணும்
       const userCredential = await confirmation.confirm(otpCode);
-
-      // ✅ userCredential-ஐ pass பண்றோம் — தனியா signInWithCredential இல்லை
       await handleAutoLogin(userCredential, phoneNumber);
-
     } catch (err) {
+      console.log("OTP confirm error:", err.code, err.message);
+
       if (err.code === "auth/invalid-verification-code") {
         setErrorMessage("Invalid OTP. Please try again.");
-      } else if (err.code === "auth/session-expired") {
+      } else if (
+        err.code === "auth/session-expired" ||
+        err.code === "auth/code-expired"
+      ) {
         setErrorMessage("OTP expired. Please resend.");
+        setCanResend(true);
+        setTimer(0);
+      } else if (err.code === "auth/too-many-requests") {
+        setErrorMessage("Too many attempts. Try again later.");
       } else {
         setErrorMessage(err.message || "OTP verification failed");
       }
@@ -435,24 +507,30 @@ if (role === "admin") {
     }
   };
 
+  // ─── Resend OTP ────────────────────────────────────────────
   const handleResendOtp = async () => {
     const net = await NetInfo.fetch();
-    const isOffline = net.isConnected === false || net.isInternetReachable === false;
+    const isOffline =
+      net.isConnected === false || net.isInternetReachable === false;
     if (isOffline) {
       Alert.alert("No Internet", "No network connection available");
       return;
     }
+
     try {
       setLoading(true);
       setCanResend(false);
       setTimer(30);
       setOtp(["", "", "", "", "", ""]);
+      setErrorMessage("");
+
       const result = await auth().signInWithPhoneNumber(phoneNumber, true);
       setConfirmation(result);
       Alert.alert("OTP Sent", "A new OTP has been sent.");
     } catch (e) {
       setCanResend(true);
-      Alert.alert("Error", "Failed to resend OTP.");
+      console.log("Resend error:", e.code, e.message);
+      Alert.alert("Error", e.message || "Failed to resend OTP.");
     } finally {
       setLoading(false);
     }
@@ -462,7 +540,11 @@ if (role === "admin") {
 
   return (
     <View style={{ flex: 1 }}>
-      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+      <StatusBar
+        translucent
+        backgroundColor="transparent"
+        barStyle="light-content"
+      />
       <LinearGradient
         colors={["#F00001", "#B00100"]}
         start={{ x: 0, y: 0 }}
@@ -470,26 +552,43 @@ if (role === "admin") {
         style={{ flex: 1 }}
       >
         <SafeAreaView style={{ flex: 1 }} edges={["bottom"]}>
-          <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            contentContainerStyle={{ flexGrow: 1 }}
+            keyboardShouldPersistTaps="handled"
+          >
             <View style={styles.header}>
-              <Image source={require("../../assets/images/kondass.png")} style={styles.logo} resizeMode="contain" />
+              <Image
+                source={require("../../assets/images/kondass.png")}
+                style={styles.logo}
+                resizeMode="contain"
+              />
             </View>
+
             <View style={styles.card}>
               <View style={styles.indicatorWrapper}>
                 <View style={styles.indicator} />
               </View>
+
               <Text style={styles.title}>Welcome</Text>
-              <Text style={styles.subtitle}>Enter the OTP sent to your phone</Text>
+              <Text style={styles.subtitle}>
+                Enter the OTP sent to your phone
+              </Text>
               <Text style={styles.label}>OTP Number</Text>
+
               <View style={styles.otpRow}>
                 {otp.map((digit, index) => (
                   <TextInput
                     key={index}
                     ref={(ref) => (inputs.current[index] = ref)}
-                    style={[styles.otpBox, errorMessage ? styles.otpBoxError : null]}
+                    style={[
+                      styles.otpBox,
+                      errorMessage ? styles.otpBoxError : null,
+                    ]}
                     value={digit}
                     onChangeText={(text) => handleChange(text, index)}
-                    onKeyPress={({ nativeEvent }) => handleBackspace(nativeEvent.key, index)}
+                    onKeyPress={({ nativeEvent }) =>
+                      handleBackspace(nativeEvent.key, index)
+                    }
                     keyboardType="number-pad"
                     maxLength={1}
                     returnKeyType="next"
@@ -499,33 +598,46 @@ if (role === "admin") {
                   />
                 ))}
               </View>
-              {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
+
+              {!!errorMessage && (
+                <Text style={styles.errorText}>{errorMessage}</Text>
+              )}
+
               <TouchableOpacity
-                style={[styles.confirmBtn, { opacity: otpFilled ? 1 : 0.45 }]}
+                style={[
+                  styles.confirmBtn,
+                  { opacity: otpFilled ? 1 : 0.45 },
+                ]}
                 disabled={!otpFilled}
                 onPress={handleConfirm}
               >
                 <Text style={styles.confirmText}>Confirm</Text>
               </TouchableOpacity>
+
               <View style={styles.resendRow}>
                 {canResend ? (
                   <TouchableOpacity onPress={handleResendOtp}>
                     <Text style={styles.resendText}>Resend OTP</Text>
                   </TouchableOpacity>
                 ) : (
-                  <Text style={styles.timerText}>Resend available in {timer}s</Text>
+                  <Text style={styles.timerText}>
+                    Resend available in {timer}s
+                  </Text>
                 )}
               </View>
+
               <TouchableOpacity
                 style={styles.changeRow}
                 onPress={() => navigation.navigate(SCREEN_NAMES.LOGIN)}
               >
                 <Text style={styles.changeText}>
-                  Wrong number? <Text style={styles.changeLink}>Change Phone Number</Text>
+                  Wrong number?{" "}
+                  <Text style={styles.changeLink}>Change Phone Number</Text>
                 </Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
+
           {loading && <Loader />}
         </SafeAreaView>
       </LinearGradient>
@@ -536,24 +648,113 @@ if (role === "admin") {
 export default OtpScreen;
 
 const styles = StyleSheet.create({
-  header:           { justifyContent: "center", alignItems: "center", paddingTop: 60, paddingBottom: 40 },
-  logo:             { width: 200, height: 100 },
-  card:             { backgroundColor: "#fff", borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 25, paddingVertical: 40, flexGrow: 1 },
-  indicatorWrapper: { alignItems: "center", marginBottom: 25 },
-  indicator:        { width: 40, height: 4, backgroundColor: "#ddd", borderRadius: 2 },
-  title:            { fontSize: 16, fontWeight: "600", color: "#1A1A1A", marginBottom: 4 },
-  subtitle:         { fontSize: 14, color: "#555", marginBottom: 20 },
-  label:            { fontSize: 16, fontWeight: "600", color: "#1A1A1A", marginBottom: 12 },
-  otpRow:           { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
-  otpBox:           { borderWidth: 1, borderColor: "#ddd", borderRadius: 10, width: 45, height: 50, textAlign: "center", fontSize: 18, color: "#000" },
-  otpBoxError:      { borderColor: "red" },
-  errorText:        { color: "red", fontSize: 13, marginTop: 4, marginBottom: 4, fontWeight: "500" },
-  confirmBtn:       { backgroundColor: "#444", width: "100%", paddingVertical: 14, borderRadius: 10, alignItems: "center", marginTop: 10 },
-  confirmText:      { color: "#fff", fontSize: 16, fontWeight: "600" },
-  resendRow:        { alignItems: "center", marginTop: 15 },
-  resendText:       { color: "#fb0404", fontSize: 15, fontWeight: "600" },
-  timerText:        { color: "#777", fontSize: 14 },
-  changeRow:        { alignItems: "center", marginTop: 15 },
-  changeText:       { color: "#555", fontSize: 14 },
-  changeLink:       { color: "#fb0404", fontWeight: "600", textDecorationLine: "underline" },
+  header: {
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 60,
+    paddingBottom: 40,
+  },
+  logo: {
+    width: 200,
+    height: 100,
+  },
+  card: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    paddingHorizontal: 25,
+    paddingVertical: 40,
+    flexGrow: 1,
+  },
+  indicatorWrapper: {
+    alignItems: "center",
+    marginBottom: 25,
+  },
+  indicator: {
+    width: 40,
+    height: 4,
+    backgroundColor: "#ddd",
+    borderRadius: 2,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: "#555",
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    marginBottom: 12,
+  },
+  otpRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  otpBox: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    width: 45,
+    height: 50,
+    textAlign: "center",
+    fontSize: 18,
+    color: "#000",
+  },
+  otpBoxError: {
+    borderColor: "red",
+  },
+  errorText: {
+    color: "red",
+    fontSize: 13,
+    marginTop: 4,
+    marginBottom: 4,
+    fontWeight: "500",
+  },
+  confirmBtn: {
+    backgroundColor: "#444",
+    width: "100%",
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 10,
+  },
+  confirmText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  resendRow: {
+    alignItems: "center",
+    marginTop: 15,
+  },
+  resendText: {
+    color: "#fb0404",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  timerText: {
+    color: "#777",
+    fontSize: 14,
+  },
+  changeRow: {
+    alignItems: "center",
+    marginTop: 15,
+  },
+  changeText: {
+    color: "#555",
+    fontSize: 14,
+  },
+  changeLink: {
+    color: "#fb0404",
+    fontWeight: "600",
+    textDecorationLine: "underline",
+  },
 });
