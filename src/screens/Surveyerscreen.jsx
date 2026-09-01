@@ -20,7 +20,7 @@ import {
   cacheTemplate,      // 👇 புதுசா சேர்த்தது — form template proactive-ஆ cache பண்ண
   getCachedTemplate,  // 👇 புதுசா சேர்த்தது — already cache ஆகி இருக்கானு தேவைப்பட்டா check பண்ண
 } from '../service/Localleadsstorage';
-import { enqueue, processSyncQueue } from '../service/syncQueue';
+import { enqueue, processSyncQueue, getPendingCount } from '../service/syncQueue';   // ✅
 import { NativeModules } from 'react-native';
 import {
   getDistance, getRoadDistanceKm, useLocationTracking,
@@ -130,21 +130,38 @@ const SurveyerScreen = () => {
   }, []);
 
   // ── Net watcher ───────────────────────────────────────────────────────────
-  useEffect(() => {
-    const unsub = NetInfo.addEventListener(async (state) => {
-      const online = !!state.isConnected && !!state.isInternetReachable;
-      setIsOnline(online);
-      if (online) {
-        const result = await processSyncQueue();
-        if (result.synced > 0) {
-          await fetchAndMergeLeads();
-        }
-        setPendingCount(0);
-        ensureTemplateCached(); // 👈 net திரும்ப வந்ததும் template refresh/cache பண்ணு
-      }
-    });
-    return () => unsub();
-  }, []);
+  // ── Net watcher ───────────────────────────────────────────────────────────
+useEffect(() => {
+  const unsub = NetInfo.addEventListener(async (state) => {
+    // 👈 permissive check — FormScreen.checkRealConnectivity()-ஓட
+    // consistent-ஆ, isInternetReachable: null-ஐயும் "online"-ஆவே treat பண்ணு
+    const online = !!state.isConnected && state.isInternetReachable !== false;
+    setIsOnline(online);
+
+    if (online) {
+      const result = await processSyncQueue();   // 👈 network வந்த odane push
+      if (result.synced > 0) await fetchAndMergeLeads();
+      setPendingCount(await getPendingCount());
+      ensureTemplateCached();
+    }
+  });
+  return () => unsub();
+}, []);
+
+// 👇 புதுசா சேர்த்தது: safety-net — event miss ஆனாலும் (flaky network-ல
+// இது romba common) 2 min-க்கு ஒரு தடவை queue check பண்ணு
+useEffect(() => {
+  const interval = setInterval(async () => {
+    const netState = await NetInfo.fetch();
+    const online = !!netState.isConnected && netState.isInternetReachable !== false;
+    if (online) {
+      const result = await processSyncQueue();
+      if (result.synced > 0) await fetchAndMergeLeads();
+      setPendingCount(await getPendingCount());
+    }
+  }, 2 * 60 * 1000); // every 2 mins
+  return () => clearInterval(interval);
+}, []);
 
   // ── Mount ─────────────────────────────────────────────────────────────────
   useEffect(() => {

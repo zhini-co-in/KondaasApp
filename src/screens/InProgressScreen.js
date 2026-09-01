@@ -163,42 +163,25 @@ const InProgressScreen = () => {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  const handleManualEnable = async (item) => {
-    setInProgressLeads((prev) =>
-      prev.map((l) => (l.id === item.id ? { ...l, manualSiteEnabled: true } : l))
-    );
-    const surveyorNumber = await getSurveyorNumber();
-    try {
-      // handleManualEnable — scenarioType 3
-await API.post('/notification/trigger', {
-  surveyorNumber, customerMobile: item.whatsappNo || item.phone, name: item.name, scenarioType: 3,
-});
-    } catch (e) {}
-    // 👇 புதுசா சேர்த்தது: Start location + Reached location — exact lat/long
-  // இரண்டையும் dealId-யோட backend-க்கு அனுப்பி km calc பண்ண save பண்ணும்
+const handleManualEnable = async (item) => {
+  setInProgressLeads((prev) =>
+    prev.map((l) => (l.id === item.id ? { ...l, manualSiteEnabled: true } : l))
+  );
+  const surveyorNumber = await getSurveyorNumber();
   try {
-    if (startLocation && currentLocation && item.dealId) {
-      await API.post('/location/distance', {
-        dealId:   item.dealId,
-        startLat: startLocation.latitude,
-        startLng: startLocation.longitude,
-        endLat:   currentLocation.latitude,
-        endLng:   currentLocation.longitude,
-      });
-    }
-  } catch (e) {
-    // offline / API fail — queue-ல போட்டு பின்னாடி sync ஆகும்
-    await enqueue(`job_coords_${item.id}`, 'JOB_COORDINATES', {
-      dealId:   item.dealId,
-      startLat: startLocation?.latitude,
-      startLng: startLocation?.longitude,
-      endLat:   currentLocation?.latitude,
-      endLng:   currentLocation?.longitude,
+    await API.post('/notification/trigger', {
+      surveyorNumber, customerMobile: item.whatsappNo || item.phone, name: item.name, scenarioType: 3,
     });
-  }
-    setSelectedLead({ ...item, id: item.id || item._id });
-    setReachedModalVisible(true);
-  };
+  } catch (e) {}
+
+  // 👇 CHANGED: API-க்கு odana அனுப்பாம, Start click நேரத்துல correct-ஆ
+  // இருக்கிற distance (screen-ல காட்டுறது)-ஐ calculate பண்ணி LOCAL-ல
+  // (AsyncStorage) மட்டும் store பண்ணிடு. Home/Office/Skip click ஆகும்போது
+  // இந்த value எடுத்து backend-க்கு அனுப்புவோம்.
+
+  setSelectedLead({ ...item, id: item.id || item._id });
+  setReachedModalVisible(true);
+};
 
   const handleSiteObservation = (item) => {
     navigation.navigate('Form', {
@@ -237,12 +220,6 @@ await API.post('/notification/trigger', {
 
     // Step 1 — Local update
     await updateAcceptedLeadStatus(leadId, 'completed');
-
-    try {
-    await deleteSavedFormData(leadId);
-  } catch (e) {
-    console.warn('Could not delete local form data:', e);
-  }
 
     setInProgressLeads((prev) => {
       const updated = prev.map((l) =>

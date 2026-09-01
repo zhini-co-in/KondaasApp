@@ -1422,14 +1422,14 @@ const FormScreen = ({
     }
   }, [typedLocation, gpsCoords.latitude]);
 
-  useEffect(() => {
-    const unsub = NetInfo.addEventListener((state) => {
-      const online = !!state.isConnected && !!state.isInternetReachable;
-      setIsOnline(online);
-      setOfflineBanner(!online);
-    });
-    return () => unsub();
-  }, []);
+useEffect(() => {
+  const unsub = NetInfo.addEventListener((state) => {
+    const online = !!state.isConnected && state.isInternetReachable !== false;  // 👈 permissive
+    setIsOnline(online);
+    setOfflineBanner(!online);
+  });
+  return () => unsub();
+}, []);
 
   useEffect(() => { fetchTemplate(); }, []);
 

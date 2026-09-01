@@ -71,12 +71,13 @@ const OtpScreen = ({ navigation, route }) => {
   const [errorMessage, setErrorMessage] = useState("");
   const [timer, setTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
-  const [confirmation, setConfirmation] = useState(
-    route.params?.confirmation || null
-  );
+  const [autoRetried, setAutoRetried] = useState(false);
 
   const inputs = useRef([]);
-  const { phoneNumber } = route.params;
+  const [verificationId, setVerificationId] = useState(
+  route.params?.verificationId || null
+);
+const { phoneNumber } = route.params || {};
 
   // Resend countdown timer
   useEffect(() => {
@@ -457,84 +458,85 @@ const OtpScreen = ({ navigation, route }) => {
   };
 
   // ─── Confirm OTP ───────────────────────────────────────────
-  const handleConfirm = async () => {
-    if (!confirmation) {
-      setErrorMessage("Session expired. Please resend OTP.");
+const handleConfirm = async () => {
+  const net = await NetInfo.fetch();
+  if (!net.isConnected) {
+    Alert.alert("No Internet", "No network connection available");
+    return;
+  }
+
+  const otpCode = otp.join("");
+  if (otpCode.length < 6) {
+    setErrorMessage("Please enter full OTP");
+    return;
+  }
+
+  if (!verificationId) {
+    setErrorMessage("Session expired. Please go back and request OTP again.");
+    return;
+  }
+
+  try {
+    setLoading(true);
+    setErrorMessage("");
+
+    const credential = auth.PhoneAuthProvider.credential(verificationId, otpCode);
+    const userCredential = await auth().signInWithCredential(credential);  // ← இது முக்கியம்
+
+    await handleAutoLogin(userCredential, phoneNumber);
+  } catch (err) {
+    console.log("OTP error:", err.code, err.message);
+    if (err.code === "auth/invalid-verification-code") {
+      setErrorMessage("Invalid OTP. Please try again.");
+    } else if (
+      err.code === "auth/session-expired" ||
+      err.code === "auth/code-expired"
+    ) {
+      setErrorMessage("OTP expired. Please resend.");
       setCanResend(true);
       setTimer(0);
-      return;
+    } else {
+      setErrorMessage(err.message || "OTP verification failed");
     }
+  } finally {
+    setLoading(false);
+  }
+};
 
-    const net = await NetInfo.fetch();
-    const isOffline =
-      net.isConnected === false || net.isInternetReachable === false;
-    if (isOffline) {
-      Alert.alert("No Internet", "No network connection available");
-      return;
-    }
+const handleResendOtp = async () => {
+  const net = await NetInfo.fetch();
+  if (!net.isConnected) {
+    Alert.alert("No Internet", "No network connection available");
+    return;
+  }
 
-    const otpCode = otp.join("");
-    if (otpCode.length < 6) {
-      setErrorMessage("Please enter the full 6-digit OTP");
-      return;
-    }
+  try {
+    setLoading(true);
+    setCanResend(false);
+    setTimer(30);
+    setOtp(["", "", "", "", "", ""]);
+    setErrorMessage("");
 
-    try {
-      setLoading(true);
-      setErrorMessage("");
-
-      const userCredential = await confirmation.confirm(otpCode);
-      await handleAutoLogin(userCredential, phoneNumber);
-    } catch (err) {
-      console.log("OTP confirm error:", err.code, err.message);
-
-      if (err.code === "auth/invalid-verification-code") {
-        setErrorMessage("Invalid OTP. Please try again.");
-      } else if (
-        err.code === "auth/session-expired" ||
-        err.code === "auth/code-expired"
-      ) {
-        setErrorMessage("OTP expired. Please resend.");
-        setCanResend(true);
-        setTimer(0);
-      } else if (err.code === "auth/too-many-requests") {
-        setErrorMessage("Too many attempts. Try again later.");
-      } else {
-        setErrorMessage(err.message || "OTP verification failed");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ─── Resend OTP ────────────────────────────────────────────
-  const handleResendOtp = async () => {
-    const net = await NetInfo.fetch();
-    const isOffline =
-      net.isConnected === false || net.isInternetReachable === false;
-    if (isOffline) {
-      Alert.alert("No Internet", "No network connection available");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setCanResend(false);
-      setTimer(30);
-      setOtp(["", "", "", "", "", ""]);
-      setErrorMessage("");
-
-      const result = await auth().signInWithPhoneNumber(phoneNumber, true);
-      setConfirmation(result);
-      Alert.alert("OTP Sent", "A new OTP has been sent.");
-    } catch (e) {
-      setCanResend(true);
-      console.log("Resend error:", e.code, e.message);
-      Alert.alert("Error", e.message || "Failed to resend OTP.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    auth()
+      .verifyPhoneNumber(phoneNumber, true)  // force resend
+      .on("state_changed", (snapshot) => {
+        if (snapshot.state === auth.PhoneAuthState.CODE_SENT) {
+          setVerificationId(snapshot.verificationId);
+          setLoading(false);
+          Alert.alert("OTP Sent", "A new OTP has been sent.");
+        }
+        if (snapshot.state === auth.PhoneAuthState.ERROR) {
+          setLoading(false);
+          setCanResend(true);
+          Alert.alert("Error", snapshot.error?.message || "Failed to resend");
+        }
+      });
+  } catch (e) {
+    setLoading(false);
+    setCanResend(true);
+    Alert.alert("Error", e.message || "Failed to resend OTP");
+  }
+};
 
   const otpFilled = otp.join("").length === 6;
 

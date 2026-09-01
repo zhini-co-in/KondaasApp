@@ -28,10 +28,6 @@ const LoginScreen = ({ navigation }) => {
   const slideAnim = useState(new Animated.Value(-60))[0];
 
   useEffect(() => {
-    if (__DEV__) {
-}
-  }, []);
-  useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
       setIsConnected(state.isConnected);
 
@@ -73,8 +69,6 @@ const handleSendOTP = async () => {
   if (loading) return;
 
   const net = await NetInfo.fetch();
-const isOffline = net.isConnected === false || net.isInternetReachable === false;
-if (isOffline) return;
   if (!net.isConnected) {
     Alert.alert("No Internet", "No network connection available");
     return;
@@ -89,42 +83,62 @@ if (isOffline) return;
     setLoading(true);
     const fullNumber = "+91" + phoneNumber.trim();
 
-    // ✅ FIX: iOS APNs token refresh — Chrome open ஆவதை தடுக்கும்
-    if (Platform.OS === "ios") {
-      try {
-        await messaging().registerDeviceForRemoteMessages();
-        await messaging().getAPNSToken();
-        console.log("✅ APNs token refreshed");
-      } catch (e) {
-        console.log("⚠️ APNs refresh warning:", e.message);
-        // Error வந்தாலும் continue பண்ணும் — crash ஆகாது
-      }
-    }
+    const unsubscribe = auth()
+      .verifyPhoneNumber(fullNumber)
+      .on(
+        "state_changed",
+        (snapshot) => {
+          switch (snapshot.state) {
+            case auth.PhoneAuthState.CODE_SENT:
+              setLoading(false);
+              navigation.navigate(SCREEN_NAMES.OTP, {
+                verificationId: snapshot.verificationId,
+                phoneNumber: fullNumber,
+              });
+              break;
 
-    // ✅ FIX: verifyPhoneNumber → signInWithPhoneNumber (forceResend: true)
-    const confirmation = await auth().signInWithPhoneNumber(fullNumber);
+            case auth.PhoneAuthState.AUTO_VERIFIED:
+              // SMS auto-read → credential ready
+              setLoading(false);
+              navigation.navigate(SCREEN_NAMES.OTP, {
+                verificationId: snapshot.verificationId,
+                phoneNumber: fullNumber,
+                autoCredential: snapshot.credential, // optional
+              });
+              // Or directly sign in here if you move handleAutoLogin to a shared place
+              break;
 
-    setLoading(false);
-    navigation.navigate(SCREEN_NAMES.OTP, {
-      confirmation,                              // ✅ OtpScreen already use பண்றது
-      verificationId: confirmation.verificationId,
-      phoneNumber: fullNumber,
-    });
+            case auth.PhoneAuthState.ERROR:
+              setLoading(false);
+              Alert.alert("OTP Error", snapshot.error?.message || "Failed to send OTP");
+              break;
 
+            case auth.PhoneAuthState.TIMEOUT:
+              setLoading(false);
+              Alert.alert("Timeout", "OTP request timed out. Please try again.");
+              break;
+          }
+        },
+        (error) => {
+          setLoading(false);
+          Alert.alert("Error", error.message || "Something went wrong");
+        }
+      );
+
+    // optional: store unsubscribe if you want to clean up
   } catch (err) {
     setLoading(false);
-    console.log("❌ OTP send error:", err.message);
     Alert.alert("Error", err.message);
   }
 };
 
- return (
+  return (
     <View style={{ flex: 1 }}>
       {/* 2. TRANSLUCENT STATUS BAR: This allows the gradient to sit underneath the clock */}
-      <StatusBar 
-        translucent 
-        backgroundColor="transparent" 
-        barStyle="light-content" 
+      <StatusBar
+        translucent
+        backgroundColor="transparent"
+        barStyle="light-content"
       />
 
       {/* 3. WRAP EVERYTHING IN THE GRADIENT SO IT COVERS THE TOP AREA */}
@@ -141,8 +155,8 @@ if (isOffline) return;
             <Text style={styles.netBannerText}>No Internet Connection</Text>
           </Animated.View>
 
-          <ScrollView 
-            contentContainerStyle={{ flexGrow: 1 }} 
+          <ScrollView
+            contentContainerStyle={{ flexGrow: 1 }}
             keyboardShouldPersistTaps="handled"
           >
             {/* 4. HEADER: Removed extra LinearGradient here since parent already has it */}
@@ -185,7 +199,7 @@ if (isOffline) return;
                 styles.otpButton,
                 { opacity: phoneNumber.length === 10 && isConnected ? 1 : 0.5 }
               ]}
-              disabled={phoneNumber.length !== 10 || !isConnected}
+              disabled={phoneNumber.length !== 10 || !isConnected || loading}
               onPress={handleSendOTP}
             >
               <Text style={styles.otpButtonText}>Send OTP</Text>
