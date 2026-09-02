@@ -3,7 +3,7 @@ name: Kondaas Silent Update
 on:
   push:
     branches:
-      - kondaas2.0
+      - kondaas2.1
 
 jobs:
   update:
