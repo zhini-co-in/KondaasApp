@@ -293,6 +293,98 @@ const validateRequiredFields = (
 
   return missing;
 };
+interface FieldTypeError {
+  label: string;
+  reason: string;
+}
+
+const validateSchemaTypes = (
+  properties: SchemaProperties,
+  groups: UIElement[],
+  formValues: Record<string, string>,
+  filesByField: Record<string, PhotoFile[]>,
+): FieldTypeError[] => {
+  const errors: FieldTypeError[] = [];
+  const seen = new Set<string>();
+
+  groups.forEach((group) => {
+    (group.elements ?? []).forEach((element) => {
+      const fieldKey = element.scope?.split('/').pop();
+      if (!fieldKey || seen.has(fieldKey)) return;
+      if (!isFieldVisible(element, formValues)) return;
+      const field = properties[fieldKey];
+      if (!field) return;
+      const label = field.title ?? fieldKey;
+      const val = formValues[fieldKey];
+      const isEmpty = val === undefined || val === null || String(val).trim() === '';
+
+      if (field.type === 'number' && !isEmpty) {
+        if (Number.isNaN(Number(val)) || val.trim() === '-' || val.trim() === '.') {
+          errors.push({ label, reason: 'Must be a valid number' });
+          seen.add(fieldKey);
+          return;
+        }
+      }
+
+      if (field.type === 'string' && field.pattern && !isEmpty) {
+        const re = new RegExp(field.pattern);
+        if (!re.test(val)) {
+          errors.push({ label, reason: 'Format is invalid (e.g. phone: 10 digits, zip: 6 digits)' });
+          seen.add(fieldKey);
+          return;
+        }
+      }
+
+      if (field.type === 'string' && !isEmpty) {
+        if (field.minLength && val.length < field.minLength) {
+          errors.push({ label, reason: `Must be at least ${field.minLength} characters` });
+          seen.add(fieldKey);
+          return;
+        }
+        if (field.maxLength && val.length > field.maxLength) {
+          errors.push({ label, reason: `Must be at most ${field.maxLength} characters` });
+          seen.add(fieldKey);
+          return;
+        }
+      }
+
+      if (field.enum && field.enum.length > 0 && !isEmpty) {
+        if (!field.enum.includes(val)) {
+          errors.push({ label, reason: 'Value is not one of the allowed options' });
+          seen.add(fieldKey);
+          return;
+        }
+      }
+
+      if ((field.format === 'date' || field.format === 'date-time') && !isEmpty) {
+        if (Number.isNaN(new Date(val).getTime())) {
+          errors.push({ label, reason: 'Invalid date/date-time format' });
+          seen.add(fieldKey);
+          return;
+        }
+      }
+
+      if (field.type === 'string' && field.format === 'data-url' && !isEmpty) {
+        if (!val.startsWith('data:')) {
+          errors.push({ label, reason: 'Invalid image/signature data' });
+          seen.add(fieldKey);
+          return;
+        }
+      }
+
+      if (field.type === 'array' && field.items?.format === 'data-url') {
+        const files = filesByField[fieldKey] ?? [];
+        const badFile = files.find((f) => !f.uri || !f.type);
+        if (badFile) {
+          errors.push({ label, reason: 'One of the attached files is corrupt — please re-attach it' });
+          seen.add(fieldKey);
+        }
+      }
+    });
+  });
+
+  return errors;
+};
 
 // ── Network failure detection ───────────────────────────────────────────────
 // Distinguishes a genuine connectivity drop (no response received,
@@ -1587,6 +1679,14 @@ useEffect(() => {
       );
       return;
     }
+     const typeErrors = validateSchemaTypes(schemaProperties, groups, formValues, filesByField);
+    if (typeErrors.length > 0) {
+      Alert.alert(
+        'Check These Fields',
+        typeErrors.map((e) => `• ${e.label}: ${e.reason}`).join('\n'),
+      );
+      return;
+    }
 
     setSubmitting(true);
 
@@ -1747,6 +1847,14 @@ useEffect(() => {
       Alert.alert(
         'Required Fields Missing',
         `Please fill in the following before updating:\n\n${missingFields.join('\n')}`,
+      );
+      return;
+    }
+    const typeErrors = validateSchemaTypes(schemaProperties, groups, formValues, filesByField);
+    if (typeErrors.length > 0) {
+      Alert.alert(
+        'Check These Fields',
+        typeErrors.map((e) => `• ${e.label}: ${e.reason}`).join('\n'),
       );
       return;
     }

@@ -3,7 +3,7 @@ name: Kondaas Silent Update
 on:
   push:
     branches:
-      - main
+      - kondaas2.0
 
 jobs:
   update:
@@ -20,7 +20,7 @@ jobs:
           node-version: 22
 
       - name: Install Dependencies
-        run: npm install --legacy-peer-deps
+        run: yarn install --frozen-lockfile
 
       - name: Check for Secret
         run: |
@@ -30,19 +30,19 @@ jobs:
           else
             echo "Secret is found, proceeding..."
           fi
+
       - name: Install Revopush CLI
-        run: npm install -g @revopush/code-push-cli
-  
+        run: yarn global add @revopush/code-push-cli
+
       - name: CodePush Login
         run: revopush login --access-key ${{ secrets.REVOPUSH_ACCESS_KEY }}
+
       - name: Push to Revopush
         env:
           MY_ACCESS_KEY: ${{ secrets.REVOPUSH_ACCESS_KEY }}
         run: |
-          npm install -g @revopush/code-push-cli
-          
           # Push to Android (allow identical packages)
           revopush release-react "KondaasApp" android -d Production --accessKey $MY_ACCESS_KEY || true
-          
+
           # Push to iOS (allow identical packages)
           revopush release-react "kondaas-App-iOS" ios -d Production --accessKey $MY_ACCESS_KEY || true

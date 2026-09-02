@@ -1,4 +1,4 @@
-package com.trisentrix.kondaas
+package com.zhini.kondaas
 
 import android.app.Application
 import com.facebook.react.PackageList
