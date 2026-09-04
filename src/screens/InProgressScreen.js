@@ -174,10 +174,27 @@ const handleManualEnable = async (item) => {
     });
   } catch (e) {}
 
-  // 👇 CHANGED: API-க்கு odana அனுப்பாம, Start click நேரத்துல correct-ஆ
-  // இருக்கிற distance (screen-ல காட்டுறது)-ஐ calculate பண்ணி LOCAL-ல
-  // (AsyncStorage) மட்டும் store பண்ணிடு. Home/Office/Skip click ஆகும்போது
-  // இந்த value எடுத்து backend-க்கு அனுப்புவோம்.
+  // 👇 FIX: Start click nerathula screen-la kaatura distance-a
+  // AsyncStorage-la save pannurom. Home/Office click aagumbodhu
+  // idha eduthu backend-ku anupuvom (fresh recalculate pannama).
+  if (currentLocation && item.latitude && item.longitude) {
+    const startDistance = getDistance(
+      currentLocation.latitude,
+      currentLocation.longitude,
+      parseFloat(item.latitude),
+      parseFloat(item.longitude)
+    );
+    try {
+      await AsyncStorage.setItem(
+        `start_distance_${item.id || item._id}`,
+        JSON.stringify({
+          distance: startDistance,
+          capturedAt: Date.now(),
+          location: currentLocation,
+        })
+      );
+    } catch (e) {}
+  }
 
   setSelectedLead({ ...item, id: item.id || item._id });
   setReachedModalVisible(true);

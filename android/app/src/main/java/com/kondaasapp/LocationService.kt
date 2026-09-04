@@ -1,4 +1,4 @@
-package com.zhini.kondaas
+package com.trisentrix.kondaas
 
 import android.Manifest
 import android.app.Notification

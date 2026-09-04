@@ -6,6 +6,8 @@ import { USER_DATA } from '../service/localStorage';
 import { getDistance, getRoadDistanceKm } from '../service/locationService';
 import API from '../api/api1';
 import { StyleSheet } from 'react-native'; // or inline styles
+import NetInfo from '@react-native-community/netinfo';
+import { enqueue } from '../service/syncQueue'; // or inline styles
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '—';
@@ -131,7 +133,10 @@ useEffect(() => {
     if (isFirstDistanceFetchRef.current) {
       isFirstDistanceFetchRef.current = false;
       try {
-        await AsyncStorage.setItem(`site_distance_${item.id}`, String(finalKm));
+        const existing = await AsyncStorage.getItem(`site_distance_${item.id}`);
+        if (existing === null) {
+          await AsyncStorage.setItem(`site_distance_${item.id}`, String(finalKm));
+        }
       } catch (e) {}
     }
   });
@@ -251,24 +256,38 @@ useEffect(() => {
         : (distToLead !== null ? distToLead / 1000 : 0);
     }
 
-    try {
-      const surveyorNumber = await getSurveyorNumber();
-      const surveyorName   = await getSurveyorName(); 
-      await API.post('/location/distance', {
-        deal_id:   item.dealId,
-        deal_name: item.name,
-        mobile:    surveyorNumber,
-        surveyor_name: surveyorName,
-        to_site:   toSiteKm,
-        ...(type === 'home' ? { to_home: distanceKm } : { to_office: distanceKm }),
-      });
-    } catch (e) {
-      // fail ஆனாலும் — offline queue வேணும்னா இங்க enqueue() import
-      // பண்ணி சேர்க்கலாம். இப்போ silent fail.
+    const surveyorNumber = await getSurveyorNumber();
+    const surveyorName   = await getSurveyorName();
+
+    const payload = {
+      deal_id:   item.dealId,
+      deal_name: item.name,
+      mobile:    surveyorNumber,
+      surveyor_name: surveyorName,
+       to_site:   `${toSiteKm.toFixed(1)} km`,   // 👈 string format
+  ...(type === 'home'
+    ? { to_home: `${distanceKm.toFixed(1)} km` }
+    : { to_office: `${distanceKm.toFixed(1)} km` }),
+    };
+
+    // 👇 புதுசா சேர்த்தது: offline-ஆ இருந்தா நேரடியா queue பண்ணிடுவோம்
+    // (60s timeout வரை காத்திருக்க வேண்டாம், UX bad ஆகும்).
+    const netState = await NetInfo.fetch();
+    const online = !!netState.isConnected && netState.isInternetReachable !== false;
+
+    if (!online) {
+      await enqueue(`deal_distance_${item.dealId}`, 'DEAL_DISTANCE', payload);
+    } else {
+      try {
+        await API.post('/location/distance', payload);
+      } catch (e) {
+        // online-ல இருந்தும் fail (server error/timeout) ஆனா queue பண்ணு
+        await enqueue(`deal_distance_${item.dealId}`, 'DEAL_DISTANCE', payload);
+      }
     }
 
-    // ✅ Distance அனுப்பியாச்சு — இனி map திறக்காம, நேரடியா
-    // SurveyerScreen-க்கு திரும்பி போயிடுவோம்.
+    // ✅ Distance அனுப்பியாச்சு (அல்லது queue ஆயிடுச்சு) — இனி map திறக்காம,
+    // நேரடியா SurveyerScreen-க்கு திரும்பி போயிடுவோம்.
     onFinishAndReturn?.();
   };
 
@@ -279,7 +298,7 @@ useEffect(() => {
   // Skip பண்ணா to_site backend-ல ஏறவே ஏறாது.
   const [skipLoading, setSkipLoading] = useState(false);
 
-  const handleSkip = async () => {
+    const handleSkip = async () => {
     setSkipLoading(true);
 
     let toSiteKm = null;
@@ -295,18 +314,28 @@ useEffect(() => {
         : (distToLead !== null ? distToLead / 1000 : 0);
     }
 
-    try {
-      const surveyorNumber = await getSurveyorNumber();
-      const surveyorName   = await getSurveyorName();
-      await API.post('/location/distance', {
-        deal_id:   item.dealId,
-        deal_name: item.name,
-        mobile:    surveyorNumber,
-        surveyor_name: surveyorName,
-        to_site:   toSiteKm,
-      });
-    } catch (e) {
-      // fail ஆனாலும் — silent, user-ஐ block பண்ணக்கூடாது
+    const surveyorNumber = await getSurveyorNumber();
+    const surveyorName   = await getSurveyorName();
+
+    const payload = {
+      deal_id:   item.dealId,
+      deal_name: item.name,
+      mobile:    surveyorNumber,
+      surveyor_name: surveyorName,
+      to_site:   `${toSiteKm.toFixed(1)} km`,
+    };
+
+    const netState = await NetInfo.fetch();
+    const online = !!netState.isConnected && netState.isInternetReachable !== false;
+
+    if (!online) {
+      await enqueue(`deal_distance_${item.dealId}`, 'DEAL_DISTANCE', payload);
+    } else {
+      try {
+        await API.post('/location/distance', payload);
+      } catch (e) {
+        await enqueue(`deal_distance_${item.dealId}`, 'DEAL_DISTANCE', payload);
+      }
     }
 
     setSkipLoading(false);

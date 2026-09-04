@@ -316,7 +316,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.zhini.kondaas;
+				PRODUCT_BUNDLE_IDENTIFIER = com.trisentrix.kondaas;
 				PRODUCT_NAME = KondaasApp;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;

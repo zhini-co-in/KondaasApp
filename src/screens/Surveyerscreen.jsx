@@ -797,6 +797,7 @@ useEffect(() => {
     }
 
     // STEP 1: ETA + Maps URL calculation
+      // STEP 1: ETA + Maps URL calculation
     let etaText  = 'N/A';
     let totalMins = 0;
     let distMeters = null;             // 👈 outer scope-க்கு தூக்கினோம் — கீழ site-distance store பண்ண இதுவே reuse ஆகும்
@@ -818,6 +819,17 @@ useEffect(() => {
         const mins = totalMins % 60;
         etaText = mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`;
       }
+    let toSiteKm = distMeters / 1000;
+      try {
+        const road = await getRoadDistanceKm(
+          locationRef.current.latitude, locationRef.current.longitude,
+          parseFloat(lead.latitude), parseFloat(lead.longitude)
+        );
+        if (road !== null) toSiteKm = road;
+      } catch (e) {}
+      try {
+        await AsyncStorage.setItem(`site_distance_${id}`, String(toSiteKm));
+      } catch (e) {}
     }
 
     let mapsUrl = '';

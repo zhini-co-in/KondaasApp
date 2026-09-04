@@ -247,6 +247,20 @@ const buildVisiblePayload = (
   });
   return cleaned;
 };
+// 👇 இங்க போடுங்க — buildVisiblePayload-க்கு நேரடியா கீழ
+// ── Single source of truth for the OUTGOING payload — used by both the
+// online submit/update path AND every offline/network-fallback queue path,
+// so a form that gets queued (patchy network) sends the exact same shape
+// as one that goes straight through.
+const buildOutgoingPayload = (
+  values: Record<string, string>,
+  groups: UIElement[],
+  properties: SchemaProperties,
+): Record<string, any> => {
+  const visible = buildVisiblePayload(groups, values);
+  const typed = coerceSchemaTypes(visible, properties);
+  return enforceZohoTextFields(typed);
+};
 
 const validateRequiredFields = (
   properties: SchemaProperties,
@@ -778,7 +792,7 @@ async function compressImage(uri: string): Promise<string> {
   }
 }
 
-const MAX_VIDEO_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
+const MAX_VIDEO_SIZE_BYTES = 30 * 1024 * 1024; // 50 MB
 
 const getFileSizeInBytes = async (uri: string): Promise<number> => {
   try {
@@ -922,7 +936,7 @@ const PhotoUploadField = ({
 
       {isVideo && (
         <Text style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
-          Maximum upload size: 50 MB per video
+          Maximum upload size: 28 MB per video
         </Text>
       )}
 
@@ -1758,41 +1772,43 @@ useEffect(() => {
         }
       } catch (err: any) {
         console.error('Submit error:', err);
+        console.error('Submit error response:', JSON.stringify(err?.response?.data));
 
         // Network drop mid-upload: fall back to offline save + sync queue
         // instead of showing a dead-end "Network Error" alert.
         if (isNetworkFailure(err)) {
-          try {
-            const offlinePayload = {
-              mobileNumber: lead.phone,
-              deal_id: lead.dealId,
-              state: lead.state,
-              ...stampedValues,
-              _filesByField: filesByField,
-            };
-            console.log('🆔 [handleSubmit/network-fallback] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
-            await saveFormDataLocally(lead.id, offlinePayload);
-            await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', {
-              formData: offlinePayload,
-              filesByField: filesByField,
-              mobile: lead.phone,
-              leadId: lead.id,
-            });
-            Alert.alert(
-              '⚠ Network Issue',
-              'Connection dropped mid-upload. Your form & photos are saved locally and will auto-submit once internet is stable.',
-              [{ text: 'OK', onPress: _navigateBack }],
-            );
-            setFormValues({});
-            setFilesByField({});
-          } catch (offlineErr) {
-            console.error('Offline fallback save failed:', offlineErr);
-            Alert.alert(
-              'Error',
-              'Network failed AND could not save offline. Please screenshot this form and contact support.',
-            );
-          }
-        } else if (err?.response?.status === 413) {
+  try {
+    const offlinePayload = {
+      mobileNumber: lead.phone,
+      deal_id: lead.dealId,
+      state: lead.state,
+      ...buildOutgoingPayload(stampedValues, groups, schemaProperties),
+      _filesByField: filesByField,
+    };
+    console.log('🆔 [handleSubmit/network-fallback] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
+    await saveFormDataLocally(lead.id, offlinePayload);
+    await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', {
+      formData: offlinePayload,
+      filesByField: filesByField,
+      mobile: lead.phone,
+      leadId: lead.id,
+      dealId: lead.dealId,
+    });
+    Alert.alert(
+      '⚠ Network Issue',
+      'Connection dropped mid-upload. Your form & photos are saved locally and will auto-submit once internet is stable.',
+      [{ text: 'OK', onPress: _navigateBack }],
+    );
+    setFormValues({});
+    setFilesByField({});
+  } catch (offlineErr) {
+    console.error('Offline fallback save failed:', offlineErr);
+    Alert.alert(
+      'Error',
+      'Network failed AND could not save offline. Please screenshot this form and contact support.',
+    );
+  }
+} else if (err?.response?.status === 413) {
           Alert.alert(
             'Files Too Large',
             'The photos/videos attached are too large to upload. Please remove a video or retake photos, then try again.',
@@ -1809,20 +1825,21 @@ useEffect(() => {
     } else {
       try {
         const offlinePayload = {
-          mobileNumber: lead.phone,
-          deal_id: lead.dealId,
-          state: lead.state,
-          ...stampedValues,
-          _filesByField: filesByField,
-        };
-        console.log('🆔 [handleSubmit/offline] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
-        await saveFormDataLocally(lead.id, offlinePayload);
-        await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', {
-          formData: offlinePayload,
-          filesByField: filesByField,
-          mobile: lead.phone,
-          leadId: lead.id,
-        });
+  mobileNumber: lead.phone,
+  deal_id: lead.dealId,
+  state: lead.state,
+  ...buildOutgoingPayload(stampedValues, groups, schemaProperties),
+  _filesByField: filesByField,
+};
+console.log('🆔 [handleSubmit/offline] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
+await saveFormDataLocally(lead.id, offlinePayload);
+await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', {
+  formData: offlinePayload,
+  filesByField: filesByField,
+  mobile: lead.phone,
+  leadId: lead.id,
+  dealId: lead.dealId,
+});
         Alert.alert(
           '✔ Saved Offline',
           'Form and photos saved locally. Will be submitted when internet is available.',
@@ -1933,12 +1950,12 @@ useEffect(() => {
         if (isNetworkFailure(err)) {
           try {
             const offlinePayload = {
-              mobileNumber: lead.phone,
-              deal_id: lead.dealId,
-              state: lead.state,
-              ...formValues,
-              _filesByField: filesByField,
-            };
+  mobileNumber: lead.phone,
+  deal_id: lead.dealId,
+  state: lead.state,
+  ...buildOutgoingPayload(formValues, groups, schemaProperties),
+  _filesByField: filesByField,
+};
             console.log('🆔 [handleUpdate/network-fallback] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
             await saveFormDataLocally(lead.id, offlinePayload);
             await enqueue(`form_update_${lead.id}`, 'FORM_UPDATE', {
@@ -1978,12 +1995,12 @@ useEffect(() => {
     } else {
       try {
         const offlinePayload = {
-          mobileNumber: lead.phone,
-          deal_id: lead.dealId,
-          state: lead.state,
-          ...formValues,
-          _filesByField: filesByField,
-        };
+  mobileNumber: lead.phone,
+  deal_id: lead.dealId,
+  state: lead.state,
+  ...buildOutgoingPayload(formValues, groups, schemaProperties),
+  _filesByField: filesByField,
+};
         console.log('🆔 [handleUpdate/offline] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
         await saveFormDataLocally(lead.id, offlinePayload);
         await enqueue(`form_update_${lead.id}`, 'FORM_UPDATE', {

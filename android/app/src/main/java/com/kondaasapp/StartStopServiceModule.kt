@@ -1,4 +1,4 @@
-package com.zhini.kondaas
+package com.trisentrix.kondaas
 
 import android.content.Intent
 import android.os.Build
