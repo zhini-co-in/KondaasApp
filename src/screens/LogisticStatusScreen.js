@@ -14,7 +14,7 @@ const fmtDate = val => {
 
 const initial = name => (name && name.trim() ? name.trim().charAt(0).toUpperCase() : '?');
 
-// Normalises a record coming from logistics_completed / logistics_reject collections.
+// Normalises a record coming from logistics_Completed / logistics_reject collections.
 // Field names are guessed from common patterns used elsewhere in the app — adjust
 // the raw.* keys below if your collection uses different field names.
 const normaliseLogistic = (raw, idx) => ({
@@ -96,8 +96,8 @@ const styles = StyleSheet.create({
 });
 
 const LogisticStatusScreen = ({ navigation, route }) => {
-  const status = route?.params?.status === 'rejected' ? 'rejected' : 'completed';
-  const isCompleted = status === 'completed';
+  const status = route?.params?.status === 'rejected' ? 'rejected' : 'Completed';
+  const isCompleted = status === 'Completed';
 
   const [records, setRecords]     = useState([]);
   const [loading, setLoading]     = useState(false);

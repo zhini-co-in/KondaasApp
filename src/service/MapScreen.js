@@ -13,7 +13,7 @@ const MapScreen = () => {
     : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address || city || '')}`;
 
   // Replace current screen (remove MapScreen from stack)
-  navigation.replace('InProgress'); // <-- unga previous screen name
+  navigation.replace('In-Progress'); // <-- unga previous screen name
 
   setTimeout(() => {
     Linking.openURL(url);

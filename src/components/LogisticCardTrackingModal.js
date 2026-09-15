@@ -18,31 +18,31 @@ const buildStepsForCard = (card) => {
       time: card.scannedAt
         ? new Date(card.scannedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : '',
-      // Card only reaches accepted/inprogress/picked/completed AFTER the
+      // Card only reaches Accepted/In-Progress/picked/Completed AFTER the
       // initial scan, so this step is done for anything past 'pending'.
       done: status !== 'pending',
     },
     {
       id: 2,
       label: 'Picked from Warehouse',
-      sub: status === 'inprogress' ? 'Waiting for pickup confirmation' : '',
+      sub: status === 'In-Progress' ? 'Waiting for pickup confirmation' : '',
       time:
-        status === 'picked' || status === 'completed'
+        status === 'picked' || status === 'Completed'
           ? card.pickedAt
             ? new Date(card.pickedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             : ''
           : '',
-      done: status === 'picked' || status === 'completed',
+      done: status === 'picked' || status === 'Completed',
     },
     {
       id: 3,
       label: 'Delivered to Installer',
       sub: status === 'picked' ? 'Complete delivery details below' : '',
       time:
-        status === 'completed' && card.deliveredAt
+        status === 'Completed' && card.deliveredAt
           ? new Date(card.deliveredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           : '',
-      done: status === 'completed',
+      done: status === 'Completed',
     },
   ];
 };
@@ -126,8 +126,8 @@ const LogisticCardTrackingModal = ({ visible, card, onClose, onConfirmPickup, on
                   </View>
                 </View>
 
-                {/* Confirm Pickup — only for step 2, only when card is inprogress */}
-                {step.id === 2 && status === 'inprogress' && (
+                {/* Confirm Pickup — only for step 2, only when card is In-Progress */}
+                {step.id === 2 && status === 'In-Progress' && (
                   <TouchableOpacity
                     style={styles.confirmPickupBtn}
                     onPress={() => onConfirmPickup?.(card)}
@@ -160,10 +160,10 @@ const LogisticCardTrackingModal = ({ visible, card, onClose, onConfirmPickup, on
               </View>
             ))}
 
-            {status === 'completed' && (
-              <View style={styles.completedPill}>
+            {status === 'Completed' && (
+              <View style={styles.CompletedPill}>
                 <Ionicons name="checkmark-done-circle" size={16} color="#3B6D11" />
-                <Text style={styles.completedPillText}>Delivered & Completed</Text>
+                <Text style={styles.CompletedPillText}>Delivered & Completed</Text>
               </View>
             )}
           </ScrollView>
@@ -246,9 +246,9 @@ const styles = StyleSheet.create({
   },
   markDeliveredText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
-  completedPill: {
+  CompletedPill: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
     backgroundColor: '#EAF3DE', paddingVertical: 12, borderRadius: 10, marginTop: 6,
   },
-  completedPillText: { color: '#3B6D11', fontWeight: '700', fontSize: 13 },
+  CompletedPillText: { color: '#3B6D11', fontWeight: '700', fontSize: 13 },
 });

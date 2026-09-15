@@ -176,7 +176,7 @@ export const acceptAssignedDeal = async (dealId) => {
 
     const payload = {
       id: dealId.toString(),
-      status: 'accepted'
+      status: 'Accepted'
     };
 
     console.log('📤 Accepting Deal:', payload);

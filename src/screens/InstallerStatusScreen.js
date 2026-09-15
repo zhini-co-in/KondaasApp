@@ -14,7 +14,7 @@ const fmtDate = val => {
 
 const initial = name => (name && name.trim() ? name.trim().charAt(0).toUpperCase() : '?');
 
-// Normalise a raw installer_completed / installer_reject document into a
+// Normalise a raw installer_Completed / installer_reject document into a
 // consistent shape the card UI can render, regardless of which field names
 // the backend happened to store the value under.
 const normaliseInstallerDoc = (raw, idx) => ({
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
 });
 
 const InstallerCard = ({ item, type }) => {
-  const isDone = type === 'completed';
+  const isDone = type === 'Completed';
   return (
     <View style={styles.card}>
       <LinearGradient
@@ -180,9 +180,9 @@ const InstallerCard = ({ item, type }) => {
 };
 
 const InstallerStatusScreen = ({ navigation, route }) => {
-  const initialTab = route?.params?.status === 'rejected' ? 'rejected' : 'completed';
+  const initialTab = route?.params?.status === 'rejected' ? 'rejected' : 'Completed';
   const [tab, setTab]             = useState(initialTab);
-  const [completedData, setCompletedData] = useState([]);
+  const [CompletedData, setCompletedData] = useState([]);
   const [rejectedData, setRejectedData]   = useState([]);
   const [loading, setLoading]     = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -191,12 +191,12 @@ const InstallerStatusScreen = ({ navigation, route }) => {
   const fetchData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const [completedRes, rejectedRes] = await Promise.all([
+      const [CompletedRes, rejectedRes] = await Promise.all([
         API.get('/admin/installer-completions'),
         API.get('/admin/installer-rejections'),
       ]);
 
-      const rawCompleted = Array.isArray(completedRes.data?.data) ? completedRes.data.data : [];
+      const rawCompleted = Array.isArray(CompletedRes.data?.data) ? CompletedRes.data.data : [];
       const rawRejected  = Array.isArray(rejectedRes.data?.data) ? rejectedRes.data.data : [];
 
       setCompletedData(rawCompleted.map((item, idx) => normaliseInstallerDoc(item, `ic_${idx}`)));
@@ -209,7 +209,7 @@ const InstallerStatusScreen = ({ navigation, route }) => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const activeData = tab === 'completed' ? completedData : rejectedData;
+  const activeData = tab === 'Completed' ? CompletedData : rejectedData;
 
   const filteredData = searchQuery.trim()
     ? activeData.filter(i => {
@@ -235,12 +235,12 @@ const InstallerStatusScreen = ({ navigation, route }) => {
 
         <View style={styles.tabRow}>
           <TouchableOpacity
-            style={[styles.tabBtn, tab === 'completed' && styles.tabBtnActive]}
-            onPress={() => setTab('completed')}
+            style={[styles.tabBtn, tab === 'Completed' && styles.tabBtnActive]}
+            onPress={() => setTab('Completed')}
             activeOpacity={0.85}
           >
-            <Text style={[styles.tabBtnText, tab === 'completed' && styles.tabBtnTextActive]}>
-              Completed ({completedData.length})
+            <Text style={[styles.tabBtnText, tab === 'Completed' && styles.tabBtnTextActive]}>
+              Completed ({CompletedData.length})
             </Text>
           </TouchableOpacity>
           <TouchableOpacity

@@ -42,12 +42,13 @@ import {
 import LogisticDealCard from '../components/LogisticDealCard';
 import LogisticCardTrackingModal from '../components/LogisticCardTrackingModal';
 import PackageScanVerifyModal from '../components/PackageScanVerifyModal';
+import DispatchForm from '../components/DispatchForm';
 import { saveScannedProduct, confirmDeliveryToWarehouse, getNewAssignedCards, updateLogisticsStatus } from '../service/logisticProductService';
 import {
   mergeCardsWithLocalProgress,
   setLocalDispatchStatus,
   acceptDealLocalFirst,
-  updateDispatchStatusRemote, // FIX: needed to actually push 'inprogress' to the backend
+  updateDispatchStatusRemote, // FIX: needed to actually push 'In-Progress' to the backend
 } from '../service/dispatchProgressService';
 
 const LogisticScreen = ({ navigation }) => {
@@ -82,7 +83,7 @@ const LogisticScreen = ({ navigation }) => {
   const cardScanLock = useRef(false);
 
 
-  // Per-card tracking modal (kept for "View full details" / completed cards)
+  // Per-card tracking modal (kept for "View full details" / Completed cards)
   const [trackingModalVisible, setTrackingModalVisible] = useState(false);
   const [trackingModalCard, setTrackingModalCard] = useState(null);
 
@@ -93,6 +94,8 @@ const LogisticScreen = ({ navigation }) => {
   // triggered the modal so we know what to update once verified.
   const [verifyModalVisible, setVerifyModalVisible] = useState(false);
   const [verifyTarget, setVerifyTarget] = useState(null); // { card, index, action: 'pickup' | 'delivery', pkg?, key? }
+  const [deliveryFormVisible, setDeliveryFormVisible] = useState(false);
+const [deliveryFormPkg, setDeliveryFormPkg] = useState(null);
 
   // Reject-reason popup — mirrors the Deal Details modal's design
   // (dark overlay + white rounded card). rejectTarget remembers WHICH
@@ -280,18 +283,18 @@ const LogisticScreen = ({ navigation }) => {
 
           await saveScannedProduct(value, locationRef.current);
 
-          await setLocalDispatchStatus(card.deal_id, 'inprogress');
+          await setLocalDispatchStatus(card.deal_id, 'In-Progress');
 
           // FIX: setLocalDispatchStatus only ever wrote to AsyncStorage —
           // it never told the backend, which is why dispatch_status stayed
           // null on the server after scanning. Push it through the same
           // remote path the (already-working) delivered flow uses.
-          updateDispatchStatusRemote(card.deal_id, 'inprogress').catch((e) => {
-            console.warn('⚠️ inprogress dispatch_status push failed:', e?.message);
+          updateDispatchStatusRemote(card.deal_id, 'In-Progress').catch((e) => {
+            console.warn('⚠️ In-Progress dispatch_status push failed:', e?.message);
           });
 
           setNewAssignedCards((prev) =>
-            prev.map((item, i) => (i === index ? { ...item, status: 'inprogress' } : item))
+            prev.map((item, i) => (i === index ? { ...item, status: 'In-Progress' } : item))
           );
         } catch (e) {
           console.error('[cardCodeScanner] scan handling failed:', e);
@@ -313,7 +316,7 @@ const LogisticScreen = ({ navigation }) => {
     setShowDealModal(true);
   };
 
-  // Accept — local-first. Flips AsyncStorage + the UI to "accepted"
+  // Accept — local-first. Flips AsyncStorage + the UI to "Accepted"
   // instantly; acceptDealLocalFirst() fires the backend call in the
   // background and never blocks/reverts this on failure (see
   // dispatchProgressService.js for details — it now also pushes the real
@@ -394,18 +397,18 @@ const LogisticScreen = ({ navigation }) => {
   };
 
   const markAsDropped = async (card, index) => {
-    await setLocalDispatchStatus(card.deal_id, 'completed');
+    await setLocalDispatchStatus(card.deal_id, 'Completed');
     updateDispatchStatusRemote(card.deal_id, 'delivered').catch((e) => {
       console.warn('⚠️ delivered dispatch_status push failed:', e?.message);
     });
     setNewAssignedCards((prev) =>
       prev.map((item, i) =>
-        i === index ? { ...item, status: 'completed', deliveredAt: new Date().toISOString() } : item
+        i === index ? { ...item, status: 'Completed', deliveredAt: new Date().toISOString() } : item
       )
     );
   };
 
-  // Per-card tracking sheet (used for "View full details" / completed cards)
+  // Per-card tracking sheet (used for "View full details" / Completed cards)
   // Opens the scan+verify modal instead of changing status directly.
   // `action` is 'pickup' (→ Picked) or 'delivery' (→ Dropped/Delivered).
   // Pass `pkg`/`key` for a PACKAGE-level action (from LogisticDealCard's
@@ -418,6 +421,18 @@ const LogisticScreen = ({ navigation }) => {
   const closeScanVerify = () => {
     setVerifyModalVisible(false);
     setVerifyTarget(null);
+  };
+
+  // Opens the Reached -> Photos -> Signature -> Submit form. Called from
+  // the "Reached" button's onPress. Actual stage change to 'delivered'
+  // happens only inside DispatchForm's onSubmitted (see JSX below).
+  const openDeliveryForm = (card, pkg) => {
+    setDeliveryFormPkg({
+      deal_id: card.deal_id,
+      package_number: pkg.package_number,
+      dispatch_number: card.deal_id,
+    });
+    setDeliveryFormVisible(true);
   };
 
   // Only place a card/package's status is actually allowed to change to
@@ -519,15 +534,15 @@ const LogisticScreen = ({ navigation }) => {
 
   // Map a card's raw status to one of the 3 tab columns
   const getCardColumn = (status) => {
-    if (status === 'completed') return 'completed';
-    if (status === 'accepted' || status === 'inprogress' || status === 'picked') return 'inprogress';
+    if (status === 'Completed') return 'Completed';
+    if (status === 'Accepted' || status === 'In-Progress' || status === 'picked') return 'In-Progress';
     return 'new'; // pending / undefined / rejected-filtered-out-already
   };
 
   const cardCounts = {
     new: newAssignedCards.filter((c) => getCardColumn(c.status) === 'new').length,
-    inprogress: newAssignedCards.filter((c) => getCardColumn(c.status) === 'inprogress').length,
-    completed: newAssignedCards.filter((c) => getCardColumn(c.status) === 'completed').length,
+    'In-Progress': newAssignedCards.filter((c) => getCardColumn(c.status) === 'In-Progress').length,
+    Completed: newAssignedCards.filter((c) => getCardColumn(c.status) === 'Completed').length,
   };
 
   // Cards to show on the OFF (offline) screen — "New" status only
@@ -600,8 +615,9 @@ const LogisticScreen = ({ navigation }) => {
                     onReject={rejectAssignedCard}
                     onStartScan={openScannerForCard}
                     onMarkPicked={(c, pkg, key) => openScanVerify(c, index, 'pickup', pkg, key)}
-                    onMarkDropped={(c, pkg, key) => openScanVerify(c, index, 'delivery', pkg, key)}
-                    onSeeMore={showFullDealDetails}
+onMarkDropped={(c, pkg, key) => openScanVerify(c, index, 'delivery', pkg, key)}
+onOpenDeliveryForm={(c, pkg) => openDeliveryForm(c, pkg)}
+onSeeMore={showFullDealDetails}
                     onCardPress={openCardTracking}
                     onStartPickup={(card) => navigation.navigate('PackagePickupScreen', { card, onUpdate: loadNewAssignedCards })}
                   />
@@ -643,8 +659,8 @@ const LogisticScreen = ({ navigation }) => {
                         {/* Reusable per-status section renderer */}
             {[
               { key: 'new', label: 'Deals - New', dot: '#ED1C25' },
-              { key: 'inprogress', label: 'In Progress', dot: '#f97316' },
-              { key: 'completed', label: 'Completed', dot: '#22c55e' },
+              { key: 'In-Progress', label: 'In Progress', dot: '#f97316' },
+              { key: 'Completed', label: 'Completed', dot: '#22c55e' },
             ].map((section) => {
               const sectionCards = newAssignedCards.filter(
                 (card) => getCardColumn(card.status) === section.key
@@ -675,8 +691,9 @@ const LogisticScreen = ({ navigation }) => {
                         onReject={rejectAssignedCard}
                         onStartScan={openScannerForCard}
                         onMarkPicked={(c, pkg, key) => openScanVerify(c, index, 'pickup', pkg, key)}
-                        onMarkDropped={(c, pkg, key) => openScanVerify(c, index, 'delivery', pkg, key)}
-                        onSeeMore={showFullDealDetails}
+onMarkDropped={(c, pkg, key) => openScanVerify(c, index, 'delivery', pkg, key)}
+onOpenDeliveryForm={(c, pkg) => openDeliveryForm(c, pkg)}
+onSeeMore={showFullDealDetails}
                         onCardPress={openCardTracking}
                         onStartPickup={(card) => navigation.navigate('PackagePickupScreen', { card, onUpdate: loadNewAssignedCards })}
                       />
@@ -865,6 +882,19 @@ const LogisticScreen = ({ navigation }) => {
         onVerified={handleVerifyConfirmed}
         onClose={closeScanVerify}
       />
+            {/* DISPATCH FORM — Reached -> Photos -> Signature -> Submit.
+          Only place a package actually flips to 'delivered' via advancePackage. */}
+      <DispatchForm
+        visible={deliveryFormVisible}
+        pkg={deliveryFormPkg}
+        onClose={() => { setDeliveryFormVisible(false); setDeliveryFormPkg(null); }}
+        onSubmitted={(result) => {
+          const key = deliveryFormPkg.package_number;
+          cardRefs.current[deliveryFormPkg.deal_id]?.advancePackage(
+            { package_number: key }, key, 'delivered', 'delivered'
+          );
+        }}
+      />
 
       {/* PRODUCT SCAN MODAL - per card */}
       <Modal visible={cardScanModalVisible} transparent={false} animationType="slide" onRequestClose={closeCardScanner}>
@@ -981,7 +1011,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  completedPill: {
+  CompletedPill: {
     backgroundColor: '#22c55e',
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -990,7 +1020,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  completedPillText: {
+  CompletedPillText: {
     color: '#fff',
     fontSize: 13,
     fontWeight: '700',

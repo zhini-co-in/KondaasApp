@@ -13,7 +13,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 // ─────────────────────────────────────────────────────────────────────────────
 const STATUS_CONFIG = {
   pending:    { color: '#ED1C25', label: 'New',         icon: 'ellipse-outline' },
-  accepted:   { color: '#4f46e5', label: 'Accepted',     icon: 'checkmark-circle-outline' },
+  Accepted:   { color: '#4f46e5', label: 'Accepted',     icon: 'checkmark-circle-outline' },
   inprogress: { color: '#f97316', label: 'In Progress',  icon: 'sync-outline' },
   picked:     { color: '#0ea5e9', label: 'Picked Up',    icon: 'cube-outline' },
   completed:  { color: '#22c55e', label: 'Completed',    icon: 'checkmark-done-circle' },
@@ -36,6 +36,7 @@ const getPackageAccent = (pkgStatus) =>
 const LOCAL_STAGE_CONFIG = {
   pending:   { label: 'Not Picked', color: '#94a3b8' },
   picked:    { label: 'Picked Up',  color: '#0ea5e9' },
+  reached:   { label: 'Reached',    color: '#f97316' },
   delivered: { label: 'Delivered',  color: '#22c55e' },
 };
 
@@ -63,6 +64,7 @@ const LogisticDealCard = forwardRef(({
   onMarkDropped,
   onCardPress,
   onStartPickup, // navigates to PackagePickupScreen
+  onOpenDeliveryForm,
 }, ref) => {
   // Which single package row is expanded (accordion — only one open at a time
   // so tapping a package shows ONLY that package's address, nothing else).
@@ -101,7 +103,7 @@ const LogisticDealCard = forwardRef(({
     ? new Date(card.assignedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
     : '—';
 
-  const KNOWN_FLOW_STATUSES = ['accepted', 'inprogress', 'picked', 'completed'];
+  const KNOWN_FLOW_STATUSES = ['Accepted', 'inprogress', 'picked', 'completed'];
   const normalizedStatus = KNOWN_FLOW_STATUSES.includes(status) ? status : 'pending';
 
   // REMOVED: tapping the card no longer opens the "Order Tracking" modal
@@ -137,6 +139,12 @@ const LogisticDealCard = forwardRef(({
       setBusyPackageKey(null);
     }
   };
+    // "Reached" — just a local stage bump, no scan/verify gate needed.
+  // Doesn't push a remote status change (server enum has no 'reached').
+  const markReachedLocal = async (pkg, key) => {
+    setPackageStages((prev) => ({ ...prev, [key]: 'reached' }));
+    await setLocalPackageStage(card.deal_id, pkg.package_number, 'reached');
+  };
 
   // Expose advancePackage to the parent so it can be invoked ONLY after
   // a successful scan+verify confirmation (see LogisticScreen).
@@ -157,7 +165,7 @@ const LogisticDealCard = forwardRef(({
           </View>
         );
 
-      case 'accepted':
+      case 'Accepted':
       case 'inprogress':
       case 'picked':
         return (
@@ -330,27 +338,35 @@ const LogisticDealCard = forwardRef(({
                         once the parent calls this card's advancePackage via
                         ref, after the driver confirms the scan. */}
                     <View style={styles.pkgActionsRow}>
-                      {stage === 'picked' && (
-                        <TouchableOpacity
-                          disabled={isBusy}
-                          style={[styles.pkgActionBtn, { backgroundColor: '#22c55e', opacity: isBusy ? 0.6 : 1 }]}
-                          onPress={() =>
-                            onMarkDropped
-                              ? onMarkDropped(card, pkg, key)
-                              : advancePackage(pkg, key, 'delivered', 'delivered')
-                          }
-                        >
-                          <Ionicons name="checkmark-done" size={14} color="#fff" />
-                          <Text style={styles.pkgActionBtnText}>{isBusy ? 'Updating…' : 'Mark Delivered'}</Text>
-                        </TouchableOpacity>
-                      )}
-                      {stage === 'delivered' && (
-                        <View style={[styles.pkgActionBtn, { backgroundColor: '#EAF3DE' }]}>
-                          <Ionicons name="checkmark-done-circle" size={14} color="#3B6D11" />
-                          <Text style={[styles.pkgActionBtnText, { color: '#3B6D11' }]}>Delivered</Text>
-                        </View>
-                      )}
-                    </View>
+  {stage === 'picked' && (
+    <TouchableOpacity
+      disabled={isBusy}
+      style={[styles.pkgActionBtn, { backgroundColor: '#f97316', opacity: isBusy ? 0.6 : 1 }]}
+      onPress={() => markReachedLocal(pkg, key)}
+    >
+      <Ionicons name="location" size={14} color="#fff" />
+      <Text style={styles.pkgActionBtnText}>Reached</Text>
+    </TouchableOpacity>
+  )}
+
+  {stage === 'reached' && (
+    <TouchableOpacity
+      disabled={isBusy}
+      style={[styles.pkgActionBtn, { backgroundColor: '#8b5cf6', opacity: isBusy ? 0.6 : 1 }]}
+      onPress={() => onOpenDeliveryForm?.(card, pkg, key)}
+    >
+      <Ionicons name="document-text-outline" size={14} color="#fff" />
+      <Text style={styles.pkgActionBtnText}>Form</Text>
+    </TouchableOpacity>
+  )}
+
+  {stage === 'delivered' && (
+    <View style={[styles.pkgActionBtn, { backgroundColor: '#EAF3DE' }]}>
+      <Ionicons name="checkmark-done-circle" size={14} color="#3B6D11" />
+      <Text style={[styles.pkgActionBtnText, { color: '#3B6D11' }]}>Delivered</Text>
+    </View>
+  )}
+</View>
                   </View>
                 )}
               </View>

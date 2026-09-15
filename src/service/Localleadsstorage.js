@@ -4,7 +4,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const LEADS_KEY    = 'leads:accepted';   // accepted/inprogress/completed leads
+const LEADS_KEY    = 'leads:Accepted';   // Accepted/In-Progress/Completed leads
 const TEMPLATE_KEY = 'leads:template';   // cached form template
 const FORMS_KEY     = 'leads:forms';     // submitted form data (offline)
 
@@ -44,14 +44,14 @@ export const getAcceptedLeads = async () => {
 export const saveAcceptedLead = async (item) => {
   const existing = await getAcceptedLeads();
   if (existing.some((l) => l.id === item.id)) return existing;
-  const updated = [...existing, { ...item, status: 'accepted' }];
+  const updated = [...existing, { ...item, status: 'Accepted' }];
   await _save(LEADS_KEY, updated);
   return updated;
 };
 
 /**
  * Lead status மட்டும் update பண்ணு.
- * status: 'accepted' | 'inprogress' | 'completed'
+ * status: 'Accepted' | 'In-Progress' | 'Completed'
  */
 export const updateAcceptedLeadStatus = async (leadId, status) => {
   const existing = await getAcceptedLeads();
@@ -97,8 +97,8 @@ export const mergeWithServerLeads = async (serverLeads) => {
     const ll = localMap[sl.id];
     if (!ll) return sl;
     // Local status-ஐ trust பண்ணு (offline action இருக்கலாம்)
-    // But server says 'completed' → always trust server
-    const finalStatus = sl.status === 'completed' ? 'completed' : ll.status;
+    // But server says 'Completed' → always trust server
+    const finalStatus = sl.status === 'Completed' ? 'Completed' : ll.status;
     return { ...ll, ...sl, status: finalStatus };
   });
 

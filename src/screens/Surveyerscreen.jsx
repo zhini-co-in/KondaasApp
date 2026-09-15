@@ -71,7 +71,7 @@ const SurveyerScreen = () => {
 
   const [isOn, setIsOn]                     = useState(false);
   const [leads, setLeads]                   = useState([]);
-  const [acceptedLeads, setAcceptedLeads]   = useState([]);
+  const [AcceptedLeads, setAcceptedLeads]   = useState([]);
   const [completedLeads, setCompletedLeads] = useState([]);
   const [leadsLoading, setLeadsLoading]     = useState(false);
   const [activeFilter, setActiveFilter]     = useState('all');
@@ -84,18 +84,18 @@ const SurveyerScreen = () => {
   const [rejectComment, setRejectComment]           = useState('');
   const [rejectLeadId, setRejectLeadId]             = useState(null);
 
-  // acceptedLeadsRef – setState inside setState crash தடுக்க
-  const acceptedLeadsRef = useRef([]);
+  // AcceptedLeadsRef – setState inside setState crash தடுக்க
+  const AcceptedLeadsRef = useRef([]);
   const isCapturingPhoto = useRef(false);
 
   // 👇 புதுசா சேர்த்தது — ஒரே நேரத்துல template cache 2 தடவை ஓடாம தடுக்க
   const templateCacheInFlight = useRef(false);
 
-  // acceptedLeads set பண்ணும்போது ref-ஐயும் sync பண்ண
+  // AcceptedLeads set பண்ணும்போது ref-ஐயும் sync பண்ண
   const setAcceptedLeadsSafe = useCallback((updater) => {
     setAcceptedLeads((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      acceptedLeadsRef.current = next;
+      AcceptedLeadsRef.current = next;
       return next;
     });
   }, []);
@@ -197,31 +197,38 @@ useEffect(() => {
   }, []);
 
   // useFocusEffect – setState inside setState CRASH FIX + auto refresh on screen focus
-  useFocusEffect(
-    useCallback(() => {
-      // ✅ Photo எடுக்கும்போது refresh skip பண்ணு
+useFocusEffect(
+  useCallback(() => {
+    const run = async () => {
+      // 👇 CHANGED: fire-and-forget இல்லாம await பண்ணு — server merge
+      // முதல்ல முடிஞ்சிட்டு, அப்புறம் தான் completedIds move நடக்கணும்.
+      // இல்லைனா server response பிந்தி வந்து completedIds move-ஐ
+      // overwrite பண்ணிடும் (lead மறுபடி Accepted-ல தெரியும்).
       if (!isCapturingPhoto.current) {
-        fetchAndMergeLeads();
+        await fetchAndMergeLeads();
       }
 
-      const completedIds = route.params?.completedIds;
-      if (!completedIds || completedIds.length === 0) return;
-      navigation.setParams({ completedIds: null });
+      const completedIds = route.params?.CompletedIds;
+      if (!completedIds || CompletedIds.length === 0) return;
+      navigation.setParams({ CompletedIds: null });
 
-      const toMove = acceptedLeadsRef.current.filter((l) =>
+      const toMove = AcceptedLeadsRef.current.filter((l) =>
         completedIds.includes(l.id)
       );
       setAcceptedLeadsSafe((prev) =>
-        prev.filter((l) => !completedIds.includes(l.id))
+        prev.filter((l) => !CompletedIds.includes(l.id))
       );
       if (toMove.length > 0) {
         setCompletedLeads((c) => [
           ...c.filter((cl) => !toMove.some((m) => m.id === cl.id)),
-          ...toMove.map((l) => ({ ...l, status: 'completed' })),
+          ...toMove.map((l) => ({ ...l, status: 'Completed' })),
         ]);
       }
-    }, [route.params?.completedIds])
-  );
+    };
+
+    run();
+  }, [route.params?.completedIds])
+);
 
   // ── Restore state ─────────────────────────────────────────────────────────
   const restoreState = async () => {
@@ -240,11 +247,11 @@ useEffect(() => {
     const local = await getAcceptedLeads();
     if (!isMounted.current) return;
 
-    const accepted  = local.filter((l) => l.status === 'accepted' || l.status === 'inprogress' || l.status === 'hold');
-    const completed = local.filter((l) => l.status === 'completed');
+    const Accepted  = local.filter((l) => l.status === 'Accepted' || l.status === 'In-Progress' || l.status === 'hold');
+    const completed = local.filter((l) => l.status === 'Completed');
 
-    acceptedLeadsRef.current = accepted;
-    setAcceptedLeads(accepted);
+    AcceptedLeadsRef.current = Accepted;
+    setAcceptedLeads(Accepted);
     setCompletedLeads(completed);
   };
 
@@ -297,7 +304,7 @@ useEffect(() => {
           whatsappNo: item.whatsappNo,
           email:      item.email,
           address:    fullAddress,
-          status:     item.siteSurveyStatus ?? 'notassigned',
+          status:     item.siteSurveyStatus ?? 'Not-Assigned',
 
           scheduledAt: item.siteSurveyDateTime || null,
           siteSurveyAssignedBy: item.CreatedBy || item.createdBy || null,
@@ -322,17 +329,17 @@ useEffect(() => {
       if (!isMounted.current) return;
 
       setLeads(
-        mapped.filter((l) => l.status === 'notassigned' && !rejectedIds.includes(l.id))
+        mapped.filter((l) => l.status === 'Not-Assigned' && !rejectedIds.includes(l.id))
       );
 
-      const serverNonNew = mapped.filter((l) => l.status !== 'notassigned');
+      const serverNonNew = mapped.filter((l) => l.status !== 'Not-Assigned');
       const merged       = await mergeWithServerLeads(serverNonNew);
 
-      const accepted  = merged.filter((l) => l.status === 'accepted' || l.status === 'inprogress' || l.status === 'hold');
-      const completed = merged.filter((l) => l.status === 'completed');
+      const Accepted  = merged.filter((l) => l.status === 'Accepted' || l.status === 'In-Progress' || l.status === 'hold');
+      const completed = merged.filter((l) => l.status === 'Completed');
 
-      acceptedLeadsRef.current = accepted;
-      setAcceptedLeads(accepted);
+      AcceptedLeadsRef.current = Accepted;
+      setAcceptedLeads(Accepted);
       setCompletedLeads(completed);
 
     } catch (err) {
@@ -447,7 +454,7 @@ useEffect(() => {
 
     setAcceptedLeadsSafe((prev) => {
       if (prev.some((l) => l.id === item.id)) return prev;
-      return [...prev, { ...item, status: 'accepted' }];
+      return [...prev, { ...item, status: 'Accepted' }];
     });
 
     // 👇 புதுசா சேர்த்தது: Accept பண்ணதும் form template இன்னும் cache
@@ -457,20 +464,13 @@ useEffect(() => {
     });
 
     const surveyorNumber = await getSurveyorNumber();
-    const acceptedAt     = Date.now();
+    const AcceptedAt     = Date.now();
     const payload        = { mobile: item.phone, surveyorNumber };
 
     await enqueue(`accept_${item.id}`, 'ACCEPT_LEAD', payload);
 
     if (isOnline) {
-      tryApi(() => API.post('/order/accept', payload));
-      tryApi(() => API.put('/order/updatestatus', { id: item.dealId, status: 'accepted' }));
-      tryApi(() => API.post('/order/sync-status', {
-        customerMobile: item.phone,
-        surveyorNumber,
-        status:     'accepted',
-        receivedAt: acceptedAt,
-      }));
+      tryApi(() => API.put('/order/updatestatus', { id: item.dealId, status: 'Accepted' }));
     }
   };
 
@@ -481,59 +481,56 @@ useEffect(() => {
     setRejectModalVisible(true);
   };
 
-  const confirmReject = async () => {
-    if (!rejectComment.trim()) {
-      Alert.alert('Error', 'Please enter a reason for rejection.');
-      return;
+const confirmReject = async () => {
+  if (!rejectComment.trim()) {
+    Alert.alert('Error', 'Please enter a reason for rejection.');
+    return;
+  }
+
+  const lead = leads.find((l) => l.id === rejectLeadId);
+  if (!lead) return;
+
+  if (!isOnline) {
+    Alert.alert('No Connection', 'Rejecting a lead requires internet connection.');
+    return;
+  }
+
+  const surveyorNumber = await getSurveyorNumber();
+
+  try {
+    await API.post('/order/reject', {
+      deal_id: lead.dealId,          // 👈 backend matches on deal_id for Zoho sync
+      customerMobile: lead.phone,
+      name: lead.name,
+      address: lead.address,
+      city: lead.city,
+      referredBy: lead.referredBy,
+      surveyorNumber,
+      comment: rejectComment.trim(),
+      receivedAt: Date.now(),
+    });
+
+    // ❌ removed — /order/reject already sets siteSurveyStatus: "Rejected"
+    // and pushes to Zoho. A separate /order/delete here would wipe the
+    // deal doc the reject endpoint just updated.
+
+    setLeads((prev) => prev.filter((l) => l.id !== rejectLeadId));
+
+    const existing    = await AsyncStorage.getItem('rejected_lead_ids');
+    const rejectedIds = existing ? JSON.parse(existing) : [];
+    if (!rejectedIds.includes(rejectLeadId)) {
+      rejectedIds.push(rejectLeadId);
+      await AsyncStorage.setItem('rejected_lead_ids', JSON.stringify(rejectedIds));
     }
 
-    const lead = leads.find((l) => l.id === rejectLeadId);
-    if (!lead) return;
-
-    if (!isOnline) {
-      Alert.alert('No Connection', 'Rejecting a lead requires internet connection.');
-      return;
-    }
-
-    const surveyorNumber = await getSurveyorNumber();
-
-    try {
-      await API.post('/order/reject', {
-        customerMobile: lead.phone,
-        name:           lead.name,      // 👈 customerName -> name
-        address:        lead.address, 
-         city: lead.city,          // ➕ add
-  referredBy: lead.referredBy,  // 👈 customerAddress -> address
-        surveyorNumber,
-        comment:    rejectComment.trim(),
-        receivedAt: Date.now(),
-      });
-
-      if (lead.dealId) {
-        try {
-          await API.delete('/order/delete', { data: { dealId: lead.dealId } });
-        } catch (delErr) {
-          console.log
-        }
-      }
-
-      setLeads((prev) => prev.filter((l) => l.id !== rejectLeadId));
-
-      const existing    = await AsyncStorage.getItem('rejected_lead_ids');
-      const rejectedIds = existing ? JSON.parse(existing) : [];
-      if (!rejectedIds.includes(rejectLeadId)) {
-        rejectedIds.push(rejectLeadId);
-        await AsyncStorage.setItem('rejected_lead_ids', JSON.stringify(rejectedIds));
-      }
-
-      setRejectModalVisible(false);
-      setRejectLeadId(null);
-      setRejectComment('');
-      Alert.alert('Success', 'Lead rejected successfully.');
-    } catch (err) {
-      Alert.alert('Error', err?.response?.data?.error || 'Failed to reject.');
-    }
-  };
+    setRejectModalVisible(false);
+    setRejectLeadId(null);
+    setRejectComment('');
+    Alert.alert('Success', 'Lead rejected successfully.');
+  } catch (err) {
+    Alert.alert('Error', err?.response?.data?.error || 'Failed to reject.');
+  }
+};
 
 
   // handleToggle-ல:
@@ -595,7 +592,7 @@ useEffect(() => {
             stopHighFrequencyTracking();
             if (Platform.OS === 'android') NativeModules.StartStopService?.stopService();
 
-            // ✅ 1. leads:accepted / leads:template / leads:forms clear
+            // ✅ 1. leads:Accepted / leads:template / leads:forms clear
             await clearAllLocalData();
 
             // ✅ 2. மத்த manual AsyncStorage keys clear
@@ -613,7 +610,7 @@ useEffect(() => {
             }
 
             // ✅ 4. in-memory state ellam reset pannu (next login-la stale UI varakudathu)
-            acceptedLeadsRef.current = [];
+            AcceptedLeadsRef.current = [];
             setLeads([]);
             setAcceptedLeadsSafe([]);
             setCompletedLeads([]);
@@ -782,10 +779,10 @@ useEffect(() => {
 
   // ── Start / Resume ────────────────────────────────────────────────────────
   const handleStart = async (id) => {
-    const lead = acceptedLeadsRef.current.find((l) => l.id === id);
+    const lead = AcceptedLeadsRef.current.find((l) => l.id === id);
     if (!lead) return;
-    const alreadyInProgress = acceptedLeadsRef.current.find(
-      (l) => l.status === 'inprogress' && l.id !== id
+    const alreadyInProgress = AcceptedLeadsRef.current.find(
+      (l) => l.status === 'In-Progress' && l.id !== id
     );
     if (alreadyInProgress) {
       Alert.alert(
@@ -819,7 +816,7 @@ useEffect(() => {
         const mins = totalMins % 60;
         etaText = mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`;
       }
-    let toSiteKm = distMeters / 1000;
+        let toSiteKm = distMeters / 1000;
       try {
         const road = await getRoadDistanceKm(
           locationRef.current.latitude, locationRef.current.longitude,
@@ -827,8 +824,20 @@ useEffect(() => {
         );
         if (road !== null) toSiteKm = road;
       } catch (e) {}
+
+      // 👇 CHANGED: site_distance_ key-ல fixed distance store பண்றதுக்கு பதிலா,
+      // Start click நேரத்து lat/long POINT-ஐ மட்டும் store பண்ணு.
+      // Reached click ஆகும்போது InProgressScreen.js → handleManualEnable இந்த
+      // point-ஐ வச்சு final distance calculate பண்ணும்.
       try {
-        await AsyncStorage.setItem(`site_distance_${id}`, String(toSiteKm));
+        await AsyncStorage.setItem(
+          `start_point_${id}`,
+          JSON.stringify({
+            latitude: locationRef.current.latitude,
+            longitude: locationRef.current.longitude,
+            capturedAt: Date.now(),
+          })
+        );
       } catch (e) {}
     }
 
@@ -842,27 +851,29 @@ useEffect(() => {
     }
 
     // STEP 2: Status update
-    await updateAcceptedLeadStatus(id, 'inprogress');
+    await updateAcceptedLeadStatus(id, 'In-Progress');
 
     setAcceptedLeadsSafe((prev) =>
-      prev.map((l) => l.id === id ? { ...l, status: 'inprogress' } : l)
+      prev.map((l) => l.id === id ? { ...l, status: 'In-Progress' } : l)
     );
 
-    await enqueue(`status_inprogress_${id}`, 'STATUS_UPDATE', {
-      mobile: lead.phone, status: 'inprogress',
-    });
+    await enqueue(`status_In-Progress_${id}`, 'STATUS_UPDATE', {
+  id: lead.dealId,        // 👈 added
+  mobile: lead.phone,
+  status: 'In-Progress',
+});
 
     if (isOnline) {
       const surveyorNumber = await getSurveyorNumber();
       const startAt = Date.now();
       const dueAt   = startAt + (totalMins * 60 * 1000);
 
-      tryApi(() => API.put('/order/updatestatus', { id: lead.dealId, status: 'inprogress' }));
-      tryApi(() => API.post('/order/inprogress', { mobile: lead.phone, surveyorNumber }));
+      tryApi(() => API.put('/order/updatestatus', { id: lead.dealId, status: 'In-Progress' }));
+      tryApi(() => API.post('/order/In-Progress', { mobile: lead.phone, surveyorNumber }));
       tryApi(() => API.post('/order/sync-status', {
         customerMobile: lead.phone,
         surveyorNumber,
-        status: 'inprogress',
+        status: 'In-Progress',
         startAt,
         dueAt,
       }));
@@ -890,8 +901,8 @@ useEffect(() => {
 
     startHighFrequencyTracking(() => locationRef.current);
 
-    navigation.navigate('InProgress', {
-      lead:            { ...lead, status: 'inprogress', dealId: lead.dealId },
+    navigation.navigate('In-Progress', {
+      lead:            { ...lead, status: 'In-Progress', dealId: lead.dealId },
       initialLocation: locationRef.current,
     });
   };
@@ -904,7 +915,7 @@ useEffect(() => {
   // lead already running-ஆ இருந்தா, அந்த lead-ஐ முதல்ல complete/hold
   // பண்ணனும்னு block பண்ணும் — ஒரே நேரத்துல 2 lead run ஆகக்கூடாது).
   const handleHold = async (id) => {
-    const lead = acceptedLeadsRef.current.find((l) => l.id === id);
+    const lead = AcceptedLeadsRef.current.find((l) => l.id === id);
     if (!lead) return;
 
     await updateAcceptedLeadStatus(id, 'hold');
@@ -933,11 +944,11 @@ useEffect(() => {
   };
 
   const handleUnhold = async (id) => {
-    const lead = acceptedLeadsRef.current.find((l) => l.id === id);
+    const lead = AcceptedLeadsRef.current.find((l) => l.id === id);
     if (!lead) return;
 
-    const alreadyInProgress = acceptedLeadsRef.current.find(
-      (l) => l.status === 'inprogress' && l.id !== id
+    const alreadyInProgress = AcceptedLeadsRef.current.find(
+      (l) => l.status === 'In-Progress' && l.id !== id
     );
     if (alreadyInProgress) {
       Alert.alert(
@@ -948,17 +959,19 @@ useEffect(() => {
       return;
     }
 
-    await updateAcceptedLeadStatus(id, 'inprogress');
+    await updateAcceptedLeadStatus(id, 'In-Progress');
     setAcceptedLeadsSafe((prev) =>
-      prev.map((l) => (l.id === id ? { ...l, status: 'inprogress' } : l))
+      prev.map((l) => (l.id === id ? { ...l, status: 'In-Progress' } : l))
     );
 
     await enqueue(`status_unhold_${id}`, 'STATUS_UPDATE', {
-      mobile: lead.phone, status: 'inprogress',
-    });
+  id: lead.dealId,        // 👈 added
+  mobile: lead.phone,
+  status: 'In-Progress',
+});
 
     if (isOnline) {
-      tryApi(() => API.put('/order/updatestatus', { id: lead.dealId, status: 'inprogress' }));
+      tryApi(() => API.put('/order/updatestatus', { id: lead.dealId, status: 'In-Progress' }));
     }
 
     startHighFrequencyTracking(() => locationRef.current);
@@ -1031,7 +1044,7 @@ useEffect(() => {
                       <LeadCard
                         key={item.id}
                         item={item}
-                        cardType="unaccepted"
+                        cardType="unAccepted"
                         currentLocation={locationRef.current}
                         onAccept={handleAccept}
                         onReject={handleReject}
@@ -1087,21 +1100,21 @@ useEffect(() => {
             {!leadsLoading && leads.map((item) => (
               <LeadCard
                 key={item.id} item={item} currentLocation={locationRef.current}
-                cardType="unaccepted" onAccept={handleAccept} onReject={handleReject}
+                cardType="unAccepted" onAccept={handleAccept} onReject={handleReject}
                 isDue={isSurveyDue(item.scheduledAt)}
               />
             ))}
 
             {/* Accepted / Completed */}
-            {(acceptedLeads.length > 0 || completedLeads.length > 0) && (
+            {(AcceptedLeads.length > 0 || completedLeads.length > 0) && (
               <>
                 <View style={[styles.sectionHeader, { justifyContent: 'space-between' }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <View style={[styles.sectionDot, {
-                      backgroundColor: activeFilter === 'completed' ? '#22c55e' : '#fd9104',
+                      backgroundColor: activeFilter === 'Completed' ? '#22c55e' : '#fd9104',
                     }]} />
                     <Text style={styles.sectionTitle}>
-                      {activeFilter === 'completed' ? 'Leads - Completed' : 'Leads - Accepted'}
+                      {activeFilter === 'Completed' ? 'Leads - Completed' : 'Leads - Accepted'}
                     </Text>
                   </View>
                   <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -1118,15 +1131,15 @@ useEffect(() => {
                       }}>All</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      onPress={() => setActiveFilter('completed')}
+                      onPress={() => setActiveFilter('Completed')}
                       style={{
                         paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12,
-                        backgroundColor: activeFilter === 'completed' ? '#22c55e' : '#e5e7eb',
+                        backgroundColor: activeFilter === 'Completed' ? '#22c55e' : '#e5e7eb',
                       }}
                     >
                       <Text style={{
                         fontSize: 12, fontWeight: 'bold',
-                        color: activeFilter === 'completed' ? '#fff' : '#555',
+                        color: activeFilter === 'Completed' ? '#fff' : '#555',
                       }}>Completed</Text>
                     </TouchableOpacity>
                   </View>
@@ -1134,11 +1147,11 @@ useEffect(() => {
 
                 {activeFilter === 'all' && (
                   <>
-                    {acceptedLeads.map((item) => (
+                    {AcceptedLeads.map((item) => (
                       <LeadCard
                         key={item.id}
                         item={item}
-                        cardType="accepted"
+                        cardType="Accepted"
                         currentLocation={locationRef.current}
                         onStart={handleStart}
                         onHold={handleHold}
@@ -1157,23 +1170,23 @@ useEffect(() => {
                         {completedLeads.map((item) => (
                           <LeadCard
                             key={item.id} item={item}
-                            currentLocation={locationRef.current} cardType="completed"
+                            currentLocation={locationRef.current} cardType="Completed"
                           />
                         ))}
                       </>
                     )}
-                    {acceptedLeads.length === 0 && completedLeads.length === 0 && (
+                    {AcceptedLeads.length === 0 && completedLeads.length === 0 && (
                       <Text style={styles.emptyText}>No leads yet.</Text>
                     )}
                   </>
                 )}
 
-                {activeFilter === 'completed' && (
+                {activeFilter === 'Completed' && (
                   completedLeads.length > 0
                     ? completedLeads.map((item) => (
                         <LeadCard
                           key={item.id} item={item}
-                          currentLocation={locationRef.current} cardType="completed"
+                          currentLocation={locationRef.current} cardType="Completed"
                         />
                       ))
                     : <Text style={styles.emptyText}>No completed leads yet.</Text>

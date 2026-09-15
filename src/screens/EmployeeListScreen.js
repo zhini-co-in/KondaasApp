@@ -282,14 +282,25 @@ const fmtRecordDate = val => {
   catch { return val; }
 };
 
+// DB stores these as strings like "8878.2 km" — Number() chokes on the
+// " km" suffix and returns NaN. Strip anything that isn't a digit/dot/minus
+// before parsing.
+const parseKm = raw => {
+  if (raw === null || raw === undefined) return 0;
+  if (typeof raw === 'number') return isNaN(raw) ? 0 : raw;
+  const cleaned = String(raw).replace(/[^0-9.-]/g, '');
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? 0 : n;
+};
+
 const normaliseDistance = (raw, idx) => ({
   id:         raw._id || String(idx),
   dealId:     raw.deal_id || '—',
   name:       raw.deal_name || '—',
   mobile:     raw.mobile || '—',
   surveyorName: raw.surveyor_name || '—',
-  toSite:     Number(raw.to_site ?? 0),
-  toOffice:   Number(raw.to_office ?? 0),
+  toSite:     parseKm(raw.to_site),
+  toOffice:   parseKm(raw.to_office),
   rawDate:    raw.createdAt || null,
   date:       fmtRecordDate(raw.createdAt),
 });

@@ -107,7 +107,7 @@ async function handleNotificationAccept(notifData) {
 
   try {
     const surveyorNumber = await getSurveyorNumber();
-    const acceptedAt     = Date.now();
+    const AcceptedAt     = Date.now();
 
     // local save (duplicate guard)
     const allLeads     = await getAcceptedLeads();
@@ -119,11 +119,11 @@ async function handleNotificationAccept(notifData) {
         phone:   mobile,
         name:    notifData.customerName || '',
         address: notifData.address      || '',
-        status:  'accepted',
+        status:  'Accepted',
       });
     }
 
-    const payload = { mobile, surveyorNumber, dealId, receivedAt: acceptedAt };
+    const payload = { mobile, surveyorNumber, dealId, receivedAt: AcceptedAt };
     const online  = await isOnlineNow();
 
     if (online) {
@@ -132,14 +132,14 @@ async function handleNotificationAccept(notifData) {
         const r1 = await API.post('/order/accept', payload);
         console.log('✅ accept:', r1?.data);
 
-        const r2 = await API.put('/order/updatestatus', { id: dealId, status: 'accepted' });
+        const r2 = await API.put('/order/updatestatus', { id: dealId, status: 'Accepted' });
         console.log('✅ updatestatus:', r2?.data);
 
         const r3 = await API.post('/order/sync-status', {
           customerMobile: mobile,
           surveyorNumber,
-          status:     'accepted',
-          receivedAt: acceptedAt,
+          status:     'Accepted',
+          receivedAt: AcceptedAt,
         });
         console.log('✅ sync-status:', r3?.data);
       } catch (apiErr) {

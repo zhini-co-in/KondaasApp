@@ -481,7 +481,7 @@ function CreateLeadScreen({ navigation }) {
           <View style={styles.formCard}>
             <SectionHeader icon="code-slash-outline" title="Developer Section" />
             <ToggleField label="SITE SURVEY REQUESTED" value={sitesurveyRequested} onChange={setSitesurveyRequested} />
-            <ToggleField label="TASK COMPLETED"        value={taskCompleted}       onChange={setTaskCompleted} />
+            <ToggleField label="TASK Completed"        value={taskCompleted}       onChange={setTaskCompleted} />
             <ToggleField label="QUOTE REQUESTED"       value={quoteRequested}      onChange={setQuoteRequested} />
           </View>
 

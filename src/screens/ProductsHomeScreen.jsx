@@ -55,7 +55,7 @@ const ProductsHomeScreen = () => {
   };
 
 // ─── Logout — ✅ FIX: full clear() போடாம, stale user cache மட்டும்
-// clear பண்றோம். leads:accepted / leads:forms / sync:queue இதெல்லாம்
+// clear பண்றோம். leads:Accepted / leads:forms / sync:queue இதெல்லாம்
 // NOT-YET-SYNCED offline data — logout ஆனாலும் இது தொடக்கூடாது,
 // இல்லனா surveyor-oda pending work (site observation forms, reached
 // status, etc.) permanent-ஆ போயிடும்.

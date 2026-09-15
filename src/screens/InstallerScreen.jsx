@@ -102,7 +102,7 @@ const InstallerScreen = ({ navigation }) => {
       let droppedList = [];
       let receivedList = [];
       let inProgressList = [];
-      let completedList = [];
+      let CompletedList = [];
 
       allProductsFromDB.forEach((item) => {
         const raw = item.rawValue || '';
@@ -130,18 +130,18 @@ const InstallerScreen = ({ navigation }) => {
         // Status wise split
         if (item.status === 'dropped') droppedList.push(productObj);
         else if (item.status === 'received') receivedList.push(productObj);
-        else if (item.status === 'inprogress') inProgressList.push(productObj);
-        else if (item.status === 'installed') completedList.push(productObj);
+        else if (item.status === 'In-Progress') In-ProgressList.push(productObj);
+        else if (item.status === 'installed') CompletedList.push(productObj);
         else receivedList.push(productObj); // default
       });
 
       setDroppedProducts(droppedList);
       setWarehouseReceived(receivedList);
-      setInProgress(inProgressList);
-      setInstalledProducts(completedList);
+      setIn-Progress(In-ProgressList);
+      setInstalledProducts(CompletedList);
 
       console.log(
-        `📊 Loaded: Dropped=${droppedList.length}, Received=${receivedList.length}, InProgress=${inProgressList.length}, Completed=${completedList.length}`,
+        `📊 Loaded: Dropped=${droppedList.length}, Received=${receivedList.length}, In-Progress=${In-ProgressList.length}, Completed=${CompletedList.length}`,
       );
     } catch (e) {
       console.error('loadAllProducts error:', e);
@@ -326,11 +326,11 @@ const InstallerScreen = ({ navigation }) => {
   const startInstallation = async () => {
     if (!selectedProduct) return;
 
-    // Update DB status → inprogress
+    // Update DB status → In-Progress
     const id = selectedProduct._id || selectedProduct.id;
-    await updateProductStatus(id, 'inprogress');
+    await updateProductStatus(id, 'In-Progress');
 
-    setInProgress((prev) => [...prev, selectedProduct]);
+    setIn-Progress((prev) => [...prev, selectedProduct]);
     const updated = warehouseReceived.filter((p) => p.orderId !== selectedProduct.orderId);
     setWarehouseReceived(updated);
     saveToStorage(updated);
@@ -344,7 +344,7 @@ const InstallerScreen = ({ navigation }) => {
     await updateProductStatus(id, 'installed');
 
     setInstalledProducts((prev) => [...prev, product]);
-    setInProgress((prev) => prev.filter((p) => p.orderId !== product.orderId));
+    setIn-Progress((prev) => prev.filter((p) => p.orderId !== product.orderId));
     Alert.alert('Success', 'Installation Completed');
   };
 
@@ -376,7 +376,7 @@ const InstallerScreen = ({ navigation }) => {
           ...trackingProducts,
           ...droppedProducts,
           ...warehouseReceived,
-          ...inProgress,
+          ...In-Progress,
           ...installedProducts,
         ];
 
@@ -389,21 +389,21 @@ const InstallerScreen = ({ navigation }) => {
       case 'received':
         return warehouseReceived;
 
-      case 'inprogress':
-        return inProgress;
+      case 'In-Progress':
+        return In-Progress;
 
-      case 'completed':
+      case 'Completed':
         return installedProducts;
 
       default:
-        return [...trackingProducts, ...droppedProducts, ...warehouseReceived, ...inProgress, ...installedProducts];
+        return [...trackingProducts, ...droppedProducts, ...warehouseReceived, ...In-Progress, ...installedProducts];
     }
   };
 
   const renderProductCard = (item) => {
     const isDropped = droppedProducts.some((p) => p.orderId === item.orderId);
     const isReceived = warehouseReceived.some((p) => p.orderId === item.orderId);
-    const isProgress = inProgress.some((p) => p.orderId === item.orderId);
+    const isProgress = In-Progress.some((p) => p.orderId === item.orderId);
     const isCompleted = installedProducts.some((p) => p.orderId === item.orderId);
 
     return (
@@ -676,8 +676,8 @@ const openTrackingDetails = (product) => {
                 { key: 'tracking', label: 'Product Tracking' },
                 { key: 'dropped', label: 'Dropped' },
                 { key: 'received', label: 'Received' },
-                { key: 'inprogress', label: 'In Progress' },
-                { key: 'completed', label: 'Completed' },
+                { key: 'In-Progress', label: 'In Progress' },
+                { key: 'Completed', label: 'Completed' },
               ].map((t) => (
                 <TouchableOpacity
                   key={t.key}

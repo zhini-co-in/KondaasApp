@@ -98,7 +98,7 @@ const PackagePickupScreen = ({ navigation, route }) => {
   const confirmPickup = async (pkg) => {
     await updatePackageStatusRemote(card.deal_id, pkg.package_number, 'shipped');
     await advanceStage(pkg, 'picked');
-    await setLocalDispatchStatus(card.deal_id, 'inprogress');
+    await setLocalDispatchStatus(card.deal_id, 'In-Progress');
   };
 
   const markReached = async (pkg) => {
@@ -113,11 +113,11 @@ const PackagePickupScreen = ({ navigation, route }) => {
 
   const allDelivered = packages.length > 0 && packages.every((p) => stageOf(p) === 'delivered');
 
-  const completeDispatch = async () => {
+  const Completedispatch = async () => {
     await updateDispatchStatusRemote(card.deal_id, 'delivered');
-    await setLocalDispatchStatus(card.deal_id, 'completed');
+    await setLocalDispatchStatus(card.deal_id, 'Completed');
     onUpdate?.();
-    Alert.alert('Completed', 'Dispatch marked as completed.', [
+    Alert.alert('Completed', 'Dispatch marked as Completed.', [
       { text: 'OK', onPress: () => navigation.goBack() },
     ]);
   };
@@ -250,7 +250,7 @@ const PackagePickupScreen = ({ navigation, route }) => {
 
         {allDelivered && (
           <View style={styles.completeBar}>
-            <TouchableOpacity style={styles.completeBtn} onPress={completeDispatch}>
+            <TouchableOpacity style={styles.completeBtn} onPress={Completedispatch}>
               <Ionicons name="checkmark-done-circle" size={18} color="#fff" />
               <Text style={styles.completeBtnText}>Complete Dispatch</Text>
             </TouchableOpacity>

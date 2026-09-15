@@ -66,7 +66,7 @@ export default function RootStack() {
       <Stack.Screen name={SCREEN_NAMES.SETTINGS} component={SettingsScreen} />
       <Stack.Screen name={SCREEN_NAMES.SURVEYER_SCREEN} component={Surveyerscreen} />
       <Stack.Screen name="Form" component={FormScreen} />
-      <Stack.Screen name="InProgress" component={InProgressScreen} />
+      <Stack.Screen name="In-Progress" component={InProgressScreen} />
       <Stack.Screen name="MapView" component={MapScreen} />
       <Stack.Screen name={SCREEN_NAMES.ADMIN_SCREEN} component={AdminScreen} />
 <Stack.Screen name={SCREEN_NAMES.LOGISTIC_SCREEN} component={LogisticScreen} />

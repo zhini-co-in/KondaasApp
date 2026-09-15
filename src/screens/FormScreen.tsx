@@ -2030,7 +2030,7 @@ await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', {
       routes: [
         { name: 'Surveyerscreen' },
         {
-          name: 'InProgress',
+          name: 'In-Progress',
           params: {
             lead: { ...lead, manualSiteEnabled: true },
             completedLeadId: null,

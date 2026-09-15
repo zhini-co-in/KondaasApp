@@ -8,7 +8,7 @@ import { SCREEN_NAMES } from '../constants/screenNames';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
-import { useLocationTracking, getDistance, stopHighFrequencyTracking } from '../service/locationService';
+import { useLocationTracking, getDistance, getRoadDistanceKm, stopHighFrequencyTracking } from '../service/locationService';
 import API from '../api/api1';
 import { USER_DATA } from '../service/localStorage';
 import {
@@ -64,7 +64,7 @@ const InProgressScreen = () => {
   useEffect(() => {
     if (completedLeadId) {
       setInProgressLeads((prev) =>
-        prev.map((l) => l.id === completedLeadId ? { ...l, status: 'completed' } : l)
+        prev.map((l) => l.id === completedLeadId ? { ...l, status: 'Completed' } : l)
       );
       stopHighFrequencyTracking();
     }
@@ -130,7 +130,7 @@ const InProgressScreen = () => {
       if (!completedId) return;
       navigation.setParams({ completedLeadId: null });
       setInProgressLeads((prev) =>
-        prev.map((l) => l.id === completedId ? { ...l, status: 'completed' } : l)
+        prev.map((l) => l.id === completedId ? { ...l, status: 'Completed' } : l)
       );
       stopHighFrequencyTracking();
     }, [route.params?.completedLeadId])
@@ -174,9 +174,52 @@ const handleManualEnable = async (item) => {
     });
   } catch (e) {}
 
-  // 👇 FIX: Start click nerathula screen-la kaatura distance-a
-  // AsyncStorage-la save pannurom. Home/Office click aagumbodhu
-  // idha eduthu backend-ku anupuvom (fresh recalculate pannama).
+  const leadId = item.id || item._id;
+
+  // 👇 NEW: Start click point vs இப்போ (Reached click) point-ஐ வச்சு
+  // final "to_site" distance calculate பண்ணி site_distance_${leadId}-ல store பண்ணு.
+  if (currentLocation) {
+    let startPoint = null;
+    try {
+      const raw = await AsyncStorage.getItem(`start_point_${leadId}`);
+      startPoint = raw ? JSON.parse(raw) : null;
+    } catch (e) {}
+
+    if (startPoint) {
+      let toSiteKm;
+      try {
+        const road = await getRoadDistanceKm(
+          startPoint.latitude, startPoint.longitude,
+          currentLocation.latitude, currentLocation.longitude
+        );
+        toSiteKm = road !== null
+          ? road
+          : getDistance(
+              startPoint.latitude, startPoint.longitude,
+              currentLocation.latitude, currentLocation.longitude
+            ) / 1000;
+      } catch (e) {
+        toSiteKm = getDistance(
+          startPoint.latitude, startPoint.longitude,
+          currentLocation.latitude, currentLocation.longitude
+        ) / 1000;
+      }
+      try {
+        await AsyncStorage.setItem(`site_distance_${leadId}`, String(toSiteKm));
+      } catch (e) {}
+    } else if (item.latitude && item.longitude) {
+      // fallback: start_point இல்லைனா (app restart etc.) — reached point vs site's fixed lat/long
+      const fallbackKm = getDistance(
+        currentLocation.latitude, currentLocation.longitude,
+        parseFloat(item.latitude), parseFloat(item.longitude)
+      ) / 1000;
+      try {
+        await AsyncStorage.setItem(`site_distance_${leadId}`, String(fallbackKm));
+      } catch (e) {}
+    }
+  }
+
+  // existing — display purpose-க்கு அப்படியே வச்சிருக்கு
   if (currentLocation && item.latitude && item.longitude) {
     const startDistance = getDistance(
       currentLocation.latitude,
@@ -186,7 +229,7 @@ const handleManualEnable = async (item) => {
     );
     try {
       await AsyncStorage.setItem(
-        `start_distance_${item.id || item._id}`,
+        `start_distance_${leadId}`,
         JSON.stringify({
           distance: startDistance,
           capturedAt: Date.now(),
@@ -196,7 +239,7 @@ const handleManualEnable = async (item) => {
     } catch (e) {}
   }
 
-  setSelectedLead({ ...item, id: item.id || item._id });
+  setSelectedLead({ ...item, id: leadId });
   setReachedModalVisible(true);
 };
 
@@ -236,23 +279,23 @@ const handleManualEnable = async (item) => {
     setCompletedModalVisible(false);
 
     // Step 1 — Local update
-    await updateAcceptedLeadStatus(leadId, 'completed');
+    await updateAcceptedLeadStatus(leadId, 'Completed');
 
     setInProgressLeads((prev) => {
       const updated = prev.map((l) =>
-        l.id === leadId ? { ...l, status: 'completed' } : l
+        l.id === leadId ? { ...l, status: 'Completed' } : l
       );
       stopHighFrequencyTracking();
 
       const completedIds = updated
-        .filter((l) => l.status === 'completed')
+        .filter((l) => l.status === 'Completed')
         .map((l) => l.id);
 
       // 👇 CHANGED — odana navigate பண்ணாம, completedIds-ஐ ref-ல save
       // பண்ணி வெச்சிருக்கோம். Home/Office click பண்ணும்போது (handleGoTo
       // success ஆனதும்) அல்லது Skip click பண்ணும்போது, LeadCard
       // onFinishAndReturn callback வழியா handleFinishAndReturn() call
-      // ஆகி, இதை பயன்படுத்தி SurveyerScreen-ல accepted list-ல இருந்து
+      // ஆகி, இதை பயன்படுத்தி SurveyerScreen-ல Accepted list-ல இருந்து
       // இந்த lead-ஐ நீக்கி, completed list-ல சேர்ப்போம்.
       pendingCompletedIdsRef.current = completedIds;
 
@@ -265,10 +308,11 @@ const handleManualEnable = async (item) => {
 
       // 2a. Update order status
       try {
-  await API.put('/order/updatestatus', { id: dealId, status: 'completed' });
+  await API.put('/order/updatestatus', { id: dealId, status: 'Completed' });
 } catch (err) {
   await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', {
-    id: leadId, status: 'completed',
+    id: dealId,            // 👈 was `id: leadId` — wrong, must be dealId
+    status: 'Completed',
   });
 }
 
@@ -277,27 +321,26 @@ const handleManualEnable = async (item) => {
         await API.post('/order/sync-status', {
           customerMobile: item.phone,
           surveyorNumber,
-          status: 'completed',
+          status: 'Completed',
           endAt,
         });
       } catch (err) {
         await enqueue(`flowtrix_completed_${leadId}`, 'FLOWTRIX_SYNC', {
           customerMobile: item.phone,
           surveyorNumber,
-          status: 'completed',
+          status: 'Completed',
           endAt,
         });
       }
 
       // ✅ 2c. NEW: Order completion endpoint (admin_complete collection)
-      try {
+      // 2c. Order completion endpoint
+try {
   await API.post('/order/complete', {
+    deal_id: dealId,                 // 👈 added — was missing
     customerMobile: item.phone,
-    customerName: item.name,
-    customerAddress: item.address,
-    city: item.city,          // ➕ add
-  referredBy: item.referredBy, // ➕ add
-  comment: item.comment,   
+    name: item.name,                 // 👈 was customerName
+    address: item.address,           // 👈 was customerAddress
     surveyorNumber,
     receivedAt: endAt,
   });
@@ -305,9 +348,10 @@ const handleManualEnable = async (item) => {
 } catch (err) {
   console.log(`⚠️ /order/complete failed, queuing:`, err.message);
   await enqueue(`order_complete_${leadId}`, 'ORDER_COMPLETE', {
+    deal_id: dealId,                 // 👈 added
     customerMobile: item.phone,
-    customerName: item.name,
-    customerAddress: item.address,
+    name: item.name,                 // 👈 fixed key
+    address: item.address,           // 👈 fixed key
     surveyorNumber,
     receivedAt: endAt,
   });
@@ -331,19 +375,24 @@ const handleManualEnable = async (item) => {
       // Offline — queue all operations
       const surveyorNumber = await getSurveyorNumber();
       await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', {
-        mobile: item.phone, status: 'completed',
-      });
+  id: dealId,               // 👈 was missing entirely
+  mobile: item.phone,
+  status: 'completed',
+});
       await enqueue(`flowtrix_completed_${leadId}`, 'FLOWTRIX_SYNC', {
         customerMobile: item.phone,
         surveyorNumber,
-        status: 'completed',
+        status: 'Completed',
         endAt,
       });
       await enqueue(`order_complete_${leadId}`, 'ORDER_COMPLETE', {
-        customerMobile: item.phone,
-        surveyorNumber,
-        receivedAt: endAt,
-      });
+  deal_id: dealId,          // 👈 added
+  customerMobile: item.phone,
+  name: item.name,          // 👈 added
+  address: item.address,    // 👈 added
+  surveyorNumber,
+  receivedAt: endAt,
+});
       // Offline branch — also add name
 // AFTER
 await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
@@ -358,14 +407,16 @@ await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
   // pendingCompletedIdsRef-ல இருக்கிற completedIds-ஐ SurveyerScreen-க்கு
   // பாஸ் பண்ணி நேரடியா navigate பண்ணிடுவோம் — Back button அழுத்தத் தேவையில்லை.
   const handleFinishAndReturn = () => {
-    if (pendingCompletedIdsRef.current) {
-      navigation.navigate(SCREEN_NAMES.SURVEYER_SCREEN, {
-        completedIds: pendingCompletedIdsRef.current,
-      });
-    } else {
-      navigation.navigate(SCREEN_NAMES.SURVEYER_SCREEN);
-    }
-  };
+  navigation.reset({
+    index: 0,
+    routes: [{
+      name: SCREEN_NAMES.SURVEYER_SCREEN,
+      params: pendingCompletedIdsRef.current
+        ? { completedIds: pendingCompletedIdsRef.current }
+        : undefined,
+    }],
+  });
+};
 
   // 👇 புதுசா சேர்த்தது: user "Back" arrow press பண்ணும்போது — completed
   // ஆகியிருந்தா pending completedIds-ஐ SurveyerScreen-க்கு பாஸ் பண்ணி
@@ -400,7 +451,7 @@ await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
         <TouchableOpacity onPress={handleBackPress}>
           <Ionicons name="arrow-back" size={24} color="#ED1C25" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Lead - Inprogress</Text>
+        <Text style={styles.headerTitle}>Lead - In-Progress</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -418,7 +469,7 @@ await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
             <LeadCard
               key={item.id}
               item={item}
-              cardType="inprogress"
+              cardType="In-Progress"
               currentLocation={currentLocation}
               onSiteObservation={handleSiteObservation}
               onManualEnable={handleManualEnable}

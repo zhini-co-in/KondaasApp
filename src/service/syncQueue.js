@@ -157,7 +157,7 @@ const _executeAction = async (item) => {
       await API.put('/order/updatestatus', {
         id: payload.dealId || payload.deal_id,
         mobile: payload.mobile,
-        status: 'completed',
+        status: 'Completed',
       }, { timeout: DEFAULT_TIMEOUT });
 
       if (payload.leadId) {
@@ -207,13 +207,13 @@ const _executeAction = async (item) => {
       if (payload.dealId) {
         await API.put('/order/updatestatus', {
           id: payload.dealId,
-          status: 'accepted',
+          status: 'Accepted',
         }, { timeout: DEFAULT_TIMEOUT });
       }
       await API.post('/order/sync-status', {
         customerMobile: payload.mobile,
         surveyorNumber: payload.surveyorNumber,
-        status: 'accepted',
+        status: 'Accepted',
         receivedAt: payload.receivedAt || Date.now(),
       }, { timeout: DEFAULT_TIMEOUT });
       break;
@@ -232,14 +232,14 @@ const _executeAction = async (item) => {
       }
       break;
 
-    case 'INPROGRESS_LEAD':
-      await API.post('/order/inprogress', {
+    case 'In-Progress_LEAD':
+      await API.post('/order/In-Progress', {
         mobile: payload.mobile,
         surveyorNumber: payload.surveyorNumber,
       }, { timeout: DEFAULT_TIMEOUT });
       break;
 
-    case 'COMPLETED_LEAD':
+    case 'Completed_LEAD':
       await API.post('/order/complete', {
         mobile: payload.mobile,
         surveyorNumber: payload.surveyorNumber,
@@ -283,7 +283,7 @@ const _executeAction = async (item) => {
       }
 
       // Axios skip — direct fetch (same URL curl used → 201)
-      const res = await fetch('https://kondaas.atom8itsolutions.com/location/distance', {
+      const res = await fetch('https://crucial-purifier-canopener.ngrok-free.dev/location/distance', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

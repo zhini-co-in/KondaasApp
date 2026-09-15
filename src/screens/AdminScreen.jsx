@@ -473,7 +473,7 @@ const EditModal = ({ visible, item, onClose, onSave }) => {
 
   const statusOptions = [
     { key: 'notassigned', label: 'New',        color: '#0C447C', bg: '#E6F1FB', border: '#B5D4F4' },
-    { key: 'accepted',    label: 'Accepted',    color: '#92400E', bg: '#FEF3C7', border: '#FCD34D' },
+    { key: 'Accepted',    label: 'Accepted',    color: '#92400E', bg: '#FEF3C7', border: '#FCD34D' },
     { key: 'inprogress',  label: 'In Progress', color: '#92400E', bg: '#FEF3C7', border: '#FCD34D' },
     { key: 'completed',   label: 'Completed',   color: '#27500A', bg: '#EAF3DE', border: '#97C459' },
     { key: 'rejected',    label: 'Rejected',    color: '#791F1F', bg: '#FCEBEB', border: '#F09595' },
@@ -1055,8 +1055,8 @@ const handleContactSelected = async ({ name, phone }) => {
   // ── Derived lists ──────────────────────────────────────────────────────────
   const completedLeads  = allLeads.filter(i => i.status === 'completed');
   const rejectedLeads   = allLeads.filter(i => i.status === 'rejected');
-  const inprogressLeads = allLeads.filter(i => ['inprogress', 'in progress', 'in_progress', 'accepted'].includes(i.status));
-  const otherLeads      = allLeads.filter(i => !['completed', 'rejected', 'inprogress', 'in progress', 'in_progress', 'accepted'].includes(i.status));
+  const inprogressLeads = allLeads.filter(i => ['inprogress', 'in progress', 'in_progress', 'Accepted'].includes(i.status));
+  const otherLeads      = allLeads.filter(i => !['completed', 'rejected', 'inprogress', 'in progress', 'in_progress', 'Accepted'].includes(i.status));
 
   const employeeList = React.useMemo(() => {
     const set = new Set();
@@ -1160,7 +1160,7 @@ const handleViewFull = async (item) => {
       return <CompletedCard  key={item.id} item={item} onEdit={handleEdit} onDelete={handleDelete} onAssign={handleAssignCompleted} onViewFull={handleViewFull} />;
     if (item.status === 'rejected')
       return <RejectedCard   key={item.id} item={item} onEdit={handleEdit} onDelete={handleDelete} onAssign={handleAssign} onViewLocation={handleViewLocation} />;
-    if (['inprogress', 'in progress', 'in_progress', 'accepted'].includes(item.status))
+    if (['inprogress', 'in progress', 'in_progress', 'Accepted'].includes(item.status))
       return <InProgressCard key={item.id} item={item} onEdit={handleEdit} onDelete={handleDelete} />;
     return <OtherCard key={item.id} item={item} onEdit={handleEdit} onDelete={handleDelete} onAssign={handleAssign} onViewLocation={handleViewLocation} />;
   };

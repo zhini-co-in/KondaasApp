@@ -8,9 +8,9 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 // ─── Filter options ────────────────────────────────────────────────────────
 const LEAD_FILTER_OPTIONS = [
   { key: 'all',        label: 'All Leads',   icon: 'list-outline',           dot: '#888',    bg: '#F3F3F3', activeBg: '#F3F3F3',  activeText: '#333' },
-  { key: 'completed',  label: 'Completed',   icon: 'checkmark-circle-outline', dot: '#639922', bg: '#EAF3DE', activeBg: '#EAF3DE',  activeText: '#27500A' },
+  { key: 'Completed',  label: 'Completed',   icon: 'checkmark-circle-outline', dot: '#639922', bg: '#EAF3DE', activeBg: '#EAF3DE',  activeText: '#27500A' },
   { key: 'rejected',   label: 'Rejected',    icon: 'close-circle-outline',   dot: '#E24B4A', bg: '#FCEBEB', activeBg: '#FCEBEB',  activeText: '#791F1F' },
-  { key: 'inprogress', label: 'In Progress', icon: 'time-outline',           dot: '#F59E0B', bg: '#FEF3C7', activeBg: '#FEF3C7',  activeText: '#92400E' },
+  { key: 'In-Progress', label: 'In Progress', icon: 'time-outline',           dot: '#F59E0B', bg: '#FEF3C7', activeBg: '#FEF3C7',  activeText: '#92400E' },
   { key: 'other',      label: 'New / Unassigned', icon: 'radio-button-on-outline', dot: '#378ADD', bg: '#E6F1FB', activeBg: '#E6F1FB', activeText: '#0C447C' },
 ];
 
@@ -135,9 +135,9 @@ const styles = StyleSheet.create({
 
 const LEAD_DESCRIPTIONS = {
   all:        'Show all leads regardless of status',
-  completed:  'Site survey done successfully',
+  Completed:  'Site survey done successfully',
   rejected:   'Survey rejected by surveyor',
-  inprogress: 'Survey currently underway',
+ 'In-Progress': 'Survey currently underway',
   other:      'Newly created, awaiting assignment',
 };
 
@@ -173,9 +173,9 @@ const FilterScreen = ({ navigation, route }) => {
 
   const countFor = (key) => {
     if (key === 'all') return counts.all ?? 0;
-    if (key === 'completed') return counts.completed ?? 0;
+    if (key === 'Completed') return counts.Completed ?? 0;
     if (key === 'rejected') return counts.rejected ?? 0;
-    if (key === 'inprogress') return counts.inprogress ?? 0;
+    if (key === 'In-Progress') return counts.In-Progress ?? 0;
     return counts.other ?? 0;
   };
 

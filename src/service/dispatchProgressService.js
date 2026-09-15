@@ -66,10 +66,10 @@ const STAGE_RANK = {
 
 const DISPATCH_RANK = {
   pending: 0,
-  accepted: 1,
-  inprogress: 2,
+  Accepted: 1,
+  'In-Progress': 2,
   picked: 3,
-  completed: 4,
+  Completed: 4,
 };
 
 export const mergeCardsWithLocalProgress = async (cards) => {
@@ -101,7 +101,7 @@ export const mergeCardsWithLocalProgress = async (cards) => {
 // ─────────────────────────────────────────────────────────────
 export const acceptDealLocalFirst = async (dispatch_number) => {
   // 1. Local update first (UI instantly changes)
-  await setLocalDispatchStatus(dispatch_number, 'accepted');
+  await setLocalDispatchStatus(dispatch_number, 'Accepted');
 
   const body = {
     id: dispatch_number.toString(),
@@ -140,7 +140,7 @@ export const acceptDealLocalFirst = async (dispatch_number) => {
     });
   }
 
-  return { localStatus: 'accepted' };
+  return { localStatus: 'Accepted' };
 };
 
 // ─────────────────────────────────────────────────────────────

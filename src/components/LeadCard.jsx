@@ -54,14 +54,14 @@ const parseLatLngFromUrl = (url) => {
 
 const LeadCard = ({
   item,
-  cardType, // 'unaccepted' | 'accepted' | 'inprogress' | 'completed'
+  cardType, // 'unAccepted' | 'Accepted' | 'In-Progress' | 'Completed'
   currentLocation,
   // SurveyerScreen handlers
   onAccept,
   onReject,
   onStart,
   onHold, onUnhold,
-  // InProgressScreen handlers
+  // In-ProgressScreen handlers
   onSiteObservation,
   onManualEnable,
   onEdit,
@@ -70,7 +70,7 @@ const LeadCard = ({
   formSubmitted,
   // 👇 புதுசா சேர்த்தது: Complete ஆனப்புறம் Home/Office distance
   // click பண்ணதும் (அல்லது Skip பண்ணதும்) SurveyerScreen-க்கு
-  // automatic-ஆ navigate பண்ண InProgressScreen கொடுக்கும் callback.
+  // automatic-ஆ navigate பண்ண In-ProgressScreen கொடுக்கும் callback.
   onFinishAndReturn,
 }) => {
   const hasLatLong = item.latitude && item.longitude &&
@@ -107,8 +107,8 @@ const LeadCard = ({
 const isFirstDistanceFetchRef = useRef(true);
 
 useEffect(() => {
-  if (cardType !== 'inprogress') return;
-  if (!currentLocation || !hasLatLong || item.status === 'completed') return;
+  if (cardType !== 'In-Progress') return;
+  if (!currentLocation || !hasLatLong || item.status === 'Completed') return;
   if (distToLead === null) return;
 
   const straightKm = distToLead / 1000;
@@ -143,9 +143,9 @@ useEffect(() => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [distToLead, cardType, item.status]);
 
-  // 300m auto-notify — only for inprogress
+  // 300m auto-notify — only for In-Progress
   useEffect(() => {
-    if (cardType !== 'inprogress') return;
+    if (cardType !== 'In-Progress') return;
     if (withinRange && !item.manualSiteEnabled && !notifiedRef.current) {
       notifiedRef.current = true;
       API.post('/notification/trigger', {
@@ -392,7 +392,7 @@ useEffect(() => {
   const renderActions = () => {
     switch (cardType) {
 
-      case 'unaccepted':
+      case 'unAccepted':
         return (
           <View style={styles.iconContainer}>
             <TouchableOpacity style={styles.iconBtn} onPress={() => onAccept?.(item)}>
@@ -404,8 +404,8 @@ useEffect(() => {
           </View>
         );
 
-      case 'accepted':
-  if (item.status === 'completed') {
+      case 'Accepted':
+  if (item.status === 'Completed') {
     return <CompletedPill />;
   }
 
@@ -424,16 +424,16 @@ useEffect(() => {
   return (
     <View style={{ alignItems: 'center', gap: 6 }}>
       <TouchableOpacity
-        style={[styles.startBtn, item.status === 'inprogress' && { backgroundColor: '#f97316' }]}
+        style={[styles.startBtn, item.status === 'In-Progress' && { backgroundColor: '#f97316' }]}
         onPress={() => onStart?.(item.id)}
       >
         <Ionicons name="play-circle-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
         <Text style={styles.startBtnText}>
-          {item.status === 'inprogress' ? 'Resume' : 'Start'}
+          {item.status === 'In-Progress' ? 'Resume' : 'Start'}
         </Text>
       </TouchableOpacity>
 
-      {item.status === 'inprogress' && (
+      {item.status === 'In-Progress' && (
         <TouchableOpacity
           style={styles.holdBtn}
           onPress={() => onHold?.(item.id)}
@@ -445,10 +445,10 @@ useEffect(() => {
     </View>
   );
 
-      case 'inprogress':
-        // 👇 Complete button click பண்ணி status "completed" ஆனப்புறம் தான்
+      case 'In-Progress':
+        // 👇 Complete button click பண்ணி status "Completed" ஆனப்புறம் தான்
         // Home / Office icon buttons தெரியும் — முன்னாடி வேண்டாம்.
-        if (item.status === 'completed') {
+        if (item.status === 'Completed') {
           return (
             <View style={{ alignItems: 'center', gap: 6 }}>
               <CompletedPill />
@@ -530,7 +530,7 @@ useEffect(() => {
           </View>
         );
 
-      case 'completed':
+      case 'Completed':
         return <CompletedPill />;
 
       default:
@@ -541,9 +541,9 @@ useEffect(() => {
   return (
     <View style={[
       styles.card,
-  cardType === 'unaccepted' && { borderLeftWidth: 4, borderLeftColor: '#ED1C25' },
-  cardType === 'completed'  && { borderLeftWidth: 4, borderLeftColor: '#22c55e' },
-  cardType === 'accepted' && item.status === 'hold' && { opacity: 0.5, borderLeftWidth: 4, borderLeftColor: '#6b7280' },
+  cardType === 'unAccepted' && { borderLeftWidth: 4, borderLeftColor: '#ED1C25' },
+  cardType === 'Completed'  && { borderLeftWidth: 4, borderLeftColor: '#22c55e' },
+  cardType === 'Accepted' && item.status === 'hold' && { opacity: 0.5, borderLeftWidth: 4, borderLeftColor: '#6b7280' },
     ]}>
       {/* Top row */}
       <View style={styles.rowBetween}>
@@ -740,9 +740,9 @@ useEffect(() => {
 };
 
 const CompletedPill = () => (
-  <View style={styles.completedPill}>
+  <View style={styles.CompletedPill}>
     <Ionicons name="checkmark-circle" size={14} color="#3B6D11" />
-    <Text style={styles.completedPillText}>Completed</Text>
+    <Text style={styles.CompletedPillText}>Completed</Text>
   </View>
 );
 
@@ -858,12 +858,12 @@ const styles = StyleSheet.create({
   commentRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   comment: { flex: 1, fontSize: 12, color: '#555' },
   seeMore: { fontSize: 12 },
-  completedPill: {
+  CompletedPill: {
     backgroundColor: '#EAF3DE', paddingHorizontal: 10,
     paddingVertical: 6, borderRadius: 20,
     flexDirection: 'row', alignItems: 'center', gap: 4,
   },
-  completedPillText: { color: '#3B6D11', fontSize: 12, fontWeight: '600' },
+  CompletedPillText: { color: '#3B6D11', fontSize: 12, fontWeight: '600' },
   startBtn: {
     backgroundColor: '#22c55e', flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,

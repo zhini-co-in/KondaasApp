@@ -28,7 +28,7 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
     if (!mobile) return;
 
     if (pressAction.id === 'accept') {
-      await API.put('/order/updatestatus', { mobile, status: 'accepted' });
+      await API.put('/order/updatestatus', { mobile, status: 'Accepted' });
     } else if (pressAction.id === 'reject') {
       await API.post('/order/reject', { 
         mobile, 
