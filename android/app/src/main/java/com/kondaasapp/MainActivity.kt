@@ -1,4 +1,4 @@
-package com.zhini.kondaas
+package com.trisentrix.kondaas
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

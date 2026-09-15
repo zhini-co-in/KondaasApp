@@ -1,4 +1,4 @@
-package com.zhini.kondaas
+package com.trisentrix.kondaas
 
 import android.content.BroadcastReceiver
 import android.content.Context
