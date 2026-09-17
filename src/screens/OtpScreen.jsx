@@ -23,8 +23,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getStorageData, USER_DATA } from "../service/localStorage";
 import { SCREEN_NAMES } from "../constants/screenNames";
 
-//const BASE_URL = "https://kondaas.atom8itsolutions.com";
-const BASE_URL = "https://crucial-purifier-canopener.ngrok-free.dev";
+const BASE_URL = "https://kondaas.atom8itsolutions.com";
+//const BASE_URL = "https://crucial-purifier-canopener.ngrok-free.dev";
 
 // ─────────────────────────────────────────────────────────────
 const safeApiCall = async (url, body, authToken = null, deviceId = null) => {

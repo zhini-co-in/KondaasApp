@@ -19,6 +19,7 @@ import {
   clearAllLocalData, // ✅ full local wipe helper (leads + template + form drafts)
   cacheTemplate,      // 👇 புதுசா சேர்த்தது — form template proactive-ஆ cache பண்ண
   getCachedTemplate,  // 👇 புதுசா சேர்த்தது — already cache ஆகி இருக்கானு தேவைப்பட்டா check பண்ண
+  normalizeStatus,
 } from '../service/Localleadsstorage';
 import { enqueue, processSyncQueue, getPendingCount } from '../service/syncQueue';   // ✅
 import { NativeModules } from 'react-native';
@@ -242,13 +243,14 @@ useFocusEffect(
     await fetchAndMergeLeads();
   };
 
-  // ── Load local ────────────────────────────────────────────────────────────
   const loadLocalLeads = async () => {
     const local = await getAcceptedLeads();
     if (!isMounted.current) return;
 
-    const Accepted  = local.filter((l) => l.status === 'Accepted' || l.status === 'In-Progress' || l.status === 'hold');
-    const completed = local.filter((l) => l.status === 'Completed');
+    const normalizedLocal = local.map((l) => ({ ...l, status: normalizeStatus(l.status) }));
+
+    const Accepted  = normalizedLocal.filter((l) => l.status === 'Accepted' || l.status === 'In-Progress' || l.status === 'hold');
+    const completed = normalizedLocal.filter((l) => l.status === 'Completed');
 
     AcceptedLeadsRef.current = Accepted;
     setAcceptedLeads(Accepted);
@@ -303,8 +305,8 @@ useFocusEffect(
           longitude:  item.longitude,
           whatsappNo: item.whatsappNo,
           email:      item.email,
-          address:    fullAddress,
-          status:     item.siteSurveyStatus ?? 'Not-Assigned',
+                    address:    fullAddress,
+          status:     normalizeStatus(item.siteSurveyStatus),
 
           scheduledAt: item.siteSurveyDateTime || null,
           siteSurveyAssignedBy: item.CreatedBy || item.createdBy || null,
@@ -332,11 +334,13 @@ useFocusEffect(
         mapped.filter((l) => l.status === 'Not-Assigned' && !rejectedIds.includes(l.id))
       );
 
-      const serverNonNew = mapped.filter((l) => l.status !== 'Not-Assigned');
+            const serverNonNew = mapped.filter((l) => l.status !== 'Not-Assigned');
       const merged       = await mergeWithServerLeads(serverNonNew);
 
-      const Accepted  = merged.filter((l) => l.status === 'Accepted' || l.status === 'In-Progress' || l.status === 'hold');
-      const completed = merged.filter((l) => l.status === 'Completed');
+      const normalizedMerged = merged.map((l) => ({ ...l, status: normalizeStatus(l.status) }));
+
+      const Accepted  = normalizedMerged.filter((l) => l.status === 'Accepted' || l.status === 'In-Progress' || l.status === 'hold');
+      const completed = normalizedMerged.filter((l) => l.status === 'Completed');
 
       AcceptedLeadsRef.current = Accepted;
       setAcceptedLeads(Accepted);

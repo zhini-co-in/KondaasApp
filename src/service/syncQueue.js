@@ -283,7 +283,7 @@ const _executeAction = async (item) => {
       }
 
       // Axios skip — direct fetch (same URL curl used → 201)
-      const res = await fetch('https://crucial-purifier-canopener.ngrok-free.dev/location/distance', {
+      const res = await fetch('https://kondaas.atom8itsolutions.com/location/distance', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

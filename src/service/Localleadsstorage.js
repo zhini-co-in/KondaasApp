@@ -2,11 +2,35 @@
 // Lead status + form data-வும் local-ல் save ஆகும்.
 // Full offline support.
 
+// service/localLeadsStorage.js
+// Lead status + form data-வும் local-ல் save ஆகும்.
+// Full offline support.
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// ─────────────────────────────────────────────────────────────────
+// STATUS NORMALIZER — old/new DB records எந்த case/format-ல இருந்தாலும்
+// (accepted / Accepted / in progress / inprogress / In-Progress...)
+// ஒரே canonical value-க்கு map பண்ணும். இது single source of truth —
+// SurveyerScreen.js இதையே import பண்ணி பயன்படுத்தும்.
+// ─────────────────────────────────────────────────────────────────
+export const normalizeStatus = (raw) => {
+  if (!raw) return 'Not-Assigned';
+  const s = String(raw).trim().toLowerCase().replace(/[\s_-]/g, '');
+
+  if (s.includes('notassign')) return 'Not-Assigned';
+  if (s.includes('inprogress') || s === 'ongoing') return 'In-Progress';
+  if (s.includes('hold')) return 'hold';
+  if (s.includes('complet')) return 'Completed';
+  if (s.includes('reject')) return 'Rejected';
+  if (s.includes('accept')) return 'Accepted';
+
+  return 'Not-Assigned';
+};
 
 const LEADS_KEY    = 'leads:Accepted';   // Accepted/In-Progress/Completed leads
 const TEMPLATE_KEY = 'leads:template';   // cached form template
-const FORMS_KEY     = 'leads:forms';     // submitted form data (offline)
+const FORMS_KEY     = 'leads:forms';     // submitted form data (offline)    // submitted form data (offline)
 
 // ─────────────────────────────────────────────────────────────────
 // INTERNAL
@@ -35,7 +59,8 @@ const _save = async (key, data) => {
 // ─────────────────────────────────────────────────────────────────
 
 export const getAcceptedLeads = async () => {
-  return (await _load(LEADS_KEY)) ?? [];
+  const data = (await _load(LEADS_KEY)) ?? [];
+  return data.map((l) => ({ ...l, status: normalizeStatus(l.status) }));
 };
 
 /**
@@ -90,15 +115,16 @@ export const mergeWithServerLeads = async (serverLeads) => {
   const local = await getAcceptedLeads();
 
   const localMap = {};
-  local.forEach((l) => { localMap[l.id] = l; });
+  local.forEach((l) => { localMap[l.id] = { ...l, status: normalizeStatus(l.status) }; });
 
   // Server lead-க்கு local data merge பண்ணு
   const merged = serverLeads.map((sl) => {
+    const normalizedServerStatus = normalizeStatus(sl.status);
     const ll = localMap[sl.id];
-    if (!ll) return sl;
+    if (!ll) return { ...sl, status: normalizedServerStatus };
     // Local status-ஐ trust பண்ணு (offline action இருக்கலாம்)
     // But server says 'Completed' → always trust server
-    const finalStatus = sl.status === 'Completed' ? 'Completed' : ll.status;
+    const finalStatus = normalizedServerStatus === 'Completed' ? 'Completed' : ll.status;
     return { ...ll, ...sl, status: finalStatus };
   });
 

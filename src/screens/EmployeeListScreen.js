@@ -6,8 +6,6 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import RNFS from 'react-native-fs';
 import Share from 'react-native-share';
-import Contacts from 'react-native-contacts';
-import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import API from '../api/api1';
 
 /**
@@ -28,14 +26,6 @@ import API from '../api/api1';
  */
 
 const initial = name => (name && name.trim() ? name.trim().charAt(0).toUpperCase() : '?');
-
-const AVATAR_COLORS = [
-  { bg: '#E6F1FB', text: '#0C447C' },
-  { bg: '#EAF3DE', text: '#27500A' },
-  { bg: '#FEF3C7', text: '#92400E' },
-  { bg: '#F3E8FF', text: '#6B21A8' },
-  { bg: '#FCEBEB', text: '#791F1F' },
-];
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9F9FB' },
@@ -58,27 +48,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18, paddingTop: 18, paddingBottom: 8,
   },
 
-  // Employee picker
-  empSearchWrap: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 8,
-    paddingHorizontal: 12, paddingVertical: 9, borderRadius: 12,
-    borderWidth: 1, borderColor: '#EAEAEA',
+  // Mobile number entry
+  mobileEntryWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    marginHorizontal: 16, marginBottom: 4,
   },
-  empSearchInput: { flex: 1, fontSize: 13, color: '#333', paddingVertical: 0 },
-  empItem: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: 18, paddingVertical: 12,
-    backgroundColor: '#fff', borderBottomWidth: 0.5, borderBottomColor: '#F5F5F5',
+  mobileInputBox: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 11,
+    borderRadius: 12, borderWidth: 1, borderColor: '#EAEAEA',
   },
-  empItemActive: { backgroundColor: '#FEF3F3' },
-  avatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 15, fontWeight: '700' },
-  empName: { flex: 1, fontSize: 14, fontWeight: '600', color: '#1a1a1a' },
-  checkCircle: {
-    width: 22, height: 22, borderRadius: 11, backgroundColor: '#C8000A',
+  mobileInput: { flex: 1, fontSize: 14, color: '#1a1a1a', paddingVertical: 0 },
+  mobileSetBtn: {
+    backgroundColor: '#C8000A', borderRadius: 12,
+    paddingHorizontal: 16, paddingVertical: 12,
     alignItems: 'center', justifyContent: 'center',
   },
+  mobileSetBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 
   // Selected employee chip
   selectedChip: {
@@ -94,33 +80,6 @@ const styles = StyleSheet.create({
   selectedChipAvatarText: { fontSize: 13, fontWeight: '700', color: '#A32D2D' },
   selectedChipName: { fontSize: 13.5, fontWeight: '700', color: '#A32D2D' },
   selectedChipText: { fontSize: 11.5, fontWeight: '600', color: '#C15656', marginTop: 1 },
-
-  // Pick-from-contacts button
-  pickContactBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    marginHorizontal: 16, backgroundColor: '#fff', borderRadius: 12,
-    borderWidth: 1.5, borderColor: '#C8000A', borderStyle: 'dashed',
-    paddingVertical: 13,
-  },
-  pickContactBtnText: { fontSize: 13.5, fontWeight: '700', color: '#C8000A' },
-
-  // Contacts picker modal
-  contactsOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  contactsSheet: { backgroundColor: '#fff', borderTopLeftRadius: 22, borderTopRightRadius: 22, height: '75%', overflow: 'hidden' },
-  contactsHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#E0E0E0', alignSelf: 'center', marginTop: 10, marginBottom: 12 },
-  contactsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0' },
-  contactsTitle: { fontSize: 16, fontWeight: '700', color: '#1a1a1a' },
-  contactsClose: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#F5F5F5', alignItems: 'center', justifyContent: 'center' },
-  contactsSearch: { flexDirection: 'row', alignItems: 'center', gap: 8, margin: 14, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#F5F5F7', borderRadius: 12, borderWidth: 1, borderColor: '#EAEAEA' },
-  contactsSearchInput: { flex: 1, fontSize: 13, color: '#333', paddingVertical: 0 },
-  contactItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: '#F7F7F7' },
-  contactAvatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#E6F1FB', alignItems: 'center', justifyContent: 'center' },
-  contactAvatarText: { fontSize: 16, fontWeight: '700', color: '#0C447C' },
-  contactName: { fontSize: 14, fontWeight: '600', color: '#1a1a1a' },
-  contactPhone: { fontSize: 12, color: '#999', marginTop: 2 },
-  contactsLoading: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 40 },
-  contactsEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 40 },
-  contactsEmptyText: { fontSize: 13, color: '#bbb', marginTop: 10, textAlign: 'center', paddingHorizontal: 30 },
 
   // Date row
   dateRow: {
@@ -305,117 +264,8 @@ const normaliseDistance = (raw, idx) => ({
   date:       fmtRecordDate(raw.createdAt),
 });
 
-// ─── Contacts Picker Modal — pick employee straight from phone contacts ────
-const ContactsPickerModal = ({ visible, onClose, onSelect }) => {
-  const [contacts, setContacts] = useState([]);
-  const [filtered, setFiltered] = useState([]);
-  const [searchQ, setSearchQ]   = useState('');
-  const [loadingC, setLoadingC] = useState(false);
-  const [permDenied, setPermDenied] = useState(false);
-
-  useEffect(() => { if (visible) { setSearchQ(''); loadContacts(); } }, [visible]);
-  useEffect(() => {
-    if (!searchQ.trim()) { setFiltered(contacts); return; }
-    const q = searchQ.toLowerCase();
-    setFiltered(contacts.filter(c =>
-      c.displayName?.toLowerCase().includes(q) ||
-      c.phoneNumbers?.some(p => p.number?.includes(q))
-    ));
-  }, [searchQ, contacts]);
-
-  const loadContacts = async () => {
-    setLoadingC(true); setPermDenied(false);
-    try {
-      const perm = Platform.OS === 'android' ? PERMISSIONS.ANDROID.READ_CONTACTS : PERMISSIONS.IOS.CONTACTS;
-      let res = await check(perm);
-      if (res === RESULTS.DENIED) res = await request(perm);
-      if (res !== RESULTS.GRANTED) { setPermDenied(true); setLoadingC(false); return; }
-      const all = await Contacts.getAll();
-      const sorted = all.filter(c => c.displayName && c.phoneNumbers?.length).sort((a, b) => a.displayName.localeCompare(b.displayName));
-      setContacts(sorted); setFiltered(sorted);
-    } catch (e) { Alert.alert('Error', 'Could not load contacts.'); }
-    setLoadingC(false);
-  };
-
-  const handleSelect = contact => {
-    const rawPhone = contact.phoneNumbers?.[0]?.number || '';
-    onSelect({ name: contact.displayName, phone: rawPhone.replace(/[\s\-\(\)]/g, '') });
-    onClose();
-  };
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.contactsOverlay}>
-        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
-        <View style={styles.contactsSheet}>
-          <View style={styles.contactsHandle} />
-          <View style={styles.contactsHeader}>
-            <Text style={styles.contactsTitle}>Select Employee</Text>
-            <TouchableOpacity style={styles.contactsClose} onPress={onClose}>
-              <Ionicons name="close" size={17} color="#555" />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.contactsSearch}>
-            <Ionicons name="search-outline" size={15} color="#aaa" />
-            <TextInput
-              style={styles.contactsSearchInput}
-              placeholder="Search name or number..."
-              placeholderTextColor="#ccc"
-              value={searchQ}
-              onChangeText={setSearchQ}
-            />
-            {searchQ.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQ('')}>
-                <Ionicons name="close-circle" size={16} color="#aaa" />
-              </TouchableOpacity>
-            )}
-          </View>
-          {loadingC ? (
-            <View style={styles.contactsLoading}>
-              <ActivityIndicator size="large" color="#C8000A" />
-              <Text style={{ color: '#bbb', fontSize: 12, marginTop: 10 }}>Loading contacts…</Text>
-            </View>
-          ) : permDenied ? (
-            <View style={styles.contactsEmpty}>
-              <Ionicons name="lock-closed-outline" size={40} color="#ddd" />
-              <Text style={styles.contactsEmptyText}>Contacts permission denied. Enable it in phone settings to pick an employee.</Text>
-              <TouchableOpacity onPress={loadContacts} style={{ marginTop: 12, paddingHorizontal: 18, paddingVertical: 8, backgroundColor: '#C8000A', borderRadius: 8 }}>
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Try Again</Text>
-              </TouchableOpacity>
-            </View>
-          ) : filtered.length === 0 ? (
-            <View style={styles.contactsEmpty}>
-              <Ionicons name="people-outline" size={40} color="#ddd" />
-              <Text style={styles.contactsEmptyText}>No contacts found.</Text>
-            </View>
-          ) : (
-            <FlatList
-              data={filtered}
-              keyExtractor={(item, idx) => item.recordID || String(idx)}
-              renderItem={({ item }) => (
-                <TouchableOpacity style={styles.contactItem} onPress={() => handleSelect(item)} activeOpacity={0.7}>
-                  <View style={styles.contactAvatar}>
-                    <Text style={styles.contactAvatarText}>{initial(item.displayName)}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.contactName}>{item.displayName}</Text>
-                    {item.phoneNumbers?.[0]?.number ? <Text style={styles.contactPhone}>{item.phoneNumbers[0].number}</Text> : null}
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color="#ccc" />
-                </TouchableOpacity>
-              )}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            />
-          )}
-        </View>
-      </View>
-    </Modal>
-  );
-};
-
 const EmployeeListScreen = ({ navigation, route }) => {
-  const [contactsVisible, setContactsVisible] = useState(false);
+  const [mobileInputText, setMobileInputText] = useState('');
   const [selectedEmpName, setSelectedEmpName] = useState(null);
   const [selectedEmp, setSelectedEmp]      = useState(null);
   const [fromDate, setFromDate]            = useState('');
@@ -428,9 +278,23 @@ const EmployeeListScreen = ({ navigation, route }) => {
   const [exporting, setExporting]          = useState(false);
   const [downloading, setDownloading]      = useState(false);
 
-  const handleContactSelected = ({ name, phone }) => {
-    setSelectedEmp(phone);
-    setSelectedEmpName(name);
+  const handleSetMobile = () => {
+    const cleaned = mobileInputText.replace(/\D/g, '');
+    if (cleaned.length < 10) {
+      Alert.alert('Invalid number', 'Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    setSelectedEmp(cleaned.slice(-10));
+    setSelectedEmpName(null);
+    setResults(null);
+    setDistResults(null);
+    setHasSearched(false);
+  };
+
+  const handleClearMobile = () => {
+    setSelectedEmp(null);
+    setSelectedEmpName(null);
+    setMobileInputText('');
     setResults(null);
     setDistResults(null);
     setHasSearched(false);
@@ -707,14 +571,8 @@ const EmployeeListScreen = ({ navigation, route }) => {
 
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
 
-        {/* Employee picker — from phone contacts */}
-        <Text style={styles.sectionLabel}>1. Select Employee</Text>
-
-        <ContactsPickerModal
-          visible={contactsVisible}
-          onClose={() => setContactsVisible(false)}
-          onSelect={handleContactSelected}
-        />
+        {/* Employee entry — type mobile number directly */}
+        <Text style={styles.sectionLabel}>1. Enter Employee Mobile Number</Text>
 
         {selectedEmp ? (
           <View style={styles.selectedChip}>
@@ -725,18 +583,29 @@ const EmployeeListScreen = ({ navigation, route }) => {
               <Text style={styles.selectedChipName} numberOfLines={1}>{selectedEmpName || 'Employee'}</Text>
               <Text style={styles.selectedChipText}>{selectedEmp}</Text>
             </View>
-            <TouchableOpacity onPress={() => setContactsVisible(true)}>
-              <Ionicons name="swap-horizontal-outline" size={19} color="#A32D2D" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => { setSelectedEmp(null); setSelectedEmpName(null); setResults(null); setDistResults(null); setHasSearched(false); }}>
+            <TouchableOpacity onPress={handleClearMobile}>
               <Ionicons name="close-circle" size={20} color="#A32D2D" />
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity style={styles.pickContactBtn} onPress={() => setContactsVisible(true)} activeOpacity={0.75}>
-            <Ionicons name="person-add-outline" size={16} color="#C8000A" />
-            <Text style={styles.pickContactBtnText}>Select Employee from Contacts</Text>
-          </TouchableOpacity>
+          <View style={styles.mobileEntryWrap}>
+            <View style={styles.mobileInputBox}>
+              <Ionicons name="call-outline" size={16} color="#aaa" />
+              <TextInput
+                style={styles.mobileInput}
+                placeholder="Enter 10-digit mobile number"
+                placeholderTextColor="#ccc"
+                value={mobileInputText}
+                onChangeText={setMobileInputText}
+                keyboardType="phone-pad"
+                maxLength={10}
+                onSubmitEditing={handleSetMobile}
+              />
+            </View>
+            <TouchableOpacity style={styles.mobileSetBtn} onPress={handleSetMobile} activeOpacity={0.85}>
+              <Text style={styles.mobileSetBtnText}>Set</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* Date range */}

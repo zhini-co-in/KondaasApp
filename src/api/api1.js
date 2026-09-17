@@ -8,9 +8,9 @@ import { fetchDeyeStationList, fetchDeyeHistory, fetchDeyeSavings } from "./api2
 import { fetchSolisStationList, fetchSolisHistory, fetchSolisSavings } from "./api3";
 
 
-//const BASE_URL = "https://kondaas.atom8itsolutions.com";
+const BASE_URL = "https://kondaas.atom8itsolutions.com";
 //const BASE_URL = "https://board.trisentrix.com";
-const BASE_URL = "https://crucial-purifier-canopener.ngrok-free.dev";
+//const BASE_URL = "https://crucial-purifier-canopener.ngrok-free.dev";
 
 // ─────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────
