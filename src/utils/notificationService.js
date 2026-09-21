@@ -9,6 +9,7 @@ import {
   getAcceptedLeads,
 } from '../service/Localleadsstorage';
 import { enqueue } from '../service/syncQueue';
+import messaging from '@react-native-firebase/messaging';
 
 export async function createNotificationChannel() {
   await notifee.createChannel({
@@ -263,4 +264,21 @@ export function registerNotificationHandlers() {
 
     await notifee.cancelNotification(detail.notification.id);
   });
+}
+export async function requestNotificationPermission() {
+  const authStatus = await messaging().requestPermission();
+  const enabled =
+    authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+    authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+
+  if (enabled) {
+    const token = await messaging().getToken();
+    console.log('✅ FCM Token:', token);
+    // TODO: idha backend ku anுப்ணும் — device token save panna
+    // await API.post('/device/register-token', { token });
+  } else {
+    console.log('❌ Notification permission denied');
+  }
+
+  return enabled;
 }

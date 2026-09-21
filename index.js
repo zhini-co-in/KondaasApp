@@ -19,25 +19,4 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
   await showLeadNotification(remoteMessage.data);
 });
 
-// ✅ Background notification action handler — mobile use பண்றோம்
-notifee.onBackgroundEvent(async ({ type, detail }) => {
-  if (type === EventType.ACTION_PRESS) {
-    const { pressAction, notification } = detail;
-    const mobile = notification?.data?.customerMobile; // ✅ leadId இல்ல, mobile எடு
-
-    if (!mobile) return;
-
-    if (pressAction.id === 'accept') {
-      await API.put('/order/updatestatus', { mobile, status: 'Accepted' });
-    } else if (pressAction.id === 'reject') {
-      await API.post('/order/reject', { 
-        mobile, 
-        reason: 'Rejected via notification' 
-      });
-    }
-
-    await notifee.cancelNotification(notification.id);
-  }
-});
-
 AppRegistry.registerComponent(appName, () => codePush(codePushOptions)(App));

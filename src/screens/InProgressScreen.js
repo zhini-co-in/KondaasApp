@@ -176,9 +176,19 @@ const handleManualEnable = async (item) => {
 
   const leadId = item.id || item._id;
 
-  // 👇 NEW: Start click point vs இப்போ (Reached click) point-ஐ வச்சு
-  // final "to_site" distance calculate பண்ணி site_distance_${leadId}-ல store பண்ணு.
-  if (currentLocation) {
+  // 👇 FIX: currentLocation state null-ஆ இருந்தாலும் (300m auto-trigger
+  // fast-ஆ fire ஆகும்போது இது நடக்கும்), AsyncStorage-ல் last saved
+  // location-ஐ fallback-ஆ எடுத்துக்கோ — இல்லைன்னா site_distance_ ஒருபோதும்
+  // save ஆகாம, Complete நேரத்துல "0 km" (live distance) காட்டிடும்.
+  let reachedPoint = currentLocation;
+  if (!reachedPoint) {
+    try {
+      const raw = await AsyncStorage.getItem('last_known_location');
+      reachedPoint = raw ? JSON.parse(raw) : null;
+    } catch (e) {}
+  }
+
+  if (reachedPoint) {
     let startPoint = null;
     try {
       const raw = await AsyncStorage.getItem(`start_point_${leadId}`);
@@ -190,27 +200,26 @@ const handleManualEnable = async (item) => {
       try {
         const road = await getRoadDistanceKm(
           startPoint.latitude, startPoint.longitude,
-          currentLocation.latitude, currentLocation.longitude
+          reachedPoint.latitude, reachedPoint.longitude
         );
         toSiteKm = road !== null
           ? road
           : getDistance(
               startPoint.latitude, startPoint.longitude,
-              currentLocation.latitude, currentLocation.longitude
+              reachedPoint.latitude, reachedPoint.longitude
             ) / 1000;
       } catch (e) {
         toSiteKm = getDistance(
           startPoint.latitude, startPoint.longitude,
-          currentLocation.latitude, currentLocation.longitude
+          reachedPoint.latitude, reachedPoint.longitude
         ) / 1000;
       }
       try {
         await AsyncStorage.setItem(`site_distance_${leadId}`, String(toSiteKm));
       } catch (e) {}
     } else if (item.latitude && item.longitude) {
-      // fallback: start_point இல்லைனா (app restart etc.) — reached point vs site's fixed lat/long
       const fallbackKm = getDistance(
-        currentLocation.latitude, currentLocation.longitude,
+        reachedPoint.latitude, reachedPoint.longitude,
         parseFloat(item.latitude), parseFloat(item.longitude)
       ) / 1000;
       try {
@@ -219,7 +228,7 @@ const handleManualEnable = async (item) => {
     }
   }
 
-  // existing — display purpose-க்கு அப்படியே வச்சிருக்கு
+  // existing — display purpose (still uses currentLocation, that's fine, this is UI-only)
   if (currentLocation && item.latitude && item.longitude) {
     const startDistance = getDistance(
       currentLocation.latitude,

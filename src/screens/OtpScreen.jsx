@@ -196,6 +196,7 @@ const { phoneNumber } = route.params || {};
       const deviceId = await DeviceInfo.getUniqueId();
       const osName = DeviceInfo.getSystemName();
       const osVersion = DeviceInfo.getSystemVersion();
+      const appVersionName = DeviceInfo.getVersion();
       const now = new Date().toISOString();
 
       // Step 1: Read stored token
@@ -299,17 +300,23 @@ const { phoneNumber } = route.params || {};
       ];
 
       const finalPayload = {
-        ...existingData,
-        AppInfo: { ...(existingData.AppInfo || {}), lastLogin: now },
-        PlatformInfo: { devices: mergedDevices },
-        UserInfo: {
-          ...userInfo,
-          phoneNo: cleanPhone,
-          role,
-          provider,
-        },
-        devicelist,
-      };
+  ...existingData,
+  AppInfo: {
+    ...(existingData.AppInfo || {}),
+    lastLogin: now,
+    versionName: DeviceInfo.getVersion(),
+    buildNumber: DeviceInfo.getBuildNumber(),
+  },
+  PlatformInfo: { devices: mergedDevices },
+  UserInfo: {
+    ...userInfo,
+    phoneNo: cleanPhone,
+    role,
+    provider,
+  },
+  devicelist,
+};
+
 
       // Step 7: Save to backend
       const saveResult = await safeApiCall(
