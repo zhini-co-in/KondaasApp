@@ -32,6 +32,7 @@ import {
 import LeadCard from '../components/LeadCard';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { PermissionsAndroid } from 'react-native';
+import { getAllLocalLogsForDebug, syncCrashLogs, logError } from '../utils/crashLogger';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Scheduled Site-Survey due-check helper
@@ -101,6 +102,33 @@ const SurveyerScreen = () => {
     });
   }, []);
 
+  const [logDebugVisible, setLogDebugVisible] = useState(false);
+const [debugLogs, setDebugLogs] = useState([]);
+const logoTapCount = useRef(0);
+const logoTapTimer = useRef(null);
+
+const handleLogoTap = () => {
+  logoTapCount.current += 1;
+
+  if (logoTapCount.current >= 5) {
+    logoTapCount.current = 0;
+    if (logoTapTimer.current) clearTimeout(logoTapTimer.current);
+    openDebugLogs();
+    return;
+  }
+
+  if (logoTapTimer.current) clearTimeout(logoTapTimer.current);
+  // 2 second-ku mேl tap panama irundha count reset aagum
+  logoTapTimer.current = setTimeout(() => {
+    logoTapCount.current = 0;
+  }, 2000);
+};
+
+const openDebugLogs = async () => {
+  const logs = await getAllLocalLogsForDebug();
+  setDebugLogs(logs);
+  setLogDebugVisible(true);
+};
   // ── Proactive template cache ────────────────────────────────────────────
   // 👇 புதுசா சேர்த்தது: form template-ஐ FormScreen open பண்ணும் வரைக்கும்
   // காத்திருக்காம, SurveyerScreen mount ஆனதும் / net திரும்ப வந்ததும்
@@ -346,7 +374,8 @@ useFocusEffect(
       setAcceptedLeads(Accepted);
       setCompletedLeads(completed);
 
-    } catch (err) {
+        } catch (err) {
+      logError("fetch_leads_failed", { message: err?.message });
     } finally {
       if (isMounted.current) setLeadsLoading(false);
     }
@@ -533,6 +562,7 @@ const confirmReject = async () => {
     Alert.alert('Success', 'Lead rejected successfully.');
   } catch (err) {
     Alert.alert('Error', err?.response?.data?.error || 'Failed to reject.');
+        logError("lead_reject_failed", { message: err?.message, leadId: rejectLeadId });
   }
 };
 
@@ -1016,20 +1046,22 @@ const confirmReject = async () => {
             }
           >
             <View style={{ alignItems: 'center', paddingTop: 20, marginBottom: 20 }}>
-              {uploadedPhoto ? (
-                <Image
-                  source={{ uri: uploadedPhoto }}
-                  style={[styles.logo, { borderRadius: 10 }]}
-                  resizeMode="cover"
-                />
-              ) : (
-                <Image
-                  source={require('../../assets/images/kondass.png')}
-                  style={styles.logo}
-                  resizeMode="contain"
-                />
-              )}
-            </View>
+  <TouchableOpacity activeOpacity={1} onPress={handleLogoTap}>
+    {uploadedPhoto ? (
+      <Image
+        source={{ uri: uploadedPhoto }}
+        style={[styles.logo, { borderRadius: 10 }]}
+        resizeMode="cover"
+      />
+    ) : (
+      <Image
+        source={require('../../assets/images/kondass.png')}
+        style={styles.logo}
+        resizeMode="contain"
+      />
+    )}
+  </TouchableOpacity>
+</View>
 
             <View style={styles.offTextContainer}>
               <Text style={styles.welcome}>Welcome!</Text>
@@ -1239,6 +1271,60 @@ const confirmReject = async () => {
           </View>
         </View>
       </Modal>
+      <Modal
+  visible={logDebugVisible}
+  transparent
+  animationType="slide"
+  onRequestClose={() => setLogDebugVisible(false)}
+>
+  <View style={styles.modalOverlay}>
+    <View style={[styles.modalBox, { maxHeight: '75%' }]}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <Text style={styles.modalTitle}>Pending Logs ({debugLogs.length})</Text>
+        <TouchableOpacity onPress={() => setLogDebugVisible(false)}>
+          <Ionicons name="close-outline" size={24} color="#000" />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView>
+        {debugLogs.length === 0 ? (
+          <Text style={{ textAlign: 'center', color: '#999', marginVertical: 20 }}>
+            No pending logs. Ella logs-um synced aayidichi 🎉
+          </Text>
+        ) : (
+          debugLogs.map((log) => (
+            <View
+              key={log.localId}
+              style={{
+                borderWidth: 1, borderColor: '#eee', borderRadius: 8,
+                padding: 10, marginBottom: 8, backgroundColor: '#fafafa',
+              }}
+            >
+              <Text style={{ fontSize: 11, color: '#888' }}>{log.timestamp}</Text>
+              {log.mobileNumber && (
+                <Text style={{ fontSize: 12, fontWeight: '600' }}>📱 {log.mobileNumber}</Text>
+              )}
+              <Text style={{ fontSize: 12, color: '#ED1C25', marginTop: 4 }}>
+                {log.error?.type} — {log.error?.message}
+              </Text>
+            </View>
+          ))
+        )}
+      </ScrollView>
+
+      <TouchableOpacity
+        style={[styles.modalSaveBtn, { marginTop: 12 }]}
+        onPress={async () => {
+          const result = await syncCrashLogs();
+          Alert.alert('Sync Result', `Synced: ${result.synced}, Pending: ${result.pending}`);
+          openDebugLogs(); // refresh list
+        }}
+      >
+        <Text style={styles.modalSaveBtnText}>Retry Sync Now</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+</Modal>
     </View>
   );
 };

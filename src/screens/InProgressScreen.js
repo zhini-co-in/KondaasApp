@@ -18,6 +18,7 @@ import {
 import { enqueue } from '../service/syncQueue';
 import LeadCard from '../components/LeadCard';
 import { BASE_URL } from '../api/api1';
+import { logError } from '../utils/crashLogger';
 
 const { width } = Dimensions.get('window');
 
@@ -356,6 +357,7 @@ try {
   console.log(`✅ Order completion tracked for ${item.phone}`);
 } catch (err) {
   console.log(`⚠️ /order/complete failed, queuing:`, err.message);
+    logError("order_complete_failed_queued", { dealId, message: err.message });
   await enqueue(`order_complete_${leadId}`, 'ORDER_COMPLETE', {
     deal_id: dealId,                 // 👈 added
     customerMobile: item.phone,

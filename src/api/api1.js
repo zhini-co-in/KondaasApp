@@ -6,6 +6,7 @@ import DeviceInfo from "react-native-device-info";
 import { USER_DATA, getSessionInfo } from "../service/localStorage";
 import { fetchDeyeStationList, fetchDeyeHistory, fetchDeyeSavings } from "./api2";
 import { fetchSolisStationList, fetchSolisHistory, fetchSolisSavings } from "./api3";
+import { logSecurity } from '../utils/crashLogger';
 
 
 const BASE_URL = "https://kondaas.atom8itsolutions.com";
@@ -39,8 +40,9 @@ API1.interceptors.request.use(async (config) => {
         config.headers["x-auth-token"] = idToken;
       }
     }
-  } catch (e) {
+    } catch (e) {
     console.log("Firebase token error:", e);
+    logSecurity("firebase_token_fetch_failed", { message: e.message });
   }
   return config;
 });

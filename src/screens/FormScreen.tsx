@@ -21,6 +21,7 @@ import SignatureScreen from 'react-native-signature-canvas';
 import ImageResizer from 'react-native-image-resizer';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import KondaasPaymentQR from '../../assets/images/kondaas_payment_qr.png';
+import { logError } from '../utils/crashLogger';
 
 interface FieldProperty {
   title?: string; description?: string; type?: string;
@@ -1773,6 +1774,7 @@ useEffect(() => {
       } catch (err: any) {
         console.error('Submit error:', err);
         console.error('Submit error response:', JSON.stringify(err?.response?.data));
+                logError("form_submit_failed", { message: err?.message, status: err?.response?.status, leadId: lead.id });
 
         // Network drop mid-upload: fall back to offline save + sync queue
         // instead of showing a dead-end "Network Error" alert.
@@ -1945,6 +1947,7 @@ await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', {
       } catch (err: any) {
         console.error('Update error:', err);
         console.error('Update error response:', JSON.stringify(err?.response?.data));
+                logError("form_update_failed", { message: err?.message, status: err?.response?.status, leadId: lead.id });
 
         // Network drop mid-update: fall back to offline save + sync queue.
         if (isNetworkFailure(err)) {

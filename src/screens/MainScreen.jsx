@@ -20,6 +20,9 @@ import FontStyles from "../constants/fonts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SCREEN_NAMES } from "../constants/screenNames";
 import { useFocusEffect } from "@react-navigation/native";
+import { Button } from 'react-native';
+import crashlytics from '@react-native-firebase/crashlytics';
+import { logEvent, syncCrashLogs, logError } from '../utils/crashLogger';
 
 function isDaytime() {
   const hour = new Date().getHours();
@@ -260,6 +263,7 @@ if (isOffline) return;
 
     } catch (error) {
       console.log("Error fetching stations:", error);
+      logError("load_stations_failed", { message: error?.message });
     } finally {
       setLoading(false);
     }
@@ -317,8 +321,9 @@ if (isOffline) return;
         }
       }
 
-    } catch (error) {
+        } catch (error) {
       console.error("❌ loadRealTimeData error:", error);
+      logError("load_realtime_data_failed", { message: error?.message, stationId });
     }
   };
 
@@ -385,8 +390,9 @@ if (isOffline) return;
         console.log("⚠️ Savings error:", data?.error);
         setTotalCost("₹ 0.00");
       }
-    } catch (e) {
+        } catch (e) {
       console.log("Savings fetch error:", e.message);
+      logError("fetch_savings_failed", { message: e.message, phoneNo, stationId });
       setTotalCost("₹ 0.00");
     }
   };

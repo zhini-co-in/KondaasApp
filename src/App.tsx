@@ -1,5 +1,4 @@
 import React, { useEffect } from 'react';
-
 import { Provider as PaperProvider } from 'react-native-paper';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -13,6 +12,8 @@ import codePush from "@revopush/react-native-code-push";
 // @ts-ignore
 import { initSyncQueue, teardownSyncQueue } from './service/syncQueueService';
 import messaging from '@react-native-firebase/messaging';
+import crashlytics from '@react-native-firebase/crashlytics';   // ← add pannunga
+
 // @ts-ignore
 import {
   createNotificationChannel,
@@ -27,7 +28,14 @@ let App = () => {
   const scheme = useColorScheme();
   const theme = scheme === 'dark' ? darkTheme : lightTheme;
 
-useEffect(() => {
+  useEffect(() => {
+    // ========== Crashlytics Setup ==========
+    crashlytics().setCrashlyticsCollectionEnabled(true);
+    crashlytics().log('App started');
+    // Optional: later login aana setUserId call pannunga
+    // crashlytics().setUserId('user_123');
+    // ======================================
+
     codePush.sync({
       updateDialog: true,
       installMode: codePush.InstallMode.IMMEDIATE,
@@ -35,24 +43,24 @@ useEffect(() => {
     createNotificationChannel();
     initSyncQueue();
 
-    // 🆕 FCM permission + token
+    // FCM permission + token
     requestNotificationPermission();
 
-    // 🆕 Accept/Reject button handlers (background + foreground) register pannunga
+    // Accept/Reject button handlers
     registerNotificationHandlers();
 
-    // 🆕 App foreground la irukkumbodhu FCM message vandha, notifee notification kaatanum
+    // Foreground FCM message
     const unsubscribeForeground = messaging().onMessage(async remoteMessage => {
       console.log('📩 FCM Foreground:', JSON.stringify(remoteMessage));
       await showLeadNotification(remoteMessage.data);
     });
 
-    // 🆕 App background la irundhu notification tap panni open pannumbodhu
+    // Background notification open
     const unsubscribeOpenedApp = messaging().onNotificationOpenedApp(remoteMessage => {
       console.log('App opened from background via notification:', remoteMessage);
     });
 
-    // 🆕 App quit state la irundhu notification tap panni open pannumbodhu
+    // Quit state notification open
     messaging()
       .getInitialNotification()
       .then(remoteMessage => {
@@ -67,7 +75,6 @@ useEffect(() => {
       unsubscribeOpenedApp();
     };
   }, []);
-  
 
   return (
     <QueryClientProvider client={queryClient}>

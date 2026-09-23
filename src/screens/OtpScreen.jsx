@@ -22,7 +22,7 @@ import Loader from "../components/Loader";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getStorageData, USER_DATA } from "../service/localStorage";
 import { SCREEN_NAMES } from "../constants/screenNames";
-
+import { logError, logSecurity } from '../utils/crashLogger';
 const BASE_URL = "https://kondaas.atom8itsolutions.com";
 //const BASE_URL = "https://crucial-purifier-canopener.ngrok-free.dev";
 
@@ -459,6 +459,7 @@ const { phoneNumber } = route.params || {};
       }
     } catch (err) {
       console.log("❌ Login error:", err.message);
+      logError("auto_login_failed", { message: err.message, phone: phone });
       Alert.alert("Login Failed", err.message || "Something went wrong");
     } finally {
       setLoading(false);
@@ -494,6 +495,7 @@ const handleConfirm = async () => {
     await handleAutoLogin(userCredential, phoneNumber);
   } catch (err) {
     console.log("OTP error:", err.code, err.message);
+        logSecurity("otp_verification_failed", { errorCode: err.code, message: err.message, phoneNumber });
     if (err.code === "auth/invalid-verification-code") {
       setErrorMessage("Invalid OTP. Please try again.");
     } else if (

@@ -13,6 +13,7 @@ import LinearGradient from "react-native-linear-gradient";
 import { SCREEN_NAMES } from "../constants/screenNames";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getHistory, fetchSavings } from "../api/api1";
+import { logError } from '../utils/crashLogger';
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -144,8 +145,9 @@ const PowerGenerationScreen = ({ navigation, route }) => {
             }
           }
         }
-      } catch (err) {
+            } catch (err) {
         console.error("Error loading user data:", err);
+        logError("power_screen_fetch_user_data_failed", { message: err?.message });
       }
     };
     fetchUserData();
@@ -536,8 +538,9 @@ if (isOffline) return;
         return;
       }
 
-    } catch (err) {
+        } catch (err) {
       console.log("fetchGenerationData Error:", err);
+      logError("fetch_generation_data_failed", { message: err?.message, tab, stationId });
     } finally {
       setLoading(false);
     }
