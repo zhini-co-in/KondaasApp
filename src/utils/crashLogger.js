@@ -107,7 +107,9 @@ export const saveCrashLocally = async (payload) => {
     // um automatic-ah update pannுவோம் (background la, silent-ah, fail
     // aana kூda app flow ah affect pannaadhu)
     const escalationLevels = [LogLevel.ERROR, LogLevel.CRITICAL, LogLevel.SECURITY];
+    console.log("🔍 Checking escalation for level:", entry.error?.level, "| should escalate:", escalationLevels.includes(entry.error?.level));
     if (escalationLevels.includes(entry.error?.level)) {
+      console.log("🚀 Triggering updateUserLogLevel with:", entry.error.level);
       updateUserLogLevel(entry.error.level);
     }
 
@@ -121,9 +123,14 @@ export const saveCrashLocally = async (payload) => {
  * Backend UserInfo.loglevel field ah update pannум் (background, silent)
  */
 const updateUserLogLevel = async (level) => {
+  console.log("🔧 updateUserLogLevel STARTED with level:", level);
   try {
     const session = await getSessionInfo();
-    if (!session?.parsed?.UserInfo?.phoneNo) return;
+    console.log("🔧 session fetched | phoneNo:", session?.parsed?.UserInfo?.phoneNo);
+    if (!session?.parsed?.UserInfo?.phoneNo) {
+      console.log("🔧 ABORTED: no phoneNo found in session");
+      return;
+    }
 
     const payload = {
       ...session.parsed,
@@ -133,9 +140,13 @@ const updateUserLogLevel = async (level) => {
       },
     };
 
+    console.log("🔧 calling saveUser with loglevel:", payload.UserInfo.loglevel);
     const result = await saveUser(payload);
+    console.log("🔧 saveUser result:", JSON.stringify(result));
     if (result?.success) {
-      console.log("🔧 UserInfo.loglevel updated to:", level);
+      console.log("✅ UserInfo.loglevel updated to:", level);
+    } else {
+      console.log("⚠️ saveUser returned failure:", result?.message);
     }
   } catch (e) {
     console.log("⚠️ updateUserLogLevel failed:", e.message);
@@ -145,7 +156,7 @@ const updateUserLogLevel = async (level) => {
 // ─────────────────────────────────────────────────────────────
 // 2. SYNC LOCAL LOGS -> BACKEND (success aana local la irundhu delete)
 // ─────────────────────────────────────────────────────────────
-const SYNC_BATCH_SIZE = 50;
+const SYNC_BATCH_SIZE = 80;
 
 export const syncCrashLogs = async () => {
   const allLogs = await getLocalLogs();
@@ -199,6 +210,12 @@ export const syncCrashLogs = async () => {
 // 3. GLOBAL ERROR CAPTURE (JS errors + unhandled promise rejections)
 // ─────────────────────────────────────────────────────────────
 export const initCrashLogger = () => {
+  // ✅ App open aana matter, session start log pannுவோம் — idhu than
+  // app start aanadhukku andha proof-ah irukkும்
+  logInfo("app_session_start", {
+    startedAt: new Date().toISOString(),
+  });
+
   const defaultHandler = ErrorUtils.getGlobalHandler();
 
   ErrorUtils.setGlobalHandler((error, isFatal) => {
@@ -227,12 +244,22 @@ export const initCrashLogger = () => {
     onHandled: () => {},
   });
 
+  // ✅ App open aana odane, oru sari sync try pannுவோம் (pending logs
+  // irundha, network irundha udane anுப்பணும்)
+  syncCrashLogs();
+
   // ✅ Network vandha udane auto-sync
   NetInfo.addEventListener((state) => {
     if (state.isConnected) {
       syncCrashLogs();
     }
   });
+
+  // ✅ Safety-net — network event miss aana kூda (flaky network la
+  // idhu common), every 2 mins oru sari check pannும்
+  setInterval(() => {
+    syncCrashLogs();
+  }, 2 * 60 * 1000);
 };
 
 // ─────────────────────────────────────────────────────────────
