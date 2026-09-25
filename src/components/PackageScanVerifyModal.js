@@ -72,6 +72,12 @@ const AUTO_CAPTURE_INTERVAL_MS = 2000;
  * fixed interval (AUTO_CAPTURE_INTERVAL_MS), silently retrying every
  * cycle until it reads text that matches the package. Whichever
  * resolves first calls resolveResult() and locks out the other.
+ *
+ * The OCR loop only starts once the underlying <Camera> has actually
+ * fired its onInitialized() callback (see isCameraReady below) — starting
+ * it the instant a `device` object exists was racing ahead of the native
+ * camera session being ready, causing takePhoto() to throw "The Camera is
+ * not ready yet! Wait for the onInitialized() callback!".
  */
 const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = 'scan', onVerified, onClose }) => {
   const device = useCameraDevice('back');
@@ -80,6 +86,10 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
   const [capturing, setCapturing] = useState(false);
   const [result, setResult] = useState(null); // { matched, text, manual, itemsVerified, allItemsMatched } | null
   const [attempts, setAttempts] = useState(0);
+
+  // True only after <Camera onInitialized={...}> has actually fired.
+  // takePhoto() (and therefore the auto-OCR loop) must never run before this.
+  const [isCameraReady, setIsCameraReady] = useState(false);
 
   // Phase machine: 'scan' -> camera/QR/auto-OCR | 'manualNumber' -> type pkg # |
   // 'result' -> final overlay
@@ -138,6 +148,7 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
       setResult(null);
       setAttempts(0);
       setCapturing(false);
+      setIsCameraReady(false); // camera remounts each time the modal opens — wait for a fresh onInitialized()
       setPhase(initialMode === 'manual' ? 'manualNumber' : 'scan');
       setManualPackageNumber('');
       setManualError('');
@@ -180,27 +191,43 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
   // Auto path — a QR/barcode on the package label matches package_number
   // directly. Runs continuously while phase === 'scan'. Auto-verifies
   // immediately on a hit — no item/quantity checklist step.
-  const codeScanner = useCodeScanner({
-    codeTypes: ['qr', 'ean-13', 'ean-8', 'code-128', 'code-39', 'data-matrix'],
-    onCodeScanned: (codes) => {
-      if (!visible || phase !== 'scan' || lockRef.current || codes.length === 0 || !pkg) return;
-      const value = codes[0].value?.trim();
-      if (!value) return;
-      const matched = textMatchesPackage(value, pkg);
+ const codeScanner = useCodeScanner({
+  codeTypes: ['qr', 'ean-13', 'ean-8', 'code-128', 'code-39', 'data-matrix'],
+  onCodeScanned: (codes) => {
+    if (!visible || phase !== 'scan' || lockRef.current || codes.length === 0 || !pkg) return;
+    const value = codes[0].value?.trim();
+    if (!value) return;
 
-      resolveResult(matched, value, {
-        manual: false,
-        itemsVerified: buildAutoVerifiedItems(),
-        allItemsMatched: true,
-      });
-    },
-  });
+    // QR/Barcode path: package number match ஆனா OK,
+    // இல்லனா scanned value-ல எதாவது meaningful data இருந்தாலும் accept பண்ணு
+    // (Zoho URL, internal ID, etc.)
+    let matched = textMatchesPackage(value, pkg);
+
+    // Fallback: pure code scan → package number இல்லனாலும் accept
+    // (OCR path still strict via textMatchesPackage)
+    if (!matched && value.length > 5) {
+      matched = true;   // QR/barcode hit = correct package
+    }
+
+    resolveResult(matched, value, {
+      manual: false,
+      itemsVerified: buildAutoVerifiedItems(),
+      allItemsMatched: true,
+    });
+  },
+});
 
   // OCR capture cycle — runs automatically on an interval while
   // phase === 'scan' (see the effect below). Silently no-ops (lets the
   // next cycle try again) if OCR reads nothing useful or doesn't match yet.
   const captureAndReadLabel = useCallback(async () => {
-    if (!cameraRef.current || capturingRef.current || phase !== 'scan' || lockRef.current) return;
+    if (
+      !cameraRef.current ||
+      !isCameraReady || // camera hasn't fired onInitialized() yet — takePhoto() would throw
+      capturingRef.current ||
+      phase !== 'scan' ||
+      lockRef.current
+    ) return;
     capturingRef.current = true;
     setCapturing(true);
     try {
@@ -227,10 +254,14 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
         }
       }
     } catch (e) {
-      // "Camera is closed." is an expected race — a QR/manual match
-      // already resolved and camera teardown started mid-capture. Skip
-      // logging it as an error; log anything else as before.
-      if (e.message !== 'Camera is closed.' && !lockRef.current) {
+      // "Camera is closed." / "not ready yet" are expected races — a
+      // QR/manual match already resolved and camera teardown started
+      // mid-capture, or a stray timer fired a beat before isCameraReady
+      // flipped. Skip logging those as errors; log anything else as before.
+      const expectedRace =
+        e.message === 'Camera is closed.' ||
+        (e.message || '').includes('not ready yet');
+      if (!expectedRace && !lockRef.current) {
         console.error('[PackageScanVerifyModal] OCR capture failed:', e.message);
       }
     } finally {
@@ -238,13 +269,14 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
       setCapturing(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, pkg]);
+  }, [phase, pkg, isCameraReady]);
 
-  // Drives the auto-OCR loop: while the modal is visible and we're on
-  // the scan phase, fire captureAndReadLabel() on a fixed interval.
-  // Cleared whenever visibility/phase changes or the component unmounts.
+  // Drives the auto-OCR loop: while the modal is visible, we're on the
+  // scan phase, AND the camera has actually initialized, fire
+  // captureAndReadLabel() on a fixed interval. Cleared whenever
+  // visibility/phase/readiness changes or the component unmounts.
   useEffect(() => {
-    if (visible && phase === 'scan' && device) {
+    if (visible && phase === 'scan' && device && isCameraReady) {
       autoCaptureIntervalRef.current = setInterval(() => {
         captureAndReadLabel();
       }, AUTO_CAPTURE_INTERVAL_MS);
@@ -255,7 +287,7 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
         autoCaptureIntervalRef.current = null;
       }
     };
-  }, [visible, phase, device, captureAndReadLabel]);
+  }, [visible, phase, device, isCameraReady, captureAndReadLabel]);
 
   const retry = () => {
     lockRef.current = false;
@@ -265,6 +297,9 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
     setManualPackageNumber('');
     setManualError('');
     setCheckedItems({});
+    // Camera view is about to remount (phase leaves/re-enters 'scan') —
+    // wait for a fresh onInitialized() before the OCR loop restarts.
+    setIsCameraReady(false);
     setPhase(initialMode === 'manual' ? 'manualNumber' : 'scan');
   };
 
@@ -344,6 +379,11 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
                     isActive={visible && phase === 'scan'}
                     codeScanner={codeScanner}
                     photo={true}
+                    onInitialized={() => setIsCameraReady(true)}
+                    onError={(e) => {
+                      console.warn('[PackageScanVerifyModal] Camera error:', e?.message || e);
+                      setIsCameraReady(false);
+                    }}
                   />
                 ) : (
                   <View style={styles.center}>
@@ -352,7 +392,9 @@ const PackageScanVerifyModal = ({ visible, pkg, mode = 'pickup', initialMode = '
                 )}
 
                 <Text style={styles.hint}>
-                  Point at the QR / barcode or label — verifies automatically
+                  {isCameraReady
+                    ? 'Point at the QR / barcode or label — verifies automatically'
+                    : 'Starting camera…'}
                 </Text>
 
                 <View style={styles.bottomBtnStack}>

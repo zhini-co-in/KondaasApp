@@ -21,6 +21,17 @@ const STATUS_CONFIG = {
 
 const getStatusConfig = (status) => STATUS_CONFIG[status] || STATUS_CONFIG.pending;
 
+// LogisticScreen 'In-Progress' / 'Completed' anuppum, card 'inprogress' / 'completed' expect pannum.
+// Case, hyphen, underscore ellam ignore panni match pannum.
+const normalizeStatus = (s) => {
+  const v = String(s || 'pending').toLowerCase().replace(/[-_\s]/g, '');
+  if (v === 'accepted') return 'Accepted';
+  if (v === 'inprogress') return 'inprogress';
+  if (v === 'picked') return 'picked';
+  if (v === 'completed' || v === 'delivered') return 'completed';
+  return 'pending';
+};
+
 // Package-level status → small accent color (independent of deal status)
 const PACKAGE_STATUS_COLORS = {
   shipped:   '#0ea5e9',
@@ -34,10 +45,12 @@ const getPackageAccent = (pkgStatus) =>
 // Local package "stage" pill (independent of the server's pkg.status text) —
 // mirrors the stage machine used in PackagePickupScreen (pending → picked → delivered)
 const LOCAL_STAGE_CONFIG = {
-  pending:   { label: 'Not Picked', color: '#94a3b8' },
-  picked:    { label: 'Picked Up',  color: '#0ea5e9' },
-  reached:   { label: 'Reached',    color: '#f97316' },
-  delivered: { label: 'Delivered',  color: '#22c55e' },
+  pending:           { label: 'Not Picked', color: '#94a3b8' },
+  pickup_verified:   { label: 'Verified',   color: '#4f46e5' },
+  picked:            { label: 'Picked Up',  color: '#0ea5e9' },
+  reached:           { label: 'Reached',    color: '#f97316' },
+  delivery_verified: { label: 'Verified',   color: '#8b5cf6' },
+  delivered:         { label: 'Delivered',  color: '#22c55e' },
 };
 
 // Best-effort mapping from the server's raw package status text (Packed /
@@ -94,7 +107,7 @@ const LogisticDealCard = forwardRef(({
     .map((p) => (typeof p === 'string' ? p.replace(/\s+/g, ' ').trim() : p))
     .filter(Boolean);
 
-  const status = card.status || 'pending';
+  const status = normalizeStatus(card.status);
   const { color, label, icon } = getStatusConfig(status);
 
   const dealTitle = card.deal_id || 'New Assigned Deal';
@@ -102,9 +115,6 @@ const LogisticDealCard = forwardRef(({
   const assignedDate = card.assignedAt
     ? new Date(card.assignedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
     : '—';
-
-  const KNOWN_FLOW_STATUSES = ['Accepted', 'inprogress', 'picked', 'completed'];
-  const normalizedStatus = KNOWN_FLOW_STATUSES.includes(status) ? status : 'pending';
 
   // REMOVED: tapping the card no longer opens the "Order Tracking" modal
   // at all — the top summary row below is now a plain, non-touchable View.
@@ -152,7 +162,7 @@ const LogisticDealCard = forwardRef(({
 
   // ── Action area — changes based on status ─────────────────────────────────
   const renderActions = () => {
-    switch (normalizedStatus) {
+    switch (status) {
       case 'pending':
         return (
           <View style={styles.iconRow}>
@@ -350,15 +360,15 @@ const LogisticDealCard = forwardRef(({
   )}
 
   {stage === 'reached' && (
-    <TouchableOpacity
-      disabled={isBusy}
-      style={[styles.pkgActionBtn, { backgroundColor: '#8b5cf6', opacity: isBusy ? 0.6 : 1 }]}
-      onPress={() => onOpenDeliveryForm?.(card, pkg, key)}
-    >
-      <Ionicons name="document-text-outline" size={14} color="#fff" />
-      <Text style={styles.pkgActionBtnText}>Form</Text>
-    </TouchableOpacity>
-  )}
+  <TouchableOpacity
+    disabled={isBusy}
+    style={[styles.pkgActionBtn, { backgroundColor: '#4f46e5', opacity: isBusy ? 0.6 : 1 }]}
+    onPress={() => onStartPickup?.(card, index)}
+  >
+    <Ionicons name="arrow-forward-circle-outline" size={14} color="#fff" />
+    <Text style={styles.pkgActionBtnText}>Continue</Text>
+  </TouchableOpacity>
+)}
 
   {stage === 'delivered' && (
     <View style={[styles.pkgActionBtn, { backgroundColor: '#EAF3DE' }]}>

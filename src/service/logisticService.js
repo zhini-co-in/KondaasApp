@@ -94,6 +94,13 @@ export const requestLocationPermissions = async () => {
   }
   return true;
 };
+export const requestIOSLocationPermission = async () => {
+  if (Platform.OS !== 'ios') return true;
+  const whenInUse = await request(PERMISSIONS.IOS.LOCATION_WHEN_IN_USE);
+  if (whenInUse !== RESULTS.GRANTED) return false;
+  await request(PERMISSIONS.IOS.LOCATION_ALWAYS);
+  return true;
+};
 
 export const isGPSEnabled = async () => {
   if (Platform.OS !== 'android') return true;
@@ -112,29 +119,49 @@ export const useLogisticTracking = (isMountedRef) => {
   const isTrackingRef = useRef(false);
   const listenerRef = useRef(null);
 
+  const saveLocation = (data) => {
+    setCurrentLocation({
+      latitude: data.latitude,
+      longitude: data.longitude,
+      speed: data.speed || 0,
+    });
+    AsyncStorage.setItem('last_known_location', JSON.stringify({
+      latitude: data.latitude,
+      longitude: data.longitude,
+      speed: data.speed || 0,
+      ts: Date.now(),
+    })).catch(() => {});
+  };
+
   const startTracking = () => {
     if (isTrackingRef.current) return;
     isTrackingRef.current = true;
 
     console.log('🟢 Logistic Tracking Started');
 
+    // Screen open aana udane last known location-a use pannu
+    AsyncStorage.getItem('last_known_location').then((v) => {
+      if (!v || !isMountedRef.current) return;
+      try {
+        const loc = JSON.parse(v);
+        if (Date.now() - loc.ts < 600000) {           // 10 min-ku ulla mattum
+          setCurrentLocation((prev) => prev || loc);
+        }
+      } catch (e) {}
+    });
+
     if (Platform.OS === 'android') {
-      // Native Service (StartStopService) already started from LogisticScreen
       listenerRef.current = DeviceEventEmitter.addListener(
         'nativeLocationUpdate',
         async (data) => {
-          if (data?.latitude && data?.longitude && isMountedRef.current) {
-            setCurrentLocation({
-              latitude: data.latitude,
-              longitude: data.longitude,
-              speed: data.speed || 0,
-            });
+          console.log('📡 nativeLocationUpdate:', JSON.stringify(data));
+          if (data?.latitude != null && data?.longitude != null && isMountedRef.current) {
+            saveLocation(data);
             await sendLocationToServer(data.latitude, data.longitude, data.timestamp);
           }
         }
       );
-    } 
-    else if (Platform.OS === 'ios') {
+    } else if (Platform.OS === 'ios') {
       const { LocationService } = NativeModules;
       if (!LocationService) {
         console.error('❌ LocationService Native Module not found!');
@@ -142,14 +169,9 @@ export const useLogisticTracking = (isMountedRef) => {
       }
 
       const emitter = new NativeEventEmitter(LocationService);
-
       listenerRef.current = emitter.addListener('nativeLocationUpdate', async (data) => {
-        if (data?.latitude && data?.longitude && isMountedRef.current) {
-          setCurrentLocation({
-            latitude: data.latitude,
-            longitude: data.longitude,
-            speed: data.speed || 0,
-          });
+        if (data?.latitude != null && data?.longitude != null && isMountedRef.current) {
+          saveLocation(data);
           await sendLocationToServer(data.latitude, data.longitude, data.timestamp);
         }
       });

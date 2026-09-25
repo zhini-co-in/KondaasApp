@@ -23,48 +23,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getStorageData, USER_DATA } from "../service/localStorage";
 import { SCREEN_NAMES } from "../constants/screenNames";
 import { logError, logSecurity } from '../utils/crashLogger';
-//const BASE_URL = "https://kondaas.atom8itsolutions.com";
-const BASE_URL = "https://crucial-purifier-canopener.ngrok-free.dev";
-
-// ─────────────────────────────────────────────────────────────
-const safeApiCall = async (url, body, authToken = null, deviceId = null) => {
-  try {
-    const headers = { "Content-Type": "application/json" };
-    if (authToken) headers["x-auth-token"] = authToken;
-    if (deviceId) headers["x-device-id"] = deviceId;
-
-    const res = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    });
-
-    const rawText = await res.text();
-    const endpoint = url.replace(BASE_URL, "");
-    console.log(`🌐 [${res.status}] ${endpoint}`);
-
-    try {
-      const json = JSON.parse(rawText);
-      console.log(`📨 Response:`, JSON.stringify(json).slice(0, 200));
-      return { ok: res.status < 400, status: res.status, data: json };
-    } catch {
-      console.log(`⚠️ Non-JSON from ${endpoint}:`, rawText.slice(0, 100));
-      return { ok: false, status: res.status, data: null };
-    }
-  } catch (networkErr) {
-    console.log("🔴 Network error:", networkErr.message);
-    return { ok: false, status: 0, data: null };
-  }
-};
-
-// ─────────────────────────────────────────────────────────────
-const generateAuthToken = () => {
-  const chars =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  return Array.from({ length: 64 }, () =>
-    chars[Math.floor(Math.random() * chars.length)]
-  ).join("");
-};
+import { apiFetch, BASE_URL } from "../api/apiClient";
 
 const OtpScreen = ({ navigation, route }) => {
   const [loading, setLoading] = useState(false);
@@ -185,286 +144,247 @@ const { phoneNumber } = route.params || {};
     }
   };
 
-  // ─── Auto Login after OTP success ──────────────────────────
-  const handleAutoLogin = async (userCredential, phone) => {
+const handleAutoLogin = async (userCredential, phone) => {
+  try {
+    setLoading(true);
+
+    const cleanPhone = phone?.replace("+91", "").trim();
+
+    // ✅ Firebase ID token (OTP success-க்கு அப்புறம் currentUser இருக்கு)
+    let firebaseToken = null;
     try {
-      setLoading(true);
-
-      const cleanPhone = phone?.replace("+91", "").trim();
-
-      const fcmToken = await getFcmToken();
-      const deviceId = await DeviceInfo.getUniqueId();
-      const osName = DeviceInfo.getSystemName();
-      const osVersion = DeviceInfo.getSystemVersion();
-      const appVersionName = DeviceInfo.getVersion();
-      const now = new Date().toISOString();
-
-      // Step 1: Read stored token
-      let storedToken = null;
-      try {
-        const raw = await getStorageData(USER_DATA);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          const device = (parsed?.PlatformInfo?.devices || []).find(
-            (d) => d.deviceId === deviceId
-          );
-          storedToken = device?.authToken || parsed?.authToken || null;
-        }
-      } catch (e) {
-        console.log("⚠️ Read error:", e.message);
+      const currentUser = auth().currentUser;
+      if (currentUser) {
+        firebaseToken = await currentUser.getIdToken(true); // force refresh
       }
+    } catch (e) {
+      console.log("⚠️ Firebase token fetch failed:", e.message);
+    }
 
-      // Step 2: Decide token
-      const workingToken = storedToken || generateAuthToken();
-      const isReturning = !!storedToken;
+    if (!firebaseToken) {
+      Alert.alert("Login Failed", "Could not get auth token. Please try again.");
+      return;
+    }
 
-      console.log(isReturning ? "🔄 Returning user" : "🆕 New user");
-
-      // Step 3: Get existing user (only if returning)
-      let existingData = {};
-      if (isReturning) {
-        const getResult = await safeApiCall(
-          `${BASE_URL}/solarman/get`,
-          { phoneNo: cleanPhone },
-          workingToken,
-          deviceId
-        );
-
-        if (getResult.ok && getResult.data?.success && getResult.data?.data) {
-          existingData = getResult.data.data;
-          console.log("✅ getUser success");
-        } else {
-          console.log("⚠️ Stored token rejected — treating as new session");
-        }
-      }
-
-      const userInfo = existingData?.UserInfo || existingData || {};
-      const role = userInfo?.role || "user";
-      const email = userInfo?.email || null;
-      const password = userInfo?.password || null;
-      const provider = userInfo?.provider || null;
-
-      // Step 4: accessToken
-      let accessToken = null;
-      if (email && password) {
-        const tokenResult = await safeApiCall(
-          `${BASE_URL}/solarman/token`,
-          { email, password, phoneNo: cleanPhone },
-          workingToken,
-          deviceId
-        );
-        accessToken = tokenResult.data?.access_token || null;
-      }
-
-      // Step 5: Stations
-      let devicelist = existingData.devicelist || [];
-      if (accessToken) {
-        const stationsResult = await safeApiCall(
-          `${BASE_URL}/solarman/stations`,
-          { phoneNo: cleanPhone },
-          workingToken,
-          deviceId
-        );
-        const rawList =
-          stationsResult.data?.stations ||
-          stationsResult.data?.stationList ||
-          [];
-        if (rawList.length > 0) {
-          devicelist = rawList.map((station) => ({
-            id: station.id,
-            name: station.name || "",
-            installationAmount:
-              (existingData.devicelist || []).find((d) => d.id === station.id)
-                ?.installationAmount ?? "",
-          }));
-        }
-      }
-
-      // Step 6: Final payload
-      const currentDevice = {
-        deviceId,
-        os: osName,
-        version: osVersion,
-        authToken: workingToken,
-        fcmToken: fcmToken || null,
-        lastUsedAt: now,
-        isLastLoggedIn: true,
-      };
-
-      const existingDevices = existingData?.PlatformInfo?.devices || [];
-      const mergedDevices = [
-        ...existingDevices
-          .filter((d) => d.deviceId !== deviceId)
-          .map((d) => ({ ...d, isLastLoggedIn: false })),
-        currentDevice,
-      ];
-
-      const finalPayload = {
-  ...existingData,
-  AppInfo: {
-    ...(existingData.AppInfo || {}),
-    lastLogin: now,
-    versionName: DeviceInfo.getVersion(),
-    buildNumber: DeviceInfo.getBuildNumber(),
-  },
-  PlatformInfo: { devices: mergedDevices },
-  UserInfo: {
-    ...userInfo,
-    phoneNo: cleanPhone,
-    role,
-    provider,
-  },
-  devicelist,
+    const authExtraHeaders = {
+  "x-user-phone": cleanPhone,
 };
 
+    const fcmToken = await getFcmToken();
+    const deviceId = await DeviceInfo.getUniqueId();
+    const osName = DeviceInfo.getSystemName();
+    const osVersion = DeviceInfo.getSystemVersion();
+    const now = new Date().toISOString();
 
-      // Step 7: Save to backend
-      const saveResult = await safeApiCall(
-        `${BASE_URL}/solarman/user`,
-        finalPayload,
-        workingToken,
-        deviceId
-      );
+    console.log("📡 OTP login | phone:", cleanPhone, "| hasFirebaseToken:", !!firebaseToken);
 
-      if (!saveResult.ok) {
-        console.log("⚠️ Backend save failed:", JSON.stringify(saveResult.data));
-      }
+    // ─────────────────────────────────────────────────────────
+    // Step 1: GET user (new / existing — always try)
+    // apiFetch automatically adds x-auth-token + x-user-phone
+    // ─────────────────────────────────────────────────────────
+    const getResult = await apiFetch("/solarman/get", {
+      method: "POST",
+      body: { phoneNo: cleanPhone },
+      headers: authExtraHeaders,
+    });
 
-      // Step 7b: If email missing → fetch fresh from DB
-      if (!email) {
-        console.log("📧 Email missing — fetching from DB after save...");
-        const getUserResult = await safeApiCall(
-          `${BASE_URL}/solarman/get`,
-          { phoneNo: cleanPhone },
-          workingToken,
-          deviceId
-        );
-
-        if (
-          getUserResult.ok &&
-          getUserResult.data?.success &&
-          getUserResult.data?.data
-        ) {
-          const freshData = getUserResult.data.data;
-          const freshEmail =
-            freshData?.UserInfo?.email || freshData?.email || null;
-          const freshPassword =
-            freshData?.UserInfo?.password || freshData?.password || null;
-          const freshRole =
-            freshData?.UserInfo?.role || freshData?.role || role;
-          const freshProvider =
-            freshData?.UserInfo?.provider || freshData?.provider || provider;
-
-          const updatedPayload = {
-            ...finalPayload,
-            UserInfo: {
-              ...finalPayload.UserInfo,
-              email: freshEmail || email,
-              password: freshPassword || password,
-              role: freshRole,
-              provider: freshProvider,
-            },
-            accessToken,
-            authToken: workingToken,
-          };
-
-          await AsyncStorage.setItem(
-            USER_DATA,
-            JSON.stringify(updatedPayload)
-          );
-
-          // Navigate with fresh role
-          if (freshRole === "admin") {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: SCREEN_NAMES.ADMIN_SCREEN }],
-            });
-          } else if (freshRole === "logistic") {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: SCREEN_NAMES.LOGISTIC_SCREEN }],
-            });
-          } else if (freshRole === "surveyor") {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }],
-            });
-          } else if (freshRole === "installer") {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: SCREEN_NAMES.INSTALLER_SCREEN }],
-            });
-          } else if (freshEmail?.trim()) {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: SCREEN_NAMES.MAIN }],
-            });
-          } else {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }],
-            });
-          }
-          return;
-        }
-      }
-
-      // Step 8: Save to AsyncStorage
-      await AsyncStorage.setItem(
-        USER_DATA,
-        JSON.stringify({
-          ...finalPayload,
-          UserInfo: {
-            ...finalPayload.UserInfo,
-            role,
-            provider,
-          },
-          accessToken,
-          authToken: workingToken,
-        })
-      );
-      console.log("💾 Write verify: SUCCESS ✅");
-
-      // Step 9: Navigate
-      if (role === "admin") {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: SCREEN_NAMES.ADMIN_SCREEN }],
-        });
-      } else if (role === "logistic") {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: SCREEN_NAMES.LOGISTIC_SCREEN }],
-        });
-      } else if (role === "surveyor") {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }],
-        });
-      } else if (role === "installer") {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: SCREEN_NAMES.INSTALLER_SCREEN }],
-        });
-      } else if (email?.trim()) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: SCREEN_NAMES.MAIN }],
-        });
-      } else {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }],
-        });
-      }
-    } catch (err) {
-      console.log("❌ Login error:", err.message);
-      logError("auto_login_failed", { message: err.message, phone: phone });
-      Alert.alert("Login Failed", err.message || "Something went wrong");
-    } finally {
-      setLoading(false);
+    let existingData = {};
+    if (getResult.ok && getResult.data?.success && getResult.data?.data) {
+      existingData = getResult.data.data;
+      console.log("✅ Existing user found");
+    } else {
+      console.log("🆕 New user — will create");
     }
-  };
+
+    const userInfo = existingData?.UserInfo || existingData || {};
+    const role = userInfo?.role || "user";
+    const email = userInfo?.email || null;
+    const password = userInfo?.password || null;
+    const provider = userInfo?.provider || null;
+
+    // ─────────────────────────────────────────────────────────
+    // Step 2: accessToken (email+password இருந்தா)
+    // ─────────────────────────────────────────────────────────
+    let accessToken = null;
+    if (email && password) {
+      const tokenResult = await apiFetch("/solarman/token", {
+        method: "POST",
+        body: { email, password, phoneNo: cleanPhone },
+        headers: authExtraHeaders,
+      });
+      accessToken = tokenResult.data?.access_token || null;
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Step 3: Stations
+    // ─────────────────────────────────────────────────────────
+    let devicelist = existingData.devicelist || [];
+    if (accessToken) {
+      const stationsResult = await apiFetch("/solarman/stations", {
+        method: "POST",
+        body: { phoneNo: cleanPhone },
+        headers: authExtraHeaders,
+      });
+      const rawList =
+        stationsResult.data?.stations ||
+        stationsResult.data?.stationList ||
+        [];
+      if (rawList.length > 0) {
+        devicelist = rawList.map((station) => ({
+          id: station.id,
+          name: station.name || "",
+          installationAmount:
+            (existingData.devicelist || []).find((d) => d.id === station.id)
+              ?.installationAmount ?? "",
+        }));
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Step 4: Build payload
+    // ─────────────────────────────────────────────────────────
+    const currentDevice = {
+      deviceId,
+      os: osName,
+      version: osVersion,
+      authToken: firebaseToken, // ✅ Firebase token store பண்றோம்
+      fcmToken: fcmToken || null,
+      lastUsedAt: now,
+      isLastLoggedIn: true,
+    };
+
+    const existingDevices = existingData?.PlatformInfo?.devices || [];
+    const mergedDevices = [
+      ...existingDevices
+        .filter((d) => d.deviceId !== deviceId)
+        .map((d) => ({ ...d, isLastLoggedIn: false })),
+      currentDevice,
+    ];
+
+    const finalPayload = {
+      ...existingData,
+      AppInfo: {
+        ...(existingData.AppInfo || {}),
+        lastLogin: now,
+        versionName: DeviceInfo.getVersion(),
+        buildNumber: DeviceInfo.getBuildNumber(),
+      },
+      PlatformInfo: { devices: mergedDevices },
+      UserInfo: {
+        ...userInfo,
+        phoneNo: cleanPhone,
+        role,
+        provider,
+      },
+      devicelist,
+    };
+
+    // ─────────────────────────────────────────────────────────
+    // Step 5: SAVE user (create if new / update if existing)
+    // ─────────────────────────────────────────────────────────
+    const saveResult = await apiFetch("/solarman/user", {
+      method: "POST",
+      body: finalPayload,
+      headers: authExtraHeaders,
+    });
+
+    if (!saveResult.ok) {
+      console.log("⚠️ Backend save failed:", JSON.stringify(saveResult.data));
+      // still continue — local storage save பண்ணலாம்
+    } else {
+      console.log("✅ User saved/created successfully");
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Step 6: Email missing → re-fetch
+    // ─────────────────────────────────────────────────────────
+    let finalEmail = email;
+    let finalRole = role;
+    let finalProvider = provider;
+    let finalPassword = password;
+
+    if (!email) {
+      console.log("📧 Email missing — fetching from DB after save...");
+      const getUserResult = await apiFetch("/solarman/get", {
+        method: "POST",
+        body: { phoneNo: cleanPhone },
+        headers: authExtraHeaders,
+      });
+
+      if (getUserResult.ok && getUserResult.data?.success && getUserResult.data?.data) {
+        const freshData = getUserResult.data.data;
+        finalEmail =
+          freshData?.UserInfo?.email || freshData?.email || null;
+        finalPassword =
+          freshData?.UserInfo?.password || freshData?.password || null;
+        finalRole =
+          freshData?.UserInfo?.role || freshData?.role || role;
+        finalProvider =
+          freshData?.UserInfo?.provider || freshData?.provider || provider;
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Step 7: AsyncStorage
+    // ─────────────────────────────────────────────────────────
+    const storagePayload = {
+      ...finalPayload,
+      UserInfo: {
+        ...finalPayload.UserInfo,
+        email: finalEmail,
+        password: finalPassword,
+        role: finalRole,
+        provider: finalProvider,
+      },
+      accessToken,
+      authToken: firebaseToken,
+    };
+
+    await AsyncStorage.setItem(USER_DATA, JSON.stringify(storagePayload));
+    console.log("💾 Write verify: SUCCESS ✅");
+
+    // ─────────────────────────────────────────────────────────
+    // Step 8: Navigate
+    // ─────────────────────────────────────────────────────────
+    if (finalRole === "admin") {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: SCREEN_NAMES.ADMIN_SCREEN }],
+      });
+    } else if (finalRole === "logistic") {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: SCREEN_NAMES.LOGISTIC_SCREEN }],
+      });
+    } else if (finalRole === "surveyor") {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: SCREEN_NAMES.SURVEYER_SCREEN }],
+      });
+    } else if (finalRole === "installer") {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: SCREEN_NAMES.INSTALLER_SCREEN }],
+      });
+    } else if (finalEmail?.trim()) {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: SCREEN_NAMES.MAIN }],
+      });
+    } else {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: SCREEN_NAMES.PRODUCTS_HOME }],
+      });
+    }
+  } catch (err) {
+    console.log("❌ Login error:", err.message);
+    logError("auto_login_failed", { message: err.message, phone });
+    Alert.alert("Login Failed", err.message || "Something went wrong");
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ─── Confirm OTP ───────────────────────────────────────────
 const handleConfirm = async () => {

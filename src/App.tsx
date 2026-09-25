@@ -11,8 +11,14 @@ import RootStack from './navigation';
 import codePush from "@revopush/react-native-code-push";
 // @ts-ignore
 import { initSyncQueue, teardownSyncQueue } from './service/syncQueueService';
+import { initDeliveryQueueSync, teardownDeliveryQueueSync } from './components/DispatchForm';
 import messaging from '@react-native-firebase/messaging';
-import crashlytics from '@react-native-firebase/crashlytics';   // ← add pannunga
+import crashlytics from '@react-native-firebase/crashlytics';
+
+// 👇 ADD these two imports
+import NetInfo from '@react-native-community/netinfo';
+// @ts-ignore
+import { processSyncQueue } from './service/syncQueue';
 
 // @ts-ignore
 import {
@@ -32,8 +38,6 @@ let App = () => {
     // ========== Crashlytics Setup ==========
     crashlytics().setCrashlyticsCollectionEnabled(true);
     crashlytics().log('App started');
-    // Optional: later login aana setUserId call pannunga
-    // crashlytics().setUserId('user_123');
     // ======================================
 
     codePush.sync({
@@ -42,6 +46,21 @@ let App = () => {
     });
     createNotificationChannel();
     initSyncQueue();
+    initDeliveryQueueSync();
+
+    // 👇 syncQueue.js (ACCEPT_LEAD, STATUS_UPDATE, DEAL_DISTANCE,
+    // FORM_SUBMIT, LEAD_REJECT etc) ku vera trigger illa — idhu mattum
+    // idhu inga irukanum, correct-a useEffect-kulla
+    const unsubscribeNetSync = NetInfo.addEventListener((state) => {
+      if (state.isConnected && state.isInternetReachable !== false) {
+        processSyncQueue();
+      }
+    });
+    NetInfo.fetch().then((state) => {
+      if (state.isConnected && state.isInternetReachable !== false) {
+        processSyncQueue();
+      }
+    });
 
     // FCM permission + token
     requestNotificationPermission();
@@ -71,6 +90,8 @@ let App = () => {
 
     return () => {
       teardownSyncQueue();
+      teardownDeliveryQueueSync();
+      unsubscribeNetSync();
       unsubscribeForeground();
       unsubscribeOpenedApp();
     };

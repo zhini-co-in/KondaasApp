@@ -200,23 +200,13 @@ const _executeAction = async (item) => {
       break;
 
     case 'ACCEPT_LEAD':
-      await API.post('/order/accept', {
-        mobile: payload.mobile,
-        surveyorNumber: payload.surveyorNumber,
-      }, { timeout: DEFAULT_TIMEOUT });
-      if (payload.dealId) {
-        await API.put('/order/updatestatus', {
-          id: payload.dealId,
-          status: 'Accepted',
-        }, { timeout: DEFAULT_TIMEOUT });
-      }
-      await API.post('/order/sync-status', {
-        customerMobile: payload.mobile,
-        surveyorNumber: payload.surveyorNumber,
-        status: 'Accepted',
-        receivedAt: payload.receivedAt || Date.now(),
-      }, { timeout: DEFAULT_TIMEOUT });
-      break;
+  if (payload.dealId) {
+    await API.put('/order/updatestatus', {
+      id: payload.dealId,
+      status: 'Accepted',
+    }, { timeout: DEFAULT_TIMEOUT });
+  }
+  break;
 
     case 'LEAD_REJECT':
       await API.post('/order/reject', {
@@ -230,13 +220,6 @@ const _executeAction = async (item) => {
       if (payload.dealId) {
         await API.delete('/order/delete', { data: { dealId: payload.dealId }, timeout: DEFAULT_TIMEOUT });
       }
-      break;
-
-    case 'In-Progress_LEAD':
-      await API.post('/order/In-Progress', {
-        mobile: payload.mobile,
-        surveyorNumber: payload.surveyorNumber,
-      }, { timeout: DEFAULT_TIMEOUT });
       break;
 
     case 'Completed_LEAD':
@@ -308,10 +291,6 @@ const _executeAction = async (item) => {
       }
       break;
     }
-
-    case 'FLOWTRIX_SYNC':
-      await API.post('/order/sync-status', payload, { timeout: DEFAULT_TIMEOUT });
-      break;
 
     case 'ORDER_COMPLETE':
       await API.post('/order/complete', payload, { timeout: DEFAULT_TIMEOUT });

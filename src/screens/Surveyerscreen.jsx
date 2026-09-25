@@ -728,14 +728,12 @@ const confirmReject = async () => {
 
       // ✅ FIX 3: timeout கொடு — network slow-ஆ இருந்தா hang ஆகாம
       const res = await API.post('/notification/daily-photo', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 30000,
       });
 
       if (res.data?.success) {
-        Alert.alert;
-        return true;
-      } else {
+  return true;
+} else {
         throw new Error(res.data?.message || 'Upload failed');
       }
 
@@ -903,14 +901,6 @@ const confirmReject = async () => {
       const dueAt   = startAt + (totalMins * 60 * 1000);
 
       tryApi(() => API.put('/order/updatestatus', { id: lead.dealId, status: 'In-Progress' }));
-      tryApi(() => API.post('/order/In-Progress', { mobile: lead.phone, surveyorNumber }));
-      tryApi(() => API.post('/order/sync-status', {
-        customerMobile: lead.phone,
-        surveyorNumber,
-        status: 'In-Progress',
-        startAt,
-        dueAt,
-      }));
 
       try {
         await API.post('/notification/trigger', {
@@ -965,12 +955,6 @@ const confirmReject = async () => {
   const surveyorNumber = await getSurveyorNumber();
 
   tryApi(() => API.put('/order/updatestatus', { id: lead.dealId, status: 'hold' }));
-  tryApi(() => API.post('/order/sync-status', {
-    customerMobile: lead.phone,
-    surveyorNumber,
-    status: 'hold',
-    receivedAt: Date.now(),
-  }));
 }
 
     // Hold ஆனதும் high-frequency GPS tracking இந்த lead-க்கு தேவையில்ல

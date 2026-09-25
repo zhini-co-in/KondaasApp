@@ -130,18 +130,9 @@ async function handleNotificationAccept(notifData) {
     if (online) {
       // ✅ Online-ல direct calls மட்டும் — queue-ல போடல, duplicate தவிர்க்க
       try {
-        const r1 = await API.post('/order/accept', payload);
-        console.log('✅ accept:', r1?.data);
 
         const r2 = await API.put('/order/updatestatus', { id: dealId, status: 'Accepted' });
         console.log('✅ updatestatus:', r2?.data);
-
-        const r3 = await API.post('/order/sync-status', {
-          customerMobile: mobile,
-          surveyorNumber,
-          status:     'Accepted',
-          receivedAt: AcceptedAt,
-        });
         console.log('✅ sync-status:', r3?.data);
       } catch (apiErr) {
         console.error('[notificationService] Accept API error:', apiErr?.response?.data || apiErr?.message);

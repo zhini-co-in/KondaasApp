@@ -1,36 +1,16 @@
 import { getSessionInfo } from "../service/localStorage";
+import { apiFetch } from "./apiClient";
 
 // ─────────────────────────────────────────────────────────────
-// DEYE — Backend deyeRoutes: /deye/token, /deye/stations,
-//   /deye/real-time, /deye/history, /deye/savings
-//
-// ⚠️ REMOVED: /deye/devices — இந்த route backend-ல இல்லவே இல்ல
-// (call பண்ணா 404 "Not Found" plain text வரும், JSON.parse crash
-// ஆகும்). deviceSn எடுக்க வேற வழி பாக்கணும் (கீழ Note பாருங்க).
-//
-// ⚠️ Call பண்ண வேண்டாம் (இப்போவைக்கு): /deye/real-time
+// DEYE — /deye/stations, /deye/history, /deye/savings
 // ─────────────────────────────────────────────────────────────
 
-const BASE_URL = "https://kondaas.atom8itsolutions.com";
-
-const deyeFetch = async (endpoint, body, authToken, deviceId) => {
-  const res = await fetch(`${BASE_URL}${endpoint}`, {
+const deyeFetch = async (endpoint, body) => {
+  const result = await apiFetch(endpoint, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-auth-token": authToken || "",
-      "x-device-id":  deviceId  || "",
-    },
-    body: JSON.stringify(body),
+    body,
   });
-
-  const rawText = await res.text();
-  try {
-    return JSON.parse(rawText);
-  } catch {
-    console.log(`⚠️ ${endpoint} returned non-JSON (status ${res.status}):`, rawText.slice(0, 200));
-    return { error: rawText || `Non-JSON response (status ${res.status})` };
-  }
+  return result.data;
 };
 
 const normalizeDeyeItem = (raw) => {
@@ -69,26 +49,23 @@ const normalizeDeyeItem = (raw) => {
     generationPower: findVal(["TotalActiveACOutputPower", "ActivePower"]),
   };
 };
+
 // ─────────────────────────────────────────────────────────────
-// 1. DEYE — FETCH STATION LIST
-// ✅ FIX: முன்னாடி ஒவ்வொரு station-க்கும் /deye/devices call பண்ணி
-// deviceSn attach பண்ண try பண்ணுச்சு — அந்த route backend-ல இல்ல,
-// அதனால அந்த enrichment step நீக்கிருக்கேன். stations plain-ஆ
-// return பண்றோம்.
+// 1. FETCH STATION LIST
 // ─────────────────────────────────────────────────────────────
 let inFlightDeyeStationListRequest = null;
 
 const fetchDeyeStationListInternal = async () => {
-  const { deviceId, authToken, phoneNo } = await getSessionInfo();
+  const { phoneNo } = await getSessionInfo();
 
-  console.log("📡 fetchDeyeStationList | deviceId:", deviceId);
+  console.log("📡 fetchDeyeStationList");
 
-  const data = await deyeFetch("/deye/stations", { phoneNo }, authToken, deviceId);
+  const data = await deyeFetch("/deye/stations", { phoneNo });
 
   console.log("🏭 fetchDeyeStationList:", JSON.stringify(data));
 
-  if (data?.stations)      return data.stations;
-  if (data?.stationList)   return data.stationList;
+  if (data?.stations) return data.stations;
+  if (data?.stationList) return data.stationList;
   if (Array.isArray(data)) return data;
   return [];
 };
@@ -110,21 +87,26 @@ export const fetchDeyeStationList = async () => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// 2. DEYE — GET HISTORY
-// deviceSn கட்டாயம் தேவை. backend fallback-ஆ user.devicelist-ல
-// save பண்ணிருக்கிற deviceSn-ஐ எடுக்கும் — அதனால caller (getHistory
-// in api1.js) devicelist-ல deviceSn already இருந்தா தான் வேலை செய்யும்.
+// 2. GET HISTORY
 // ─────────────────────────────────────────────────────────────
-export const fetchDeyeHistory = async ({ stationId, deviceSn, timeType, startTime, endTime }) => {
+export const fetchDeyeHistory = async ({
+  stationId,
+  deviceSn,
+  timeType,
+  startTime,
+  endTime,
+}) => {
   try {
-    const { deviceId, authToken, phoneNo } = await getSessionInfo();
+    const { phoneNo } = await getSessionInfo();
 
-    const data = await deyeFetch(
-      "/deye/history",
-      { phoneNo, stationId, deviceSn, timeType, startTime, endTime },
-      authToken,
-      deviceId
-    );
+    const data = await deyeFetch("/deye/history", {
+      phoneNo,
+      stationId,
+      deviceSn,
+      timeType,
+      startTime,
+      endTime,
+    });
 
     console.log("✅ fetchDeyeHistory:", JSON.stringify(data).slice(0, 200));
 
@@ -139,7 +121,11 @@ export const fetchDeyeHistory = async ({ stationId, deviceSn, timeType, startTim
     }
 
     console.log("⚠️ fetchDeyeHistory: backend error:", data?.error);
-    return { stationDataItems: [], fromCache: false, liveGenerationToday: undefined };
+    return {
+      stationDataItems: [],
+      fromCache: false,
+      liveGenerationToday: undefined,
+    };
   } catch (e) {
     console.log("❌ fetchDeyeHistory error:", e.message);
     return null;
@@ -147,18 +133,17 @@ export const fetchDeyeHistory = async ({ stationId, deviceSn, timeType, startTim
 };
 
 // ─────────────────────────────────────────────────────────────
-// 3. DEYE — FETCH SAVINGS
+// 3. FETCH SAVINGS
 // ─────────────────────────────────────────────────────────────
 export const fetchDeyeSavings = async ({ phoneNo, stationId } = {}) => {
   try {
-    const { deviceId, authToken, phoneNo: sessionPhoneNo } = await getSessionInfo();
+    const { phoneNo: sessionPhoneNo, deviceId } = await getSessionInfo();
 
-    const data = await deyeFetch(
-      "/deye/savings",
-      { phoneNo: phoneNo || sessionPhoneNo, stationId, deviceId },
-      authToken,
-      deviceId
-    );
+    const data = await deyeFetch("/deye/savings", {
+      phoneNo: phoneNo || sessionPhoneNo,
+      stationId,
+      deviceId,
+    });
 
     console.log("💰 fetchDeyeSavings:", JSON.stringify(data));
     return data;

@@ -47,9 +47,14 @@ import { saveScannedProduct, confirmDeliveryToWarehouse, getNewAssignedCards, up
 import {
   mergeCardsWithLocalProgress,
   setLocalDispatchStatus,
+  getLocalProgress, // FIX: needed to check every package's local stage before advancing the dispatch
   acceptDealLocalFirst,
-  updateDispatchStatusRemote, // FIX: needed to actually push 'In-Progress' to the backend
+  updateDispatchStatusRemote,
+  clearAllLocalLogisticData, // FIX: needed to actually push 'In-Progress' to the backend
 } from '../service/dispatchProgressService';
+import { getQueueLength } from '../service/syncQueueService';
+import { getDeliveryQueueLength } from '../components/DispatchForm';
+import { getPendingCount } from '../service/syncQueue';
 
 const LogisticScreen = ({ navigation }) => {
   const isMounted = useRef(true);
@@ -408,6 +413,50 @@ const [deliveryFormPkg, setDeliveryFormPkg] = useState(null);
     );
   };
 
+  // FIX: package-level scans (handleVerifyConfirmed's target.pkg/target.key
+  // branch below) only ever advanced that ONE package's own status — they
+  // never touched the dispatch's own status, so a dispatch stayed stuck on
+  // 'Accepted'/'In-Progress' forever even after every package was picked
+  // or delivered. This checks ALL of a card's packages against their local
+  // stage (written by setLocalPackageStage — same source advancePackage
+  // itself persists to) and only then advances the dispatch:
+  //   action 'pickup'   -> every package >= 'picked'  -> dispatch 'picked'
+  //   action 'delivery' -> every package === 'delivered' -> dispatch 'Completed'
+  const checkAndAdvanceDispatchIfAllPackagesDone = async (card, action) => {
+    const packages = card?.packages || [];
+    if (!card?.deal_id || packages.length === 0) return;
+
+    const local = await getLocalProgress(card.deal_id);
+
+    const allDone = packages.every((pkg) => {
+      const stage = local.packages?.[pkg.package_number]?.stage;
+      if (action === 'pickup') return stage === 'picked' || stage === 'delivered';
+      return stage === 'delivered';
+    });
+
+    if (!allDone) return;
+
+    const dispatchStatus = action === 'pickup' ? 'picked' : 'Completed';
+    const remoteStatus = action === 'pickup' ? 'picked' : 'delivered';
+
+    await setLocalDispatchStatus(card.deal_id, dispatchStatus);
+    updateDispatchStatusRemote(card.deal_id, remoteStatus).catch((e) => {
+      console.warn(`⚠️ ${remoteStatus} dispatch_status push failed:`, e?.message);
+    });
+
+    setNewAssignedCards((prev) =>
+      prev.map((item) =>
+        item.deal_id === card.deal_id
+          ? {
+              ...item,
+              status: dispatchStatus,
+              ...(dispatchStatus === 'Completed' ? { deliveredAt: new Date().toISOString() } : {}),
+            }
+          : item
+      )
+    );
+  };
+
   // Per-card tracking sheet (used for "View full details" / Completed cards)
   // Opens the scan+verify modal instead of changing status directly.
   // `action` is 'pickup' (→ Picked) or 'delivery' (→ Dropped/Delivered).
@@ -427,13 +476,14 @@ const [deliveryFormPkg, setDeliveryFormPkg] = useState(null);
   // the "Reached" button's onPress. Actual stage change to 'delivered'
   // happens only inside DispatchForm's onSubmitted (see JSX below).
   const openDeliveryForm = (card, pkg) => {
-    setDeliveryFormPkg({
-      deal_id: card.deal_id,
-      package_number: pkg.package_number,
-      dispatch_number: card.deal_id,
-    });
-    setDeliveryFormVisible(true);
-  };
+  setDeliveryFormPkg({
+    deal_id: card.deal_id,
+    package_number: pkg.package_number,
+    dispatch_number: card.deal_id,
+    crm_deal_id: pkg.crm_deal_id,
+  });
+  setDeliveryFormVisible(true);
+};
 
   // Only place a card/package's status is actually allowed to change to
   // Picked/Delivered — fires only after the driver explicitly confirms on
@@ -449,7 +499,13 @@ const [deliveryFormPkg, setDeliveryFormPkg] = useState(null);
     if (target.pkg && target.key) {
       const nextStage = target.action === 'pickup' ? 'picked' : 'delivered';
       const remoteStatus = target.action === 'pickup' ? 'shipped' : 'delivered';
-      cardRefs.current[target.card?.deal_id]?.advancePackage(target.pkg, target.key, nextStage, remoteStatus);
+      await cardRefs.current[target.card?.deal_id]?.advancePackage(target.pkg, target.key, nextStage, remoteStatus);
+
+      // FIX: this used to `return` right here, so the dispatch's own
+      // status never advanced past whatever it was before the scan. Now
+      // check whether every package on this card is done and, if so,
+      // push the dispatch forward too.
+      await checkAndAdvanceDispatchIfAllPackagesDone(target.card, target.action);
       return;
     }
 
@@ -512,25 +568,51 @@ const [deliveryFormPkg, setDeliveryFormPkg] = useState(null);
     openScanVerify(card, index, 'delivery');
   };
 
-  const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Yes',
-        onPress: async () => {
-          try {
-            stopTracking();
-            stopHighFrequencyTracking();
-            if (Platform.OS === 'android') NativeModules.StartStopService?.stopService();
-            await AsyncStorage.removeItem(USER_DATA);
-            navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.LOGIN }] });
-          } catch (e) {
-            Alert.alert('Error', 'Failed to logout.');
-          }
-        },
+// Actual logout — tracking stop, local data wipe, navigate. Called either
+// directly (no pending items) or after the "Logout Anyway" confirm below.
+const doActualLogout = async () => {
+  try {
+    stopTracking();
+    stopHighFrequencyTracking();
+    if (Platform.OS === 'android') NativeModules.StartStopService?.stopService();
+
+    await clearAllLocalLogisticData();
+    await AsyncStorage.removeItem(USER_DATA);
+
+    navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.LOGIN }] });
+  } catch (e) {
+    Alert.alert('Error', 'Failed to logout.');
+  }
+};
+
+const handleLogout = () => {
+  Alert.alert('Logout', 'Are you sure you want to logout?', [
+    { text: 'Cancel', style: 'cancel' },
+    {
+      text: 'Yes',
+      onPress: async () => {
+        const pendingSync = await getQueueLength();          // syncQueueService.js
+        const pendingDelivery = await getDeliveryQueueLength(); // DispatchForm.js
+        const pendingOther = await getPendingCount();          // syncQueue.js
+
+        const total = pendingSync + pendingDelivery + pendingOther;
+
+        if (total > 0) {
+          Alert.alert(
+            'Unsynced Data',
+            `${total} item(s) haven't synced to the server yet. Logging out will delete them permanently. Continue?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Logout Anyway', style: 'destructive', onPress: doActualLogout },
+            ]
+          );
+        } else {
+          await doActualLogout();
+        }
       },
-    ]);
-  };
+    },
+  ]);
+};
 
   // Map a card's raw status to one of the 3 tab columns
   const getCardColumn = (status) => {
@@ -681,6 +763,7 @@ onSeeMore={showFullDealDetails}
 
                   {sectionCards.map((card) => {
                     const index = newAssignedCards.indexOf(card); // original array index, for handlers
+                    console.log('CARD', card.deal_id, 'status=', card.status, 'dispatch_status=', card.dispatch_status);
                     return (
                       <LogisticDealCard
                         ref={(r) => { cardRefs.current[card.deal_id] = r; }}
@@ -893,6 +976,12 @@ onSeeMore={showFullDealDetails}
           cardRefs.current[deliveryFormPkg.deal_id]?.advancePackage(
             { package_number: key }, key, 'delivered', 'delivered'
           );
+
+          // FIX: same missing piece as handleVerifyConfirmed above — this
+          // only ever advanced the one package, never checked whether the
+          // whole dispatch was now done.
+          const card = newAssignedCards.find((c) => c.deal_id === deliveryFormPkg.deal_id);
+          if (card) checkAndAdvanceDispatchIfAllPackagesDone(card, 'delivery');
         }}
       />
 

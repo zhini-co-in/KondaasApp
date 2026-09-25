@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Platform, Alert,
 } from 'react-native';
@@ -7,13 +7,20 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import PackageScanVerifyModal from '../components/PackageScanVerifyModal';
+import DispatchForm from '../components/DispatchForm';
 import {
   getLocalProgress,
   setLocalDispatchStatus,
   setLocalPackageStage,
+  setLocalPackageFormDone,
   updatePackageStatusRemote,
   updateDispatchStatusRemote,
 } from '../service/dispatchProgressService';
+import { useLogisticTracking } from '../service/logisticService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { USER_DATA } from '../service/localStorage';
+import API from '../api/api1';
+import { enqueue } from '../service/syncQueue';
 
 // Stage → { label, color, icon } for the per-package status pill
 const STAGE_CONFIG = {
@@ -23,6 +30,77 @@ const STAGE_CONFIG = {
   reached:            { label: 'Reached',       color: '#f97316', icon: 'location' },
   delivery_verified:  { label: 'Verified',      color: '#8b5cf6', icon: 'checkmark-circle-outline' },
   delivered:          { label: 'Delivered',     color: '#22c55e', icon: 'checkmark-done-circle' },
+};
+// Haversine — meters
+const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const formatDistance = (m) =>
+  m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
+const DISTANCE_SYNCED_KEY = 'distance_synced_package_ids';
+
+const isDistanceAlreadySynced = async (packageKey) => {
+  try {
+    const raw = await AsyncStorage.getItem(DISTANCE_SYNCED_KEY);
+    const ids = raw ? JSON.parse(raw) : [];
+    return ids.includes(packageKey);
+  } catch (e) {
+    return false;
+  }
+};
+
+const markDistanceSynced = async (packageKey) => {
+  try {
+    const raw = await AsyncStorage.getItem(DISTANCE_SYNCED_KEY);
+    const ids = raw ? JSON.parse(raw) : [];
+    if (!ids.includes(packageKey)) {
+      ids.push(packageKey);
+      await AsyncStorage.setItem(DISTANCE_SYNCED_KEY, JSON.stringify(ids));
+    }
+  } catch (e) {}
+};
+
+const getLoggedInUserName = async () => {
+  try {
+    const userData = await AsyncStorage.getItem(USER_DATA);
+    const parsed = userData ? JSON.parse(userData) : null;
+    return parsed?.UserInfo?.name || parsed?.UserInfo?.userName || '';
+  } catch (e) {
+    return '';
+  }
+};
+
+const postDealDistanceToSite = async (card, pkg, toSiteKm) => {
+  const packageKey = `${card.deal_id}_${pkg.package_number}`;
+  if (await isDistanceAlreadySynced(packageKey)) return;
+
+  const driverName = await getLoggedInUserName();
+  const payload = {
+    deal_id: card.deal_id,
+    deal_name: card.deal_id,
+    mobile: card.contact_number || card.mobile || '',
+    to_site: Number(toSiteKm.toFixed(2)),
+    surveyor_name: driverName,
+  };
+
+  try {
+    await API.post('/location/distance', payload);
+    await markDistanceSynced(packageKey);
+  } catch (err) {
+    if (err?.response?.status === 409) {
+      await markDistanceSynced(packageKey);
+      return;
+    }
+    await enqueue(`deal_distance_${packageKey}`, 'DEAL_DISTANCE', payload);
+  }
 };
 
 const openDirections = (pkg, fallbackAddress) => {
@@ -54,21 +132,49 @@ const PackagePickupScreen = ({ navigation, route }) => {
   const { card, onUpdate } = route.params || {};
   const [packages, setPackages] = useState(card?.packages || []);
   const [stages, setStages] = useState({}); // { [package_number]: stage }
+  const [formDone, setFormDone] = useState({}); // { [package_number]: true }
+const [formModal, setFormModal] = useState({ visible: false, pkg: null });
 
   // 🆕 initialMode: 'scan' | 'manual' — controls whether the modal opens on
   // the camera or jumps straight into the manual entry form.
   const [scanModal, setScanModal] = useState({ visible: false, pkg: null, mode: 'pickup', initialMode: 'scan' });
+  const isMounted = useRef(true);
+  const { currentLocation, startTracking } = useLogisticTracking(isMounted);
+  useEffect(() => {
+  console.log('📍 currentLocation:', currentLocation);
+}, [currentLocation]);
 
   useEffect(() => {
-    (async () => {
-      const progress = await getLocalProgress(card.deal_id);
-      const merged = {};
-      (card?.packages || []).forEach((pkg) => {
-        merged[pkg.package_number] = progress.packages?.[pkg.package_number]?.stage || 'pending';
-      });
-      setStages(merged);
-    })();
-  }, [card]);
+    isMounted.current = true;
+    startTracking();
+    return () => { isMounted.current = false; };
+  }, []);
+
+  const getDistanceText = (pkg) => {
+    const lat = parseFloat(pkg.latitude);
+    const lng = parseFloat(pkg.longitude);
+    console.log('📦 pkg coords:', pkg.package_number, pkg.latitude, pkg.longitude);
+    if (isNaN(lat) || isNaN(lng)) return null;   // backend-la coords illa → box hide
+    if (!currentLocation) return '...';          // GPS innum varala
+    return formatDistance(
+      getDistanceMeters(currentLocation.latitude, currentLocation.longitude, lat, lng)
+    );
+  };
+
+useEffect(() => {
+  (async () => {
+    const progress = await getLocalProgress(card.deal_id);
+    const merged = {};
+    const forms = {};
+    (card?.packages || []).forEach((pkg) => {
+      const local = progress.packages?.[pkg.package_number];
+      merged[pkg.package_number] = local?.stage || 'pending';
+      if (local?.formDone) forms[pkg.package_number] = true;
+    });
+    setStages(merged);
+    setFormDone(forms);
+  })();
+}, [card]);
 
   const stageOf = (pkg) => stages[pkg.package_number] || 'pending';
 
@@ -83,17 +189,16 @@ const PackagePickupScreen = ({ navigation, route }) => {
     setScanModal({ visible: true, pkg, mode, initialMode: entryMode });
   const closeScan = () => setScanModal({ visible: false, pkg: null, mode: 'pickup', initialMode: 'scan' });
 
-  const handleVerified = async (matched, pkg, mode, meta) => {
-    if (!matched) return; // stay on the result screen so driver can rescan/override
-    if (mode === 'pickup') {
-      await advanceStage(pkg, 'pickup_verified');
-    } else {
-      await advanceStage(pkg, 'delivery_verified');
-    }
-    if (meta?.manual) {
-      console.log('📝 Package confirmed manually:', pkg.package_number, meta);
-    }
-  };
+const handleVerified = async (matched, pkg, mode, meta) => {
+  if (mode === 'pickup') {
+    await advanceStage(pkg, 'pickup_verified');
+  } else {
+    await advanceStage(pkg, 'delivery_verified');
+  }
+  if (meta?.manual) {
+    console.log('📝 Package confirmed manually:', pkg.package_number, meta);
+  }
+};
 
   const confirmPickup = async (pkg) => {
     await updatePackageStatusRemote(card.deal_id, pkg.package_number, 'shipped');
@@ -102,8 +207,39 @@ const PackagePickupScreen = ({ navigation, route }) => {
   };
 
   const markReached = async (pkg) => {
-    await advanceStage(pkg, 'reached');
-  };
+  await advanceStage(pkg, 'reached');
+
+  // 👇 Odometer box-la kaamikira same value-a package ku one-time
+  // backend-ku anuppுவோம்.
+  const lat = parseFloat(pkg.latitude);
+  const lng = parseFloat(pkg.longitude);
+  if (!isNaN(lat) && !isNaN(lng) && currentLocation) {
+    const meters = getDistanceMeters(
+      currentLocation.latitude, currentLocation.longitude, lat, lng
+    );
+    postDealDistanceToSite(card, pkg, meters / 1000);
+  }
+};
+  const openDeliveryForm = (pkg) =>
+  setFormModal({
+    visible: true,
+    pkg: {
+      deal_id: card.deal_id,                       // dispatch no. (as before)
+      package_number: pkg.package_number,
+      dispatch_number: card.deal_id,
+      crm_deal_id: pkg.crm_deal_id,                // upload endpoint-ku mattum
+    },
+  });
+
+const closeDeliveryForm = () => setFormModal({ visible: false, pkg: null });
+
+// Form submit aanadhum stage maaradhu, formDone mattum true
+const handleFormSubmitted = async () => {
+  const pkgNumber = formModal.pkg?.package_number;
+  if (!pkgNumber) return;
+  setFormDone((prev) => ({ ...prev, [pkgNumber]: true }));
+  await setLocalPackageFormDone(card.deal_id, pkgNumber);
+};
 
   const markDelivered = async (pkg) => {
     await updatePackageStatusRemote(card.deal_id, pkg.package_number, 'delivered');
@@ -140,10 +276,15 @@ const PackagePickupScreen = ({ navigation, route }) => {
           { key: 'reached', icon: 'location', label: 'Reached', bg: '#334155', onPress: () => markReached(pkg) },
         ];
       case 'reached':
-        return [
-          { key: 'scan-delivery', icon: 'scan-outline', label: 'Scan', bg: '#8b5cf6', onPress: () => openScan(pkg, 'delivery', 'scan') },
-          { key: 'manual-delivery', icon: 'create-outline', label: 'Manual', bg: '#fff', border: '#8b5cf6', iconColor: '#8b5cf6', textColor: '#8b5cf6', onPress: () => openScan(pkg, 'delivery', 'manual') },
-        ];
+  if (!formDone[pkg.package_number]) {
+    return [
+      { key: 'form', icon: 'document-text-outline', label: 'Form', bg: '#8b5cf6', onPress: () => openDeliveryForm(pkg) },
+    ];
+  }
+  return [
+    { key: 'scan-delivery', icon: 'scan-outline', label: 'Scan', bg: '#8b5cf6', onPress: () => openScan(pkg, 'delivery', 'scan') },
+    { key: 'manual-delivery', icon: 'create-outline', label: 'Manual', bg: '#fff', border: '#8b5cf6', iconColor: '#8b5cf6', textColor: '#8b5cf6', onPress: () => openScan(pkg, 'delivery', 'manual') },
+  ];
       case 'delivery_verified':
         return [
           { key: 'delivered', icon: 'checkmark-done', label: 'Delivered', bg: '#22c55e', onPress: () => markDelivered(pkg) },
@@ -219,7 +360,7 @@ const PackagePickupScreen = ({ navigation, route }) => {
 
                   {/* Right side — LeadCard-style rectangle action buttons, stacked vertically */}
                   <View style={styles.pkgActionCol}>
-                    {actions.map((a) => (
+                      {actions.map((a) => (
                       <TouchableOpacity
                         key={a.key}
                         disabled={a.disabled}
@@ -237,6 +378,13 @@ const PackagePickupScreen = ({ navigation, route }) => {
                         </Text>
                       </TouchableOpacity>
                     ))}
+                    {/* Reached button-ku keela distance */}
+  {stage === 'picked' && getDistanceText(pkg) && (
+    <View style={styles.distanceBox}>
+      <Text style={styles.distanceLabel}>Distance</Text>
+      <Text style={styles.reachDistance}>{getDistanceText(pkg)}</Text>
+    </View>
+  )}
                   </View>
                 </View>
               </View>
@@ -266,6 +414,12 @@ const PackagePickupScreen = ({ navigation, route }) => {
         onVerified={(matched, rawText, meta) => handleVerified(matched, scanModal.pkg, scanModal.mode, meta)}
         onClose={closeScan}
       />
+      <DispatchForm
+  visible={formModal.visible}
+  pkg={formModal.pkg}
+  onClose={closeDeliveryForm}
+  onSubmitted={handleFormSubmitted}
+/>
     </View>
   );
 };
@@ -311,6 +465,16 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', borderRadius: 8,
   },
   commonBtnText: { fontSize: 11, fontWeight: 'bold' },
+
+  // ⬇️ IDHA ADD PANNU
+  distanceBox: {
+    width: 98, backgroundColor: '#fff7ed', borderWidth: 1.5,
+    borderColor: '#f97316', borderRadius: 8,
+    paddingVertical: 4, alignItems: 'center',
+  },
+  distanceLabel: { fontSize: 10, color: '#f97316', fontWeight: '600' },
+  reachDistance: { fontSize: 15, color: '#f97316', fontWeight: '800', lineHeight: 20 },
+  // ⬆️
 
   emptyText: { textAlign: 'center', color: '#999', marginTop: 40 },
 

@@ -326,22 +326,6 @@ const handleManualEnable = async (item) => {
   });
 }
 
-      // 2b. Flowtrix sync
-      try {
-        await API.post('/order/sync-status', {
-          customerMobile: item.phone,
-          surveyorNumber,
-          status: 'Completed',
-          endAt,
-        });
-      } catch (err) {
-        await enqueue(`flowtrix_completed_${leadId}`, 'FLOWTRIX_SYNC', {
-          customerMobile: item.phone,
-          surveyorNumber,
-          status: 'Completed',
-          endAt,
-        });
-      }
 
       // ✅ 2c. NEW: Order completion endpoint (admin_complete collection)
       // 2c. Order completion endpoint
