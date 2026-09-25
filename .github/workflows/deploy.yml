@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - kondaas2.1
+      - kondaas2.3
 
 jobs:
   update:
