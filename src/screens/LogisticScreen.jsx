@@ -355,7 +355,7 @@ const [deliveryFormPkg, setDeliveryFormPkg] = useState(null);
   // once the driver has typed a reason and confirmed.
   const confirmRejectCard = async () => {
     if (!rejectReason.trim()) {
-      setRejectError('Reject reason podunga');
+      setRejectError('please enter reject reason');
       return;
     }
     const target = rejectTarget;
