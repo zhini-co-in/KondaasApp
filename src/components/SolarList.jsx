@@ -8,36 +8,27 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import firestore from "@react-native-firebase/firestore";
+import { fetchProducts } from "../service/productService";
 
 const SolarList = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchProducts = async () => {
+    const loadProducts = async () => {
       try {
-        const snapshot = await firestore().collection("productList").where("isArchived", "==", false).get();
-
-        if (snapshot.empty) {
-          setLoading(false);
-          return;
-        }
-        const allProducts = [];
-        snapshot.forEach((doc) => {
-          allProducts.push({ id: doc.id, ...doc.data() });
-        });
-
-        setProducts(allProducts);
+        // isArchived filter is handled in the backend (GET /products)
+        const data = await fetchProducts();
+        setProducts(data);
       } catch (error) {
-        console.error("Firestore error:", error);
+        console.error("Products fetch error:", error);
         Alert.alert("Error", error.message || "Failed to fetch products");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchProducts();
+    loadProducts();
   }, []);
 
   if (loading) {
@@ -57,7 +48,7 @@ const SolarList = () => {
 
           {products.length > 0 ? (
             products.map((item) => (
-              <View key={item.id} style={styles.productCard}>
+              <View key={item.docId} style={styles.productCard}>
                 {item.imageURL ? (
                   <Image source={{ uri: item.imageURL }} style={styles.productImg} />
                 ) : (

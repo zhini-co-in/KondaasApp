@@ -160,8 +160,9 @@ const [deliveryFormPkg, setDeliveryFormPkg] = useState(null);
   const restoreState = async () => {
     try {
       const saved = await AsyncStorage.getItem('logistic_is_on');
-      if (saved === 'true') {
-        setIsAvailable(true);
+const accepted = await AsyncStorage.getItem('location_disclosure_accepted');
+if (saved === 'true' && accepted === 'true') {
+  setIsAvailable(true);
         if (Platform.OS === 'android') NativeModules.StartStopService?.startService();
         startTracking();
       }
@@ -186,37 +187,54 @@ const [deliveryFormPkg, setDeliveryFormPkg] = useState(null);
     loadNewAssignedCards();
     setTimeout(() => setRefreshing(false), 1200);
   }, []);
+  const showLocationDisclosure = () =>
+  new Promise((resolve) => {
+    Alert.alert(
+      'Location access',
+      'Kondaas collects your location data to track your live location while you are on delivery duty, so that dispatch and delivery progress can be monitored. This location data is collected even when the app is closed or not in use, as long as your availability is turned ON.\n\nYour location data is sent to Kondaas servers and used only for delivery tracking and dispatch management.',
+      [
+        { text: 'Decline', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Agree', onPress: () => resolve(true) },
+      ],
+      { cancelable: false }
+    );
+  });
 
-  const handleToggle = async () => {
-    if (!isAvailable) {
-      if (Platform.OS === 'android') {
-        try {
-          const gpsOn = await isGPSEnabled();
-          if (!gpsOn) {
-            Alert.alert('Location is Off', 'Please turn on GPS.', [
-              {
-                text: 'Open Settings',
-                onPress: () => Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS'),
-              },
-              { text: 'Cancel', style: 'cancel' },
-            ]);
-            return;
-          }
-          const granted = await requestLocationPermissions();
-          if (!granted) return;
-          NativeModules.StartStopService?.startService();
-        } catch (e) {
-          console.error(e);
+const handleToggle = async () => {
+  if (!isAvailable) {
+    // 1. Prominent disclosure FIRST (before GPS check / permission)
+    const agreed = await showLocationDisclosure();
+    if (!agreed) return;
+    await AsyncStorage.setItem('location_disclosure_accepted', 'true');
+
+    if (Platform.OS === 'android') {
+      try {
+        const gpsOn = await isGPSEnabled();
+        if (!gpsOn) {
+          Alert.alert('Location is Off', 'Please turn on GPS.', [
+            {
+              text: 'Open Settings',
+              onPress: () => Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS'),
+            },
+            { text: 'Cancel', style: 'cancel' },
+          ]);
           return;
         }
-      } else if (Platform.OS === 'ios') {
-        const granted = await requestIOSLocationPermission();
+        const granted = await requestLocationPermissions();
         if (!granted) return;
+        NativeModules.StartStopService?.startService();
+      } catch (e) {
+        console.error(e);
+        return;
       }
-      setIsAvailable(true);
-      await AsyncStorage.setItem('logistic_is_on', 'true');
-      startTracking();
-    } else {
+    } else if (Platform.OS === 'ios') {
+      const granted = await requestIOSLocationPermission();
+      if (!granted) return;
+    }
+    setIsAvailable(true);
+    await AsyncStorage.setItem('logistic_is_on', 'true');
+    startTracking();
+  } else {
       setIsAvailable(false);
       await AsyncStorage.setItem('logistic_is_on', 'false');
       stopTracking();

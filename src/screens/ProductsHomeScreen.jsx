@@ -14,16 +14,16 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useNavigation } from "@react-navigation/native";
-import firestore from "@react-native-firebase/firestore";
 import { saveMailCredentials } from "../api/api1";
 import Loader from "../components/Loader";
 import ProfileImg from "../../assets/images/Round.png";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SCREEN_NAMES } from '../constants/screenNames';
 import { getStorageData, USER_DATA, IsLackCallsShown } from "../service/localStorage";
+import { fetchProducts } from "../service/productService";
 
 // ✅ Product-type template API — dropdown options இதுல இருந்து வரும்
-const PRODUCT_TYPE_API = "https://kondaas.atom8itsolutions.com/template/get/product_type";
+const PRODUCT_TYPE_API = "https://kondaas.atom8itsolutions.com";
 
 // ✅ API fail ஆனா / tunnel down ஆனா காட்ட fallback options
 const FALLBACK_PRODUCT_OPTIONS = [
@@ -108,32 +108,19 @@ const handleLogout = async () => {
 
   // ─── Fetch products from Firestore ────────────────────────────────────────
   useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        const snapshot = await firestore()
-          .collection("productList")
-          .where("isArchived", "==", false)
-          .get();
-
-        if (snapshot.empty) {
-          setLoading(false);
-          return;
-        }
-
-        const allProducts = [];
-        snapshot.forEach((doc) => {
-          allProducts.push({ id: doc.id, ...doc.data() });
-        });
-        setProducts(allProducts);
-      } catch (error) {
-        console.error("Firestore error:", error);
-        Alert.alert("Error", error.message || "Failed to fetch products");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProducts();
-  }, []);
+  const loadProducts = async () => {
+    try {
+      const data = await fetchProducts();
+      setProducts(data);
+    } catch (error) {
+      console.error("Products fetch error:", error);
+      Alert.alert("Error", error.message || "Failed to fetch products");
+    } finally {
+      setLoading(false);
+    }
+  };
+  loadProducts();
+}, []);
 
   // ─── Fetch product-type options (new) ─────────────────────────────────────
   // Credential popup திறக்கும்போது ஒரு தடவை fetch பண்ணுவோம்.

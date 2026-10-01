@@ -142,7 +142,7 @@ if (role === "admin") {
         />
       </View>
 
-      <Text style={styles.bottomText}>Powered by Atom8 | Version 2.0.26092501</Text>
+      <Text style={styles.bottomText}>Powered by Atom8 | Version 2.0.26093001</Text>
     </LinearGradient>
   );
 };

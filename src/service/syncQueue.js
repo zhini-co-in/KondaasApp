@@ -3,6 +3,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import API from '../api/api1';
 import { deleteSavedFormData } from './Localleadsstorage';
+import { apiFetch } from '../api/apiClient';
 
 const QUEUE_KEY = 'sync:queue';
 const DEFAULT_TIMEOUT = 60000; // 👈 all queued network calls get a timeout now
@@ -266,20 +267,14 @@ const _executeAction = async (item) => {
       }
 
       // Axios skip — direct fetch (same URL curl used → 201)
-      const res = await fetch('https://kondaas.atom8itsolutions.com/location/distance', {
+           const res = await apiFetch('/location/distance', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(body),
+        body,
       });
 
-      const text = await res.text();
-      let data = null;
-      try { data = JSON.parse(text); } catch (_) {}
+      const data = res.data;
 
-      console.log('[SyncQueue] DEAL_DISTANCE fetch result:', res.status, data || text);
+      console.log('[SyncQueue] DEAL_DISTANCE result:', res.status, data);
 
       if (res.status === 409 || String(data?.error || '').toLowerCase().includes('already exists')) {
         console.log('[SyncQueue] DEAL_DISTANCE already exists — treating as synced');
@@ -287,7 +282,7 @@ const _executeAction = async (item) => {
       }
 
       if (!res.ok) {
-        throw new Error(`DEAL_DISTANCE failed ${res.status}: ${text}`);
+        throw new Error(`DEAL_DISTANCE failed ${res.status}: ${JSON.stringify(data)}`);
       }
       break;
     }

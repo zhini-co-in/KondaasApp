@@ -6,7 +6,7 @@ import { USER_DATA, getSessionInfo } from "../service/localStorage";
 import { fetchDeyeStationList, fetchDeyeHistory, fetchDeyeSavings } from "./api2";
 import { fetchSolisStationList, fetchSolisHistory, fetchSolisSavings } from "./api3";
 import { logSecurity } from "../utils/crashLogger";
-import { apiFetch, BASE_URL, getAuthHeaders } from "./apiClient";
+import { apiFetch, BASE_URL, getAuthHeaders, getFreshToken } from "./apiClient";
 
 // ─────────────────────────────────────────────────────────────
 // Axios instance (optional — mostly apiFetch use பண்றோம்)
@@ -54,6 +54,18 @@ API1.interceptors.request.use(async (config) => {
   }
   return config;
 });
+API1.interceptors.response.use(
+  (res) => res,
+  async (error) => {
+    const original = error.config;
+    if (error.response?.status === 401 && original && !original._retry) {
+      original._retry = true;
+      await getFreshToken(true);
+      return API1(original);
+    }
+    return Promise.reject(error);
+  }
+);
 
 // ─────────────────────────────────────────────────────────────
 // INTERNAL HELPER — apiFetch use பண்றது

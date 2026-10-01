@@ -79,22 +79,31 @@ export const flushQueue = async () => {
     console.log(`🔄 [syncQueue] flushing ${queue.length} queued action(s)...`);
     const remaining = [];
 
-        for (const item of queue) {
+      for (const item of queue) {
       try {
         await API[item.method](item.url, item.body);
         console.log('✅ [syncQueue] synced:', item.method, item.url, item.body);
       } catch (e) {
         const status = e?.response?.status;
 
-        // 4xx (408/429 thavira) = request thappu, retry pannaalum fail aagum → drop
-        if (status && status >= 400 && status < 500 && status !== 408 && status !== 429) {
+        // 4xx (401/403/408/429 thavira) = request thappu → drop
+        if (
+          status && status >= 400 && status < 500 &&
+          ![401, 403, 408, 429].includes(status)
+        ) {
           console.warn('🗑️ [syncQueue] dropping bad request (4xx):', status, item.url, e?.response?.data);
           continue;
         }
 
-        // Network error / 5xx / 408 / 429 → retry later
+        // Network error / 5xx / 401 / 403 / 408 / 429 → retry later
         console.warn('⚠️ [syncQueue] still failing, will retry later:', item.url, e?.response?.data || e.message);
-        remaining.push({ ...item, attempts: (item.attempts || 0) + 1 });
+
+        const attempts = status ? (item.attempts || 0) + 1 : (item.attempts || 0);
+        if (attempts >= 10) {
+          console.warn('🗑️ giving up after 10 attempts:', item.url);
+          continue;
+        }
+        remaining.push({ ...item, attempts });
       }
     }
 
