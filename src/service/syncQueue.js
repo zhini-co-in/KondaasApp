@@ -7,6 +7,17 @@ import { apiFetch } from '../api/apiClient';
 
 const QUEUE_KEY = 'sync:queue';
 const DEFAULT_TIMEOUT = 60000; // 👈 all queued network calls get a timeout now
+// Backend returns 400 + "Deal already Done!" when the form is already saved
+const isAlreadyExistsError = (e) => {
+  const msg = String(
+    e?.response?.data?.error || e?.response?.data?.message || e?.message || ''
+  ).toLowerCase();
+  return (
+    e?.response?.status === 409 ||
+    msg.includes('already done') ||
+    msg.includes('already exists')
+  );
+};
 
 const _loadQueue = async () => {
   try {
@@ -144,15 +155,18 @@ const _executeAction = async (item) => {
           });
         });
 
-        await API.post('/user/add', fd, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 90000, // 👈 files இருக்கு, bigger timeout
-        });
+        try {
+  await API.post('/user/add', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 90000,
+  });
+} catch (e) {
+  if (!isAlreadyExistsError(e)) throw e; // vera error na retry
+  console.log('[SyncQueue] FORM_SUBMIT already saved on server, treating as uploaded');
+}
 
-        // Upload success ஆனதும் odane flag persist பண்ணு — இதுக்கு பிறகு
-        // action fail ஆனாலும், retry இந்த block-ஐ skip பண்ணிடும்.
-        payload._uploadDone = true;
-        await _persistQueueItemPayload(item.id, payload);
+payload._uploadDone = true;
+await _persistQueueItemPayload(item.id, payload);
       }
 
       await API.put('/order/updatestatus', {

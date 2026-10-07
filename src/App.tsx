@@ -3,7 +3,7 @@ import { Provider as PaperProvider } from 'react-native-paper';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useColorScheme } from 'react-native';
+import { useColorScheme, AppState } from 'react-native';          // 👈 AppState add
 import { lightTheme, darkTheme, PaperDefaultTheme } from './theme';
 // @ts-ignore
 import RootStack from './navigation';
@@ -15,10 +15,14 @@ import { initDeliveryQueueSync, teardownDeliveryQueueSync } from './components/D
 import messaging from '@react-native-firebase/messaging';
 import crashlytics from '@react-native-firebase/crashlytics';
 
-// 👇 ADD these two imports
 import NetInfo from '@react-native-community/netinfo';
 // @ts-ignore
 import { processSyncQueue } from './service/syncQueue';
+
+// 👇 ADD
+import { getAuth, onIdTokenChanged } from '@react-native-firebase/auth';
+// @ts-ignore
+import { getFreshToken, syncTokenToServer } from './api/apiClient';
 
 // @ts-ignore
 import {
@@ -35,10 +39,8 @@ let App = () => {
   const theme = scheme === 'dark' ? darkTheme : lightTheme;
 
   useEffect(() => {
-    // ========== Crashlytics Setup ==========
     crashlytics().setCrashlyticsCollectionEnabled(true);
     crashlytics().log('App started');
-    // ======================================
 
     codePush.sync({
       updateDialog: true,
@@ -48,38 +50,53 @@ let App = () => {
     initSyncQueue();
     initDeliveryQueueSync();
 
-    // 👇 syncQueue.js (ACCEPT_LEAD, STATUS_UPDATE, DEAL_DISTANCE,
-    // FORM_SUBMIT, LEAD_REJECT etc) ku vera trigger illa — idhu mattum
-    // idhu inga irukanum, correct-a useEffect-kulla
+    // 👇 token sync helper (queue-ku munnaadi eppavum idhu run aaganum)
+    const syncToken = async () => {
+      try {
+        const t = await getFreshToken(false);
+        if (t) await syncTokenToServer(t);
+      } catch (e) {}
+    };
+
+    // 👇 CHANGED: token sync → apparam queue
+    const runSync = async () => {
+      await syncToken();
+      await processSyncQueue();
+    };
+
     const unsubscribeNetSync = NetInfo.addEventListener((state) => {
       if (state.isConnected && state.isInternetReachable !== false) {
-        processSyncQueue();
+        runSync();
       }
     });
     NetInfo.fetch().then((state) => {
       if (state.isConnected && state.isInternetReachable !== false) {
-        processSyncQueue();
+        runSync();
       }
     });
 
-    // FCM permission + token
-    requestNotificationPermission();
+    // 👇 ADD: token hourly rotate aana odane DB update
+    const unsubToken = onIdTokenChanged(getAuth(), (user) => {
+      if (user) syncToken();
+    });
 
-    // Accept/Reject button handlers
+    // 👇 ADD: background → foreground vandha catch-up
+    const appStateSub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') syncToken();
+    });
+
+    requestNotificationPermission();
     registerNotificationHandlers();
 
-    // Foreground FCM message
     const unsubscribeForeground = messaging().onMessage(async remoteMessage => {
       console.log('📩 FCM Foreground:', JSON.stringify(remoteMessage));
       await showLeadNotification(remoteMessage.data);
     });
 
-    // Background notification open
     const unsubscribeOpenedApp = messaging().onNotificationOpenedApp(remoteMessage => {
       console.log('App opened from background via notification:', remoteMessage);
     });
 
-    // Quit state notification open
     messaging()
       .getInitialNotification()
       .then(remoteMessage => {
@@ -92,6 +109,8 @@ let App = () => {
       teardownSyncQueue();
       teardownDeliveryQueueSync();
       unsubscribeNetSync();
+      unsubToken();            // 👈 add
+      appStateSub.remove();    // 👈 add
       unsubscribeForeground();
       unsubscribeOpenedApp();
     };
@@ -110,7 +129,6 @@ let App = () => {
   );
 };
 
-// Attach Revopush CodePush
 App = codePush(App);
 
 export default App;

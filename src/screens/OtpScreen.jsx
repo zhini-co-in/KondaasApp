@@ -289,11 +289,14 @@ const handleAutoLogin = async (userCredential, phone) => {
     });
 
     if (!saveResult.ok) {
-      console.log("⚠️ Backend save failed:", JSON.stringify(saveResult.data));
-      // still continue — local storage save பண்ணலாம்
-    } else {
-      console.log("✅ User saved/created successfully");
-    }
+  console.log("⚠️ Backend save failed:", JSON.stringify(saveResult.data));
+  // still continue — local storage save பண்ணலாம்
+  // last_synced_token set pannala, so app la next request ku munnaadi auto sync retry aagum
+} else {
+  console.log("✅ User saved/created successfully");
+  // 👇 ADD: DB la indha token save aachu, so extra sync thevai illa
+  await AsyncStorage.setItem("last_synced_token", firebaseToken);
+}
 
     // ─────────────────────────────────────────────────────────
     // Step 6: Email missing → re-fetch

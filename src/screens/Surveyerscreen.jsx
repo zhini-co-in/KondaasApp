@@ -33,6 +33,8 @@ import LeadCard from '../components/LeadCard';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { PermissionsAndroid } from 'react-native';
 import { getAllLocalLogsForDebug, syncCrashLogs, logError } from '../utils/crashLogger';
+import auth from '@react-native-firebase/auth';
+import { getFreshToken, syncTokenToServer } from '../api/apiClient';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Scheduled Site-Survey due-check helper
@@ -162,13 +164,17 @@ const openDebugLogs = async () => {
   // ── Net watcher ───────────────────────────────────────────────────────────
 useEffect(() => {
   const unsub = NetInfo.addEventListener(async (state) => {
-    // 👈 permissive check — FormScreen.checkRealConnectivity()-ஓட
-    // consistent-ஆ, isInternetReachable: null-ஐயும் "online"-ஆவே treat பண்ணு
     const online = !!state.isConnected && state.isInternetReachable !== false;
     setIsOnline(online);
 
     if (online) {
-      const result = await processSyncQueue();   // 👈 network வந்த odane push
+      // 👇 ADD: queue ku munnaadi token DB la irukkaannu ensure
+      try {
+        const t = await getFreshToken(false);
+        if (t) await syncTokenToServer(t);
+      } catch (e) {}
+
+      const result = await processSyncQueue();
       if (result.synced > 0) await fetchAndMergeLeads();
       setPendingCount(await getPendingCount());
       ensureTemplateCached();
@@ -184,10 +190,16 @@ useEffect(() => {
     const netState = await NetInfo.fetch();
     const online = !!netState.isConnected && netState.isInternetReachable !== false;
     if (online) {
-      const result = await processSyncQueue();
-      if (result.synced > 0) await fetchAndMergeLeads();
-      setPendingCount(await getPendingCount());
-    }
+  // 👇 ADD
+  try {
+    const t = await getFreshToken(false);
+    if (t) await syncTokenToServer(t);
+  } catch (e) {}
+
+  const result = await processSyncQueue();
+  if (result.synced > 0) await fetchAndMergeLeads();
+  setPendingCount(await getPendingCount());
+}
   }, 2 * 60 * 1000); // every 2 mins
   return () => clearInterval(interval);
 }, []);
@@ -229,20 +241,16 @@ useEffect(() => {
 useFocusEffect(
   useCallback(() => {
     const run = async () => {
-      // 👇 CHANGED: fire-and-forget இல்லாம await பண்ணு — server merge
-      // முதல்ல முடிஞ்சிட்டு, அப்புறம் தான் completedIds move நடக்கணும்.
-      // இல்லைனா server response பிந்தி வந்து completedIds move-ஐ
-      // overwrite பண்ணிடும் (lead மறுபடி Accepted-ல தெரியும்).
       if (!isCapturingPhoto.current) {
         await fetchAndMergeLeads();
       }
 
-      const completedIds = route.params?.CompletedIds;
-      if (!completedIds || CompletedIds.length === 0) return;
+      const CompletedIds = route.params?.CompletedIds;
+      if (!CompletedIds || CompletedIds.length === 0) return;
       navigation.setParams({ CompletedIds: null });
 
       const toMove = AcceptedLeadsRef.current.filter((l) =>
-        completedIds.includes(l.id)
+        CompletedIds.includes(l.id)
       );
       setAcceptedLeadsSafe((prev) =>
         prev.filter((l) => !CompletedIds.includes(l.id))
@@ -256,7 +264,7 @@ useFocusEffect(
     };
 
     run();
-  }, [route.params?.completedIds])
+  }, [route.params?.CompletedIds])
 );
 
   // ── Restore state ─────────────────────────────────────────────────────────
@@ -498,7 +506,7 @@ useFocusEffect(
 
     const surveyorNumber = await getSurveyorNumber();
     const AcceptedAt     = Date.now();
-    const payload        = { mobile: item.phone, surveyorNumber };
+    const payload = { mobile: item.phone, surveyorNumber, dealId: item.dealId };
 
     await enqueue(`accept_${item.id}`, 'ACCEPT_LEAD', payload);
 
@@ -628,17 +636,24 @@ const confirmReject = async () => {
 
             // ✅ 1. leads:Accepted / leads:template / leads:forms clear
             await clearAllLocalData();
+try { await auth().signOut(); } catch (e) {}
 
             // ✅ 2. மத்த manual AsyncStorage keys clear
             await AsyncStorage.multiRemove([
               USER_DATA,
               'rejected_lead_ids',
               'surveyer_is_on',
+              'last_synced_token',
             ]);
 
             // ✅ 3. dynamic site_distance_<leadId> keys ellam scan panni remove pannu
             const allKeys = await AsyncStorage.getAllKeys();
-            const siteDistanceKeys = allKeys.filter((k) => k.startsWith('site_distance_'));
+            const siteDistanceKeys = allKeys.filter(
+  (k) =>
+    k.startsWith('site_distance_') ||
+    k.startsWith('start_point_') ||
+    k.startsWith('start_distance_')
+);
             if (siteDistanceKeys.length > 0) {
               await AsyncStorage.multiRemove(siteDistanceKeys);
             }
@@ -813,6 +828,26 @@ const confirmReject = async () => {
   const handleStart = async (id) => {
     const lead = AcceptedLeadsRef.current.find((l) => l.id === id);
     if (!lead) return;
+      console.log('DIST DEBUG', { id, loc: locationRef.current, lat: lead.latitude, lng: lead.longitude });
+      let startLoc = locationRef.current;
+  if (!startLoc) {
+    try {
+      const raw = await AsyncStorage.getItem('last_known_location');
+      startLoc = raw ? JSON.parse(raw) : null;
+    } catch (e) {}
+  }
+  if (startLoc) {
+    try {
+      const existing = await AsyncStorage.getItem(`start_point_${id}`);
+      if (existing === null) {
+        await AsyncStorage.setItem(`start_point_${id}`, JSON.stringify({
+          latitude: startLoc.latitude,
+          longitude: startLoc.longitude,
+          capturedAt: Date.now(),
+        }));
+      }
+    } catch (e) {}
+  }
     const alreadyInProgress = AcceptedLeadsRef.current.find(
       (l) => l.status === 'In-Progress' && l.id !== id
     );
@@ -832,11 +867,11 @@ const confirmReject = async () => {
     let distMeters = null;             // 👈 outer scope-க்கு தூக்கினோம் — கீழ site-distance store பண்ண இதுவே reuse ஆகும்
     const hasLatLong = lead.latitude && lead.longitude;
 
-    if (locationRef.current && hasLatLong) {
-      distMeters = Math.round(getDistance(
-        locationRef.current.latitude, locationRef.current.longitude,
-        parseFloat(lead.latitude), parseFloat(lead.longitude)
-      ));
+    if (startLoc && hasLatLong) {
+  distMeters = Math.round(getDistance(
+    startLoc.latitude, startLoc.longitude,
+    parseFloat(lead.latitude), parseFloat(lead.longitude)
+  ));
       const speed = distMeters <= 300 ? 1.4 : 8.3;
       totalMins = Math.round(distMeters / speed / 60);
       if (totalMins < 1) {
@@ -848,39 +883,46 @@ const confirmReject = async () => {
         const mins = totalMins % 60;
         etaText = mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`;
       }
-        let toSiteKm = distMeters / 1000;
-      try {
-        const road = await getRoadDistanceKm(
-          locationRef.current.latitude, locationRef.current.longitude,
-          parseFloat(lead.latitude), parseFloat(lead.longitude)
-        );
-        if (road !== null) toSiteKm = road;
-      } catch (e) {}
+        let roadKm = null;
+try {
+  roadKm = await getRoadDistanceKm(
+    startLoc.latitude, startLoc.longitude,          // 👈 was locationRef.current
+    parseFloat(lead.latitude), parseFloat(lead.longitude)
+  );
+} catch (e) {}
 
-      // 👇 CHANGED: site_distance_ key-ல fixed distance store பண்றதுக்கு பதிலா,
-      // Start click நேரத்து lat/long POINT-ஐ மட்டும் store பண்ணு.
-      // Reached click ஆகும்போது InProgressScreen.js → handleManualEnable இந்த
-      // point-ஐ வச்சு final distance calculate பண்ணும்.
       try {
-        await AsyncStorage.setItem(
-          `start_point_${id}`,
-          JSON.stringify({
-            latitude: locationRef.current.latitude,
-            longitude: locationRef.current.longitude,
-            capturedAt: Date.now(),
-          })
-        );
+        const src = await AsyncStorage.getItem(`site_distance_src_${id}`);
+
+        if (roadKm !== null && !Number.isNaN(roadKm)) {
+          if (src !== 'road') {
+            await AsyncStorage.setItem(`site_distance_${id}`, String(roadKm));
+            await AsyncStorage.setItem(`site_distance_src_${id}`, 'road');
+          }
+        } else if (src !== 'road') {
+  const existingStart = await AsyncStorage.getItem(`start_point_${id}`);
+  if (existingStart === null) {
+    await AsyncStorage.setItem(
+      `start_point_${id}`,
+      JSON.stringify({
+        latitude: startLoc.latitude,                // 👈 was locationRef.current
+        longitude: startLoc.longitude,
+        capturedAt: Date.now(),
+      })
+    );
+  }
+}
       } catch (e) {}
     }
 
     let mapsUrl = '';
-    if (locationRef.current && hasLatLong) {
-      mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${locationRef.current.latitude},${locationRef.current.longitude}&destination=${lead.latitude},${lead.longitude}`;
-    } else if (hasLatLong) {
-      mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lead.latitude},${lead.longitude}`;
-    } else if (lead.address || lead.city) {
-      mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lead.address || lead.city)}`;
-    }
+if (startLoc && hasLatLong) {
+  mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${startLoc.latitude},${startLoc.longitude}&destination=${lead.latitude},${lead.longitude}`;
+} else if (hasLatLong) {
+  mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lead.latitude},${lead.longitude}`;
+} else if (lead.address || lead.city) {
+  mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lead.address || lead.city)}`;
+} 
 
     // STEP 2: Status update
     await updateAcceptedLeadStatus(id, 'In-Progress');
@@ -948,8 +990,10 @@ const confirmReject = async () => {
     );
 
     await enqueue(`status_hold_${id}`, 'STATUS_UPDATE', {
-      mobile: lead.phone, status: 'hold',
-    });
+  id: lead.dealId,
+  mobile: lead.phone,
+  status: 'hold',
+});
 
     if (isOnline) {
   const surveyorNumber = await getSurveyorNumber();

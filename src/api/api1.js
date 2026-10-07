@@ -58,10 +58,14 @@ API1.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
+    // error.response illa = network error → retry pannaadhe, queue paathukkum
     if (error.response?.status === 401 && original && !original._retry) {
       original._retry = true;
-      await getFreshToken(true);
-      return API1(original);
+      const token = await getFreshToken(false);
+      if (!token) return Promise.reject(error);
+      const ok = await syncTokenToServer(token, true);
+      if (!ok) return Promise.reject(error);
+      return API1(original); // request interceptor puthu headers set pannum
     }
     return Promise.reject(error);
   }

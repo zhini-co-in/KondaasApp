@@ -57,7 +57,7 @@ const InProgressScreen = () => {
   // ── Net watcher ───────────────────────────────────────────────────────────
   useEffect(() => {
     const unsub = NetInfo.addEventListener((state) => {
-      setIsOnline(!!state.isConnected && !!state.isInternetReachable);
+      setIsOnline(!!state.isConnected && state.isInternetReachable !== false);
     });
     return () => unsub();
   }, []);
@@ -189,43 +189,73 @@ const handleManualEnable = async (item) => {
     } catch (e) {}
   }
 
-  if (reachedPoint) {
-    let startPoint = null;
+  // Start la road km already store aachu na, Reached la recalculate pannaadhe
+  let alreadyRoad = false;
+  try {
+    alreadyRoad = (await AsyncStorage.getItem(`site_distance_src_${leadId}`)) === 'road';
+  } catch (e) {}
+
+  if (!alreadyRoad) {
+    let reachedPoint = currentLocation;
+    if (!reachedPoint) {
+      try {
+        const raw = await AsyncStorage.getItem('last_known_location');
+        reachedPoint = raw ? JSON.parse(raw) : null;
+      } catch (e) {}
+    }
+
+    if (reachedPoint) {
+      let startPoint = null;
+      try {
+        const raw = await AsyncStorage.getItem(`start_point_${leadId}`);
+        startPoint = raw ? JSON.parse(raw) : null;
+      } catch (e) {}
+
+      if (startPoint) {
+        let toSiteKm;
+        try {
+          const road = await getRoadDistanceKm(
+            startPoint.latitude, startPoint.longitude,
+            reachedPoint.latitude, reachedPoint.longitude
+          );
+          toSiteKm = road !== null
+            ? road
+            : getDistance(
+                startPoint.latitude, startPoint.longitude,
+                reachedPoint.latitude, reachedPoint.longitude
+              ) / 1000;
+        } catch (e) {
+          toSiteKm = getDistance(
+            startPoint.latitude, startPoint.longitude,
+            reachedPoint.latitude, reachedPoint.longitude
+          ) / 1000;
+        }
+        try { await AsyncStorage.setItem(`site_distance_${leadId}`, String(toSiteKm)); } catch (e) {}
+            } else if (item.latitude && item.longitude) {
+        const fallbackKm = getDistance(
+          reachedPoint.latitude, reachedPoint.longitude,
+          parseFloat(item.latitude), parseFloat(item.longitude)
+        ) / 1000;
+        if (fallbackKm > 0.05) {   // near-0 na save pannaadhe
+          try { await AsyncStorage.setItem(`site_distance_${leadId}`, String(fallbackKm)); } catch (e) {}
+        }
+      }
+    }
+  }
+  const pointForLive = reachedPoint || currentLocation;
+  if (pointForLive && item.latitude && item.longitude) {
+    const liveKm = getDistance(
+      pointForLive.latitude, pointForLive.longitude,
+      parseFloat(item.latitude), parseFloat(item.longitude)
+    ) / 1000;
+
+    let savedKm = 0;
     try {
-      const raw = await AsyncStorage.getItem(`start_point_${leadId}`);
-      startPoint = raw ? JSON.parse(raw) : null;
+      savedKm = parseFloat((await AsyncStorage.getItem(`site_distance_${leadId}`)) || '0');
     } catch (e) {}
 
-    if (startPoint) {
-      let toSiteKm;
-      try {
-        const road = await getRoadDistanceKm(
-          startPoint.latitude, startPoint.longitude,
-          reachedPoint.latitude, reachedPoint.longitude
-        );
-        toSiteKm = road !== null
-          ? road
-          : getDistance(
-              startPoint.latitude, startPoint.longitude,
-              reachedPoint.latitude, reachedPoint.longitude
-            ) / 1000;
-      } catch (e) {
-        toSiteKm = getDistance(
-          startPoint.latitude, startPoint.longitude,
-          reachedPoint.latitude, reachedPoint.longitude
-        ) / 1000;
-      }
-      try {
-        await AsyncStorage.setItem(`site_distance_${leadId}`, String(toSiteKm));
-      } catch (e) {}
-    } else if (item.latitude && item.longitude) {
-      const fallbackKm = getDistance(
-        reachedPoint.latitude, reachedPoint.longitude,
-        parseFloat(item.latitude), parseFloat(item.longitude)
-      ) / 1000;
-      try {
-        await AsyncStorage.setItem(`site_distance_${leadId}`, String(fallbackKm));
-      } catch (e) {}
+    if (!savedKm || savedKm < 0.05) {
+      try { await AsyncStorage.setItem(`site_distance_${leadId}`, String(liveKm)); } catch (e) {}
     }
   }
 
@@ -372,7 +402,7 @@ try {
       await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', {
   id: dealId,               // 👈 was missing entirely
   mobile: item.phone,
-  status: 'completed',
+  status: 'Completed',
 });
       await enqueue(`flowtrix_completed_${leadId}`, 'FLOWTRIX_SYNC', {
         customerMobile: item.phone,
@@ -407,8 +437,8 @@ await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
     routes: [{
       name: SCREEN_NAMES.SURVEYER_SCREEN,
       params: pendingCompletedIdsRef.current
-        ? { completedIds: pendingCompletedIdsRef.current }
-        : undefined,
+  ? { CompletedIds: pendingCompletedIdsRef.current }
+  : undefined,
     }],
   });
 };
@@ -417,12 +447,12 @@ await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
   // ஆகியிருந்தா pending completedIds-ஐ SurveyerScreen-க்கு பாஸ் பண்ணி
   // navigate பண்ணுவோம். இல்லைன்னா plain goBack.
   const handleBackPress = () => {
-    const hasIncomplete = inProgressLeads.some(l => l.status !== 'completed');
+    const hasIncomplete = inProgressLeads.some(l => l.status !== 'Completed');
     const goBackOrHome = () => {
       if (pendingCompletedIdsRef.current) {
         navigation.navigate(SCREEN_NAMES.SURVEYER_SCREEN, {
-          completedIds: pendingCompletedIdsRef.current,
-        });
+  CompletedIds: pendingCompletedIdsRef.current,
+});
       } else {
         navigation.goBack();
       }

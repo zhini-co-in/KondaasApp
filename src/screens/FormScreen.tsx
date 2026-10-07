@@ -406,6 +406,16 @@ const validateSchemaTypes = (
 // timeout, DNS/socket failure) from a real server-side error (4xx/5xx with a
 // response). Used to auto-fallback into the offline save + sync queue flow
 // instead of just showing a dead-end "Network Error" alert.
+const isAlreadyExistsError = (err: any): boolean => {
+  const msg = String(
+    err?.response?.data?.error || err?.response?.data?.message || err?.message || ''
+  ).toLowerCase();
+  return (
+    err?.response?.status === 409 ||
+    msg.includes('already done') ||
+    msg.includes('already exists')
+  );
+};
 const isNetworkFailure = (err: any): boolean => {
   if (!err?.response) return true;          // axios: no response received at all
   if (err?.message === 'Network Error') return true;
@@ -1405,6 +1415,7 @@ const FormScreen = ({
   const [formValues, setFormValues]             = useState<Record<string, string>>({});
   const [filesByField, setFilesByField]         = useState<Record<string, PhotoFile[]>>({});
   const [submitting, setSubmitting]             = useState(false);
+  const submittingRef = useRef(false);
   const [isOnline, setIsOnline]                 = useState(true);
   const [offlineBanner, setOfflineBanner]       = useState(false);
 
@@ -1702,8 +1713,9 @@ useEffect(() => {
       );
       return;
     }
-
-    setSubmitting(true);
+    if (submittingRef.current) return;
+submittingRef.current = true;
+setSubmitting(true);
 
     const nowZoho = toZohoDateTime(new Date());
     const stampedValues = { ...formValues, Site_survey_Completed_Date_Time: nowZoho };
@@ -1764,7 +1776,7 @@ useEffect(() => {
           },
         });
 
-        if (res.status === 201 || res.data?.message) {
+        if (res.status >= 200 && res.status < 300) {
           Alert.alert('✔ Submitted', 'Form submitted successfully!', [
             { text: 'OK', onPress: _navigateBack },
           ]);
@@ -1778,6 +1790,14 @@ useEffect(() => {
 
         // Network drop mid-upload: fall back to offline save + sync queue
         // instead of showing a dead-end "Network Error" alert.
+        if (isAlreadyExistsError(err)) {
+  Alert.alert('✔ Submitted', 'Form already submitted successfully!', [
+    { text: 'OK', onPress: _navigateBack },
+  ]);
+  setFormValues({});
+  setFilesByField({});
+  return; // finally still runs
+}
         if (isNetworkFailure(err)) {
   try {
     const offlinePayload = {
@@ -1822,6 +1842,7 @@ useEffect(() => {
           );
         }
       } finally {
+        submittingRef.current = false;
         setSubmitting(false);
       }
     } else {
@@ -1852,6 +1873,7 @@ await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', {
       } catch (e) {
         Alert.alert('Error', 'Failed to save form offline.');
       } finally {
+        submittingRef.current = false;
         setSubmitting(false);
       }
     }
@@ -1993,6 +2015,7 @@ await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', {
           );
         }
       } finally {
+        submittingRef.current = false;
         setSubmitting(false);
       }
     } else {
@@ -2022,6 +2045,7 @@ await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', {
       } catch (e) {
         Alert.alert('Error', 'Failed to save update offline.');
       } finally {
+        submittingRef.current = false;
         setSubmitting(false);
       }
     }
