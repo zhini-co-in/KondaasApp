@@ -41,7 +41,7 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>app-1-833207375451-ios-5c6999e8518509be39917e</string>
+				<string>app-1-356138314000-ios-c26f8717ff3a042b5cdd95</string>
 			</array>
 		</dict>
 		<dict>
@@ -70,6 +70,8 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>We need camera access to take survey photos.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>This app requires contacts access to help you share information with your team.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
@@ -80,8 +82,10 @@
 	<string>We need your location to track your activity.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app requires microphone access.</string>
-	<key>NSCameraUsageDescription</key>
-<string>We need camera access to take survey photos.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>This app needs permission to save photos to your library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app needs access to your photos to upload images.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UIAppFonts</key>

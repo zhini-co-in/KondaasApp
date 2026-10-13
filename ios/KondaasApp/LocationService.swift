@@ -53,9 +53,20 @@ class LocationService: RCTEventEmitter, CLLocationManagerDelegate {
       manager.allowsBackgroundLocationUpdates = true
       manager.pausesLocationUpdatesAutomatically = false
       manager.distanceFilter = kCLDistanceFilterNone
-      manager.startUpdatingLocation()  // ✅ இது மட்டும் போதும், Timer வேண்டாம்
 
       self.locationManager = manager
+
+      let status = manager.authorizationStatus
+      if status == .notDetermined {
+        manager.requestWhenInUseAuthorization()
+      } else if status == .authorizedWhenInUse {
+        manager.requestAlwaysAuthorization()
+        manager.startUpdatingLocation()
+      } else if status == .authorizedAlways {
+        manager.startUpdatingLocation()
+      } else {
+        print("⚠️ Location permission denied/restricted")
+      }
       print("✅ iOS LocationService startTracking called")
     }
   }
@@ -87,6 +98,18 @@ class LocationService: RCTEventEmitter, CLLocationManagerDelegate {
       // JS listener இல்லாட்டாலும் queue பண்ணு
       pendingEvents.append(body)
       print("⏳ Queued — listener not ready yet")
+    }
+  }
+
+  func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+    switch manager.authorizationStatus {
+    case .authorizedWhenInUse:
+      manager.requestAlwaysAuthorization()
+      manager.startUpdatingLocation()
+    case .authorizedAlways:
+      manager.startUpdatingLocation()
+    default:
+      break
     }
   }
 
