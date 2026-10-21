@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import API from '../api/api1';
 import { deleteSavedFormData } from './Localleadsstorage';
 import { apiFetch } from '../api/apiClient';
+import { onFormSynced } from './deferredNotif';
 
 const QUEUE_KEY = 'sync:queue';
 const DEFAULT_TIMEOUT = 60000; // 👈 all queued network calls get a timeout now
@@ -112,7 +113,10 @@ export const processSyncQueue = async () => {
       }
     }
 
-    await _saveQueue(remaining);
+        const processedIds = new Set(queue.map((q) => q.id));
+    const latest = await _loadQueue();
+    const newlyAdded = latest.filter((q) => !processedIds.has(q.id));
+    await _saveQueue([...remaining, ...newlyAdded]);
     console.log(`[SyncQueue] Done. Synced: ${synced}, Failed: ${failed}, Remaining: ${remaining.length}`);
     return { synced, failed };
   } finally {
@@ -167,6 +171,12 @@ const _executeAction = async (item) => {
 
 payload._uploadDone = true;
 await _persistQueueItemPayload(item.id, payload);
+      }
+
+      try {
+        await onFormSynced(payload.leadId);
+      } catch (e) {
+        console.log('[SyncQueue] onFormSynced failed (non-fatal):', e?.message);
       }
 
       await API.put('/order/updatestatus', {

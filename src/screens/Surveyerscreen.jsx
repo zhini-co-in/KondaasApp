@@ -652,7 +652,9 @@ try { await auth().signOut(); } catch (e) {}
   (k) =>
     k.startsWith('site_distance_') ||
     k.startsWith('start_point_') ||
-    k.startsWith('start_distance_')
+    k.startsWith('start_distance_') ||
+    k.startsWith('form_pending_sync_') ||
+    k.startsWith('deferred_notif4_')
 );
             if (siteDistanceKeys.length > 0) {
               await AsyncStorage.multiRemove(siteDistanceKeys);

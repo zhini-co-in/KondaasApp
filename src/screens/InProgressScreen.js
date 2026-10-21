@@ -19,6 +19,7 @@ import { enqueue } from '../service/syncQueue';
 import LeadCard from '../components/LeadCard';
 import { BASE_URL } from '../api/api1';
 import { logError } from '../utils/crashLogger';
+import { isFormPendingSync, saveDeferredNotif4, onFormSynced } from '../service/deferredNotif';
 
 const { width } = Dimensions.get('window');
 
@@ -342,6 +343,31 @@ const handleManualEnable = async (item) => {
       return updated;
     });
 
+        const sendScenario4 = async () => {
+      const notifPayload = {
+        customerMobile: item.whatsappNo || item.phone,
+        name: item.name,
+        scenarioType: 4,
+        deal_id: dealId,
+        state: item.state || item.State || item.customerState || item.address?.state || undefined,
+      };
+
+      // Form innum sync aagala → hold
+      if (await isFormPendingSync(leadId)) {
+        await saveDeferredNotif4(leadId, notifPayload);
+        // race: save panra gap-la form sync aayiruntha udane fire
+        if (!(await isFormPendingSync(leadId))) await onFormSynced(leadId);
+        return;
+      }
+
+      // Form already submitted → normal flow
+      if (isOnline) {
+        try { await API.post('/notification/trigger', notifPayload); }
+        catch (err) { await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', notifPayload); }
+      } else {
+        await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', notifPayload);
+      }
+    };
     // Step 2 — API / Queue
     if (isOnline) {
       const surveyorNumber = await getSurveyorNumber();
@@ -382,20 +408,7 @@ try {
   });
 }
 
-      // 2d. Notification trigger
-      // 2d. Notification trigger
-      // 2d. Notification trigger
-      try {
-  await API.post('/notification/trigger', {
-    customerMobile: item.whatsappNo || item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
-    state: item.state || item.State || item.customerState || item.address?.state || undefined,
-  });
-} catch (err) {
-  await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
-    customerMobile: item.whatsappNo || item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
-    state: item.state || item.State || item.customerState || item.address?.state || undefined,
-  });
-}
+     
     } else {
       // Offline — queue all operations
       const surveyorNumber = await getSurveyorNumber();
@@ -419,12 +432,8 @@ try {
   receivedAt: endAt,
 });
       // Offline branch — also add name
-// AFTER
-await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', {
-  customerMobile: item.whatsappNo || item.phone, name: item.name, scenarioType: 4, deal_id: dealId,
-  state: item.state || item.State || item.customerState || item.address?.state || undefined,
-});
     }
+    await sendScenario4();
   };
 
   // 👇 புதுசா சேர்த்தது: Home/Office (distance save ஆனப்புறம்) அல்லது Skip

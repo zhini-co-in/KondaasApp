@@ -22,6 +22,7 @@ import ImageResizer from 'react-native-image-resizer';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import KondaasPaymentQR from '../../assets/images/kondaas_payment_qr.png';
 import { logError } from '../utils/crashLogger';
+import { markFormPendingSync, onFormSynced } from '../service/deferredNotif';
 
 interface FieldProperty {
   title?: string; description?: string; type?: string;
@@ -1776,7 +1777,8 @@ setSubmitting(true);
           },
         });
 
-        if (res.status >= 200 && res.status < 300) {
+                if (res.status >= 200 && res.status < 300) {
+          await onFormSynced(lead.id).catch(() => {});
           Alert.alert('✔ Submitted', 'Form submitted successfully!', [
             { text: 'OK', onPress: _navigateBack },
           ]);
@@ -1790,7 +1792,8 @@ setSubmitting(true);
 
         // Network drop mid-upload: fall back to offline save + sync queue
         // instead of showing a dead-end "Network Error" alert.
-        if (isAlreadyExistsError(err)) {
+                if (isAlreadyExistsError(err)) {
+  await onFormSynced(lead.id).catch(() => {});
   Alert.alert('✔ Submitted', 'Form already submitted successfully!', [
     { text: 'OK', onPress: _navigateBack },
   ]);
@@ -1809,6 +1812,7 @@ setSubmitting(true);
     };
     console.log('🆔 [handleSubmit/network-fallback] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
     await saveFormDataLocally(lead.id, offlinePayload);
+    await markFormPendingSync(lead.id);
     await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', {
       formData: offlinePayload,
       filesByField: filesByField,
@@ -1856,6 +1860,7 @@ setSubmitting(true);
 };
 console.log('🆔 [handleSubmit/offline] leadId (local):', lead.id, '| deal_id (backend):', offlinePayload.deal_id);
 await saveFormDataLocally(lead.id, offlinePayload);
+await markFormPendingSync(lead.id);
 await enqueue(`form_submit_${lead.id}`, 'FORM_SUBMIT', {
   formData: offlinePayload,
   filesByField: filesByField,
