@@ -19,7 +19,8 @@ import { enqueue } from '../service/syncQueue';
 import LeadCard from '../components/LeadCard';
 import { BASE_URL } from '../api/api1';
 import { logError } from '../utils/crashLogger';
-import { isFormPendingSync, saveDeferredNotif4, onFormSynced } from '../service/deferredNotif';
+import { isFormSynced, saveDeferredNotif4, saveDeferredCompletion, onFormSynced } from '../service/deferredNotif';
+import { getBestLocation, saveSitePointOnce } from '../service/dealDistancePoints';
 
 const { width } = Dimensions.get('window');
 
@@ -178,104 +179,16 @@ const handleManualEnable = async (item) => {
 
   const leadId = item.id || item._id;
 
-  // 👇 FIX: currentLocation state null-ஆ இருந்தாலும் (300m auto-trigger
-  // fast-ஆ fire ஆகும்போது இது நடக்கும்), AsyncStorage-ல் last saved
-  // location-ஐ fallback-ஆ எடுத்துக்கோ — இல்லைன்னா site_distance_ ஒருபோதும்
-  // save ஆகாம, Complete நேரத்துல "0 km" (live distance) காட்டிடும்.
-  let reachedPoint = currentLocation;
-  if (!reachedPoint) {
-    try {
-      const raw = await AsyncStorage.getItem('last_known_location');
-      reachedPoint = raw ? JSON.parse(raw) : null;
-    } catch (e) {}
-  }
-
-  // Start la road km already store aachu na, Reached la recalculate pannaadhe
-  let alreadyRoad = false;
-  try {
-    alreadyRoad = (await AsyncStorage.getItem(`site_distance_src_${leadId}`)) === 'road';
-  } catch (e) {}
-
-  if (!alreadyRoad) {
-    let reachedPoint = currentLocation;
-    if (!reachedPoint) {
-      try {
-        const raw = await AsyncStorage.getItem('last_known_location');
-        reachedPoint = raw ? JSON.parse(raw) : null;
-      } catch (e) {}
-    }
-
-    if (reachedPoint) {
-      let startPoint = null;
-      try {
-        const raw = await AsyncStorage.getItem(`start_point_${leadId}`);
-        startPoint = raw ? JSON.parse(raw) : null;
-      } catch (e) {}
-
-      if (startPoint) {
-        let toSiteKm;
-        try {
-          const road = await getRoadDistanceKm(
-            startPoint.latitude, startPoint.longitude,
-            reachedPoint.latitude, reachedPoint.longitude
-          );
-          toSiteKm = road !== null
-            ? road
-            : getDistance(
-                startPoint.latitude, startPoint.longitude,
-                reachedPoint.latitude, reachedPoint.longitude
-              ) / 1000;
-        } catch (e) {
-          toSiteKm = getDistance(
-            startPoint.latitude, startPoint.longitude,
-            reachedPoint.latitude, reachedPoint.longitude
-          ) / 1000;
-        }
-        try { await AsyncStorage.setItem(`site_distance_${leadId}`, String(toSiteKm)); } catch (e) {}
-            } else if (item.latitude && item.longitude) {
-        const fallbackKm = getDistance(
-          reachedPoint.latitude, reachedPoint.longitude,
-          parseFloat(item.latitude), parseFloat(item.longitude)
-        ) / 1000;
-        if (fallbackKm > 0.05) {   // near-0 na save pannaadhe
-          try { await AsyncStorage.setItem(`site_distance_${leadId}`, String(fallbackKm)); } catch (e) {}
-        }
-      }
-    }
-  }
-  const pointForLive = reachedPoint || currentLocation;
-  if (pointForLive && item.latitude && item.longitude) {
-    const liveKm = getDistance(
-      pointForLive.latitude, pointForLive.longitude,
-      parseFloat(item.latitude), parseFloat(item.longitude)
-    ) / 1000;
-
-    let savedKm = 0;
-    try {
-      savedKm = parseFloat((await AsyncStorage.getItem(`site_distance_${leadId}`)) || '0');
-    } catch (e) {}
-
-    if (!savedKm || savedKm < 0.05) {
-      try { await AsyncStorage.setItem(`site_distance_${leadId}`, String(liveKm)); } catch (e) {}
-    }
-  }
-
-  // existing — display purpose (still uses currentLocation, that's fine, this is UI-only)
+  // display purpose only (UI)
   if (currentLocation && item.latitude && item.longitude) {
     const startDistance = getDistance(
-      currentLocation.latitude,
-      currentLocation.longitude,
-      parseFloat(item.latitude),
-      parseFloat(item.longitude)
+      currentLocation.latitude, currentLocation.longitude,
+      parseFloat(item.latitude), parseFloat(item.longitude)
     );
     try {
       await AsyncStorage.setItem(
         `start_distance_${leadId}`,
-        JSON.stringify({
-          distance: startDistance,
-          capturedAt: Date.now(),
-          location: currentLocation,
-        })
+        JSON.stringify({ distance: startDistance, capturedAt: Date.now(), location: currentLocation })
       );
     } catch (e) {}
   }
@@ -284,12 +197,18 @@ const handleManualEnable = async (item) => {
   setReachedModalVisible(true);
 };
 
-  const handleSiteObservation = (item) => {
-    navigation.navigate('Form', {
-      category: 'site_observation',
-      lead: { ...item, id: item.id || item._id },
-    });
-  };
+const handleSiteObservation = async (item) => {
+  const leadId = item.id || item._id;
+
+  // Site Observation click aana point (once)
+  const loc = await getBestLocation(currentLocation);
+  await saveSitePointOnce(leadId, loc);
+
+  navigation.navigate('Form', {
+    category: 'site_observation',
+    lead: { ...item, id: leadId },
+  });
+};
 
   const handleEdit = (item) => {
     navigation.navigate('Form', {
@@ -343,7 +262,7 @@ const handleManualEnable = async (item) => {
       return updated;
     });
 
-        const sendScenario4 = async () => {
+    const sendScenario4 = async () => {
       const notifPayload = {
         customerMobile: item.whatsappNo || item.phone,
         name: item.name,
@@ -352,15 +271,15 @@ const handleManualEnable = async (item) => {
         state: item.state || item.State || item.customerState || item.address?.state || undefined,
       };
 
-      // Form innum sync aagala → hold
-      if (await isFormPendingSync(leadId)) {
+      // Form server-ku pona confirm illana → hold
+      if (!(await isFormSynced(leadId))) {
         await saveDeferredNotif4(leadId, notifPayload);
         // race: save panra gap-la form sync aayiruntha udane fire
-        if (!(await isFormPendingSync(leadId))) await onFormSynced(leadId);
+        if (await isFormSynced(leadId)) await onFormSynced(leadId);
         return;
       }
 
-      // Form already submitted → normal flow
+      // Form already synced → normal flow
       if (isOnline) {
         try { await API.post('/notification/trigger', notifPayload); }
         catch (err) { await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', notifPayload); }
@@ -368,71 +287,46 @@ const handleManualEnable = async (item) => {
         await enqueue(`notif_completed_${leadId}`, 'NOTIFICATION', notifPayload);
       }
     };
-    // Step 2 — API / Queue
-    if (isOnline) {
-      const surveyorNumber = await getSurveyorNumber();
 
-      // 2a. Update order status
-      try {
-  await API.put('/order/updatestatus', { id: dealId, status: 'Completed' });
-} catch (err) {
-  await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', {
-    id: dealId,            // 👈 was `id: leadId` — wrong, must be dealId
-    status: 'Completed',
-  });
-}
+    const surveyorNumber = await getSurveyorNumber();
+    const statusBody = { id: dealId, mobile: item.phone, status: 'Completed' };
+    const orderCompleteBody = {
+      deal_id: dealId,
+      customerMobile: item.phone,
+      name: item.name,
+      address: item.address,
+      surveyorNumber,
+      receivedAt: endAt,
+    };
 
-
-      // ✅ 2c. NEW: Order completion endpoint (admin_complete collection)
-      // 2c. Order completion endpoint
-try {
-  await API.post('/order/complete', {
-    deal_id: dealId,                 // 👈 added — was missing
-    customerMobile: item.phone,
-    name: item.name,                 // 👈 was customerName
-    address: item.address,           // 👈 was customerAddress
-    surveyorNumber,
-    receivedAt: endAt,
-  });
-  console.log(`✅ Order completion tracked for ${item.phone}`);
-} catch (err) {
-  console.log(`⚠️ /order/complete failed, queuing:`, err.message);
-    logError("order_complete_failed_queued", { dealId, message: err.message });
-  await enqueue(`order_complete_${leadId}`, 'ORDER_COMPLETE', {
-    deal_id: dealId,                 // 👈 added
-    customerMobile: item.phone,
-    name: item.name,                 // 👈 fixed key
-    address: item.address,           // 👈 fixed key
-    surveyorNumber,
-    receivedAt: endAt,
-  });
-}
-
-     
-    } else {
-      // Offline — queue all operations
-      const surveyorNumber = await getSurveyorNumber();
-      await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', {
-  id: dealId,               // 👈 was missing entirely
-  mobile: item.phone,
-  status: 'Completed',
-});
-      await enqueue(`flowtrix_completed_${leadId}`, 'FLOWTRIX_SYNC', {
-        customerMobile: item.phone,
-        surveyorNumber,
-        status: 'Completed',
-        endAt,
+    // Step 2 — Form innum sync aagala → status + order/complete + scenario 4 ellam hold
+    if (!(await isFormSynced(leadId))) {
+      await saveDeferredCompletion(leadId, {
+        status: statusBody,
+        orderComplete: orderCompleteBody,
       });
-      await enqueue(`order_complete_${leadId}`, 'ORDER_COMPLETE', {
-  deal_id: dealId,          // 👈 added
-  customerMobile: item.phone,
-  name: item.name,          // 👈 added
-  address: item.address,    // 👈 added
-  surveyorNumber,
-  receivedAt: endAt,
-});
-      // Offline branch — also add name
+      await sendScenario4(); // idhu scenario 4 mattum hold pannum
+      return;
     }
+
+    // Step 3 — Form already synced → normal flow
+    if (isOnline) {
+      try {
+        await API.put('/order/updatestatus', { id: dealId, status: 'Completed' });
+      } catch (err) {
+        await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', statusBody);
+      }
+      try {
+        await API.post('/order/complete', orderCompleteBody);
+      } catch (err) {
+        logError('order_complete_failed_queued', { dealId, message: err.message });
+        await enqueue(`order_complete_${leadId}`, 'ORDER_COMPLETE', orderCompleteBody);
+      }
+    } else {
+      await enqueue(`status_completed_${leadId}`, 'STATUS_UPDATE', statusBody);
+      await enqueue(`order_complete_${leadId}`, 'ORDER_COMPLETE', orderCompleteBody);
+    }
+
     await sendScenario4();
   };
 

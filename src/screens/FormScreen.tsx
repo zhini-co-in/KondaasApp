@@ -22,7 +22,7 @@ import ImageResizer from 'react-native-image-resizer';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import KondaasPaymentQR from '../../assets/images/kondaas_payment_qr.png';
 import { logError } from '../utils/crashLogger';
-import { markFormPendingSync, onFormSynced } from '../service/deferredNotif';
+import { markFormPendingSync, onFormSynced, clearFormPending } from '../service/deferredNotif';
 
 interface FieldProperty {
   title?: string; description?: string; type?: string;
@@ -1717,6 +1717,7 @@ useEffect(() => {
     if (submittingRef.current) return;
 submittingRef.current = true;
 setSubmitting(true);
+await markFormPendingSync(lead.id).catch(() => {});
 
     const nowZoho = toZohoDateTime(new Date());
     const stampedValues = { ...formValues, Site_survey_Completed_Date_Time: nowZoho };
@@ -1835,11 +1836,13 @@ setSubmitting(true);
     );
   }
 } else if (err?.response?.status === 413) {
+  await clearFormPending(lead.id).catch(() => {});
           Alert.alert(
             'Files Too Large',
             'The photos/videos attached are too large to upload. Please remove a video or retake photos, then try again.',
           );
         } else {
+          await clearFormPending(lead.id).catch(() => {});
           Alert.alert(
             'Error',
             err?.response?.data?.error || err?.message || 'Submit failed. Please try again.',

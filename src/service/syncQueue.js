@@ -4,8 +4,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import API from '../api/api1';
 import { deleteSavedFormData } from './Localleadsstorage';
 import { apiFetch } from '../api/apiClient';
-import { onFormSynced } from './deferredNotif';
-
+import { onFormSynced, isFormPendingSync } from './deferredNotif';
+import { getDistancePoints } from './dealDistancePoints';
+const FORM_GATED_PREFIXES = ['status_completed_', 'order_complete_', 'notif_completed_'];
 const QUEUE_KEY = 'sync:queue';
 const DEFAULT_TIMEOUT = 60000; // 👈 all queued network calls get a timeout now
 // Backend returns 400 + "Deal already Done!" when the form is already saved
@@ -100,6 +101,14 @@ export const processSyncQueue = async () => {
     const remaining = [];
 
     for (const item of queue) {
+      const prefix = FORM_GATED_PREFIXES.find((p) => item.id.startsWith(p));
+if (prefix) {
+  const gatedLeadId = item.id.slice(prefix.length);
+  if (await isFormPendingSync(gatedLeadId)) {
+    remaining.push(item);   // form sync aagura varaikum wait
+    continue;
+  }
+}
       try {
         await _executeAction(item);
         synced++;
@@ -178,12 +187,6 @@ await _persistQueueItemPayload(item.id, payload);
       } catch (e) {
         console.log('[SyncQueue] onFormSynced failed (non-fatal):', e?.message);
       }
-
-      await API.put('/order/updatestatus', {
-        id: payload.dealId || payload.deal_id,
-        mobile: payload.mobile,
-        status: 'Completed',
-      }, { timeout: DEFAULT_TIMEOUT });
 
       if (payload.leadId) {
         await deleteSavedFormData(payload.leadId);
@@ -269,47 +272,50 @@ await _persistQueueItemPayload(item.id, payload);
       }, { timeout: DEFAULT_TIMEOUT });
       break;
 
-    case 'DEAL_DISTANCE': {
-      const body = {
-        deal_id:       String(payload.deal_id || payload.dealId || ''),
-        deal_name:     String(payload.deal_name || payload.dealName || ''),
-        mobile:        String(payload.mobile || ''),
-        surveyor_name: String(payload.surveyor_name || payload.surveyorName || 'Surveyor'),
-        to_site:       String(payload.to_site || payload.toSite || ''),
-      };
-      if (payload.to_office || payload.toOffice) {
-        body.to_office = String(payload.to_office || payload.toOffice);
-      }
-      if (payload.to_home || payload.toHome) {
-        body.to_home = String(payload.to_home || payload.toHome);
-      }
+case 'DEAL_DISTANCE': {
+  let { start_latitude, start_longitude, site_latitude, site_longitude } = payload;
 
-      console.log('[SyncQueue] DEAL_DISTANCE sending:', JSON.stringify(body));
+  // payload-la coordinates illa-na AsyncStorage-la irundhu edu
+  if ((start_latitude == null || site_latitude == null) && payload.leadId) {
+    const { start, site } = await getDistancePoints(payload.leadId);
+    start_latitude  = start_latitude  ?? start?.latitude;
+    start_longitude = start_longitude ?? start?.longitude;
+    site_latitude   = site_latitude   ?? site?.latitude;
+    site_longitude  = site_longitude  ?? site?.longitude;
+  }
 
-      if (!body.deal_id || !body.deal_name || !body.mobile || !body.to_site) {
-        throw new Error('DEAL_DISTANCE missing required fields');
-      }
+  const body = {
+    deal_id:       String(payload.deal_id || payload.dealId || ''),
+    deal_name:     String(payload.deal_name || payload.dealName || ''),
+    mobile:        String(payload.mobile || ''),
+    surveyor_name: String(payload.surveyor_name || payload.surveyorName || 'Surveyor'),
+    start_latitude, start_longitude, site_latitude, site_longitude,
+  };
+  if (payload.to_office || payload.toOffice) body.to_office = String(payload.to_office || payload.toOffice);
+  if (payload.to_home || payload.toHome)     body.to_home   = String(payload.to_home || payload.toHome);
 
-      // Axios skip — direct fetch (same URL curl used → 201)
-           const res = await apiFetch('/location/distance', {
-        method: 'POST',
-        body,
-      });
+  if (!body.deal_id || !body.deal_name || !body.mobile) {
+    throw new Error('DEAL_DISTANCE missing required fields');
+  }
 
-      const data = res.data;
+  const missingCoords = [start_latitude, start_longitude, site_latitude, site_longitude]
+    .some((v) => v === undefined || v === null);
+  if (missingCoords) {
+    console.log('[SyncQueue] DEAL_DISTANCE dropped, coordinates missing:', body);
+    break;
+  }
 
-      console.log('[SyncQueue] DEAL_DISTANCE result:', res.status, data);
+  const res = await apiFetch('/location/distance', { method: 'POST', body });
+  const data = res.data;
 
-      if (res.status === 409 || String(data?.error || '').toLowerCase().includes('already exists')) {
-        console.log('[SyncQueue] DEAL_DISTANCE already exists — treating as synced');
-        return;
-      }
+  console.log('[SyncQueue] DEAL_DISTANCE result:', res.status, data);
 
-      if (!res.ok) {
-        throw new Error(`DEAL_DISTANCE failed ${res.status}: ${JSON.stringify(data)}`);
-      }
-      break;
-    }
+  if (res.status === 409 || String(data?.error || '').toLowerCase().includes('already exists')) {
+    return;
+  }
+  if (!res.ok) throw new Error(`DEAL_DISTANCE failed ${res.status}: ${JSON.stringify(data)}`);
+  break;
+}
 
     case 'ORDER_COMPLETE':
       await API.post('/order/complete', payload, { timeout: DEFAULT_TIMEOUT });

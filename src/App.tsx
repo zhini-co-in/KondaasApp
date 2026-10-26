@@ -31,6 +31,7 @@ import {
   registerNotificationHandlers,
   showLeadNotification,
 } from './utils/notificationService';
+import UpdateGate from './components/UpdateGate'; // UpdateGate.js enga irukko adhuku match pannu
 
 const queryClient = new QueryClient();
 
@@ -116,13 +117,15 @@ let App = () => {
     };
   }, []);
 
-  return (
+    return (
     <QueryClientProvider client={queryClient}>
       <PaperProvider theme={PaperDefaultTheme}>
         <SafeAreaProvider>
-          <NavigationContainer theme={theme}>
-            <RootStack />
-          </NavigationContainer>
+          <UpdateGate>
+            <NavigationContainer theme={theme}>
+              <RootStack />
+            </NavigationContainer>
+          </UpdateGate>
         </SafeAreaProvider>
       </PaperProvider>
     </QueryClientProvider>

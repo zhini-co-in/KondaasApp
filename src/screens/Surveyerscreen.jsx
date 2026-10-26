@@ -35,6 +35,7 @@ import { PermissionsAndroid } from 'react-native';
 import { getAllLocalLogsForDebug, syncCrashLogs, logError } from '../utils/crashLogger';
 import auth from '@react-native-firebase/auth';
 import { getFreshToken, syncTokenToServer } from '../api/apiClient';
+   import { getBestLocation, saveStartPointOnce } from '../service/dealDistancePoints';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Scheduled Site-Survey due-check helper
@@ -651,6 +652,7 @@ try { await auth().signOut(); } catch (e) {}
             const siteDistanceKeys = allKeys.filter(
   (k) =>
     k.startsWith('site_distance_') ||
+  k.startsWith('site_point_') ||
     k.startsWith('start_point_') ||
     k.startsWith('start_distance_') ||
     k.startsWith('form_pending_sync_') ||
@@ -827,104 +829,60 @@ try { await auth().signOut(); } catch (e) {}
 
 
   // ── Start / Resume ────────────────────────────────────────────────────────
-  const handleStart = async (id) => {
-    const lead = AcceptedLeadsRef.current.find((l) => l.id === id);
-    if (!lead) return;
-      console.log('DIST DEBUG', { id, loc: locationRef.current, lat: lead.latitude, lng: lead.longitude });
-      let startLoc = locationRef.current;
-  if (!startLoc) {
-    try {
-      const raw = await AsyncStorage.getItem('last_known_location');
-      startLoc = raw ? JSON.parse(raw) : null;
-    } catch (e) {}
-  }
-  if (startLoc) {
-    try {
-      const existing = await AsyncStorage.getItem(`start_point_${id}`);
-      if (existing === null) {
-        await AsyncStorage.setItem(`start_point_${id}`, JSON.stringify({
-          latitude: startLoc.latitude,
-          longitude: startLoc.longitude,
-          capturedAt: Date.now(),
-        }));
-      }
-    } catch (e) {}
-  }
-    const alreadyInProgress = AcceptedLeadsRef.current.find(
-      (l) => l.status === 'In-Progress' && l.id !== id
-    );
-    if (alreadyInProgress) {
-      Alert.alert(
-        'One Lead at a Time!',
-        `Please complete or hold "${alreadyInProgress.name}" before starting a new lead.`,
-        [{ text: 'OK, Got It' }]
-      );
-      return;
-    }
+const handleStart = async (id) => {
+  const lead = AcceptedLeadsRef.current.find((l) => l.id === id);
+  if (!lead) return;
 
-    // STEP 1: ETA + Maps URL calculation
-      // STEP 1: ETA + Maps URL calculation
-    let etaText  = 'N/A';
-    let totalMins = 0;
-    let distMeters = null;             // 👈 outer scope-க்கு தூக்கினோம் — கீழ site-distance store பண்ண இதுவே reuse ஆகும்
-    const hasLatLong = lead.latitude && lead.longitude;
-
-    if (startLoc && hasLatLong) {
-  distMeters = Math.round(getDistance(
-    startLoc.latitude, startLoc.longitude,
-    parseFloat(lead.latitude), parseFloat(lead.longitude)
-  ));
-      const speed = distMeters <= 300 ? 1.4 : 8.3;
-      totalMins = Math.round(distMeters / speed / 60);
-      if (totalMins < 1) {
-        etaText = 'Less than a minute';
-      } else if (totalMins < 60) {
-        etaText = `${totalMins} min`;
-      } else {
-        const hrs  = Math.floor(totalMins / 60);
-        const mins = totalMins % 60;
-        etaText = mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`;
-      }
-        let roadKm = null;
-try {
-  roadKm = await getRoadDistanceKm(
-    startLoc.latitude, startLoc.longitude,          // 👈 was locationRef.current
-    parseFloat(lead.latitude), parseFloat(lead.longitude)
+  // 1) One-lead-at-a-time check MUDHALLA
+  const alreadyInProgress = AcceptedLeadsRef.current.find(
+    (l) => l.status === 'In-Progress' && l.id !== id
   );
-} catch (e) {}
-
-      try {
-        const src = await AsyncStorage.getItem(`site_distance_src_${id}`);
-
-        if (roadKm !== null && !Number.isNaN(roadKm)) {
-          if (src !== 'road') {
-            await AsyncStorage.setItem(`site_distance_${id}`, String(roadKm));
-            await AsyncStorage.setItem(`site_distance_src_${id}`, 'road');
-          }
-        } else if (src !== 'road') {
-  const existingStart = await AsyncStorage.getItem(`start_point_${id}`);
-  if (existingStart === null) {
-    await AsyncStorage.setItem(
-      `start_point_${id}`,
-      JSON.stringify({
-        latitude: startLoc.latitude,                // 👈 was locationRef.current
-        longitude: startLoc.longitude,
-        capturedAt: Date.now(),
-      })
+  if (alreadyInProgress) {
+    Alert.alert(
+      'One Lead at a Time!',
+      `Please complete or hold "${alreadyInProgress.name}" before starting a new lead.`,
+      [{ text: 'OK, Got It' }]
     );
+    return;
   }
-}
-      } catch (e) {}
-    }
 
-    let mapsUrl = '';
-if (startLoc && hasLatLong) {
-  mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${startLoc.latitude},${startLoc.longitude}&destination=${lead.latitude},${lead.longitude}`;
-} else if (hasLatLong) {
-  mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lead.latitude},${lead.longitude}`;
-} else if (lead.address || lead.city) {
-  mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lead.address || lead.city)}`;
-} 
+  // 2) Check pass aana piragu Start point save (once)
+  const startLoc = await getBestLocation(locationRef.current);
+  await saveStartPointOnce(id, startLoc);
+
+  // 3) ETA + Maps URL
+  let etaText   = 'N/A';
+  let totalMins = 0;
+  const hasLatLong = lead.latitude && lead.longitude;
+
+  if (startLoc && hasLatLong) {
+    const distMeters = Math.round(getDistance(
+      startLoc.latitude, startLoc.longitude,
+      parseFloat(lead.latitude), parseFloat(lead.longitude)
+    ));
+    const speed = distMeters <= 300 ? 1.4 : 8.3;
+    totalMins = Math.round(distMeters / speed / 60);
+    if (totalMins < 1) {
+      etaText = 'Less than a minute';
+    } else if (totalMins < 60) {
+      etaText = `${totalMins} min`;
+    } else {
+      const hrs  = Math.floor(totalMins / 60);
+      const mins = totalMins % 60;
+      etaText = mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`;
+    }
+  }
+
+  let mapsUrl = '';
+  if (startLoc && hasLatLong) {
+    mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${startLoc.latitude},${startLoc.longitude}&destination=${lead.latitude},${lead.longitude}`;
+  } else if (hasLatLong) {
+    mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lead.latitude},${lead.longitude}`;
+  } else if (lead.address || lead.city) {
+    mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lead.address || lead.city)}`;
+  }
+
+  // STEP 2: Status update  <-- inga irunthu unga existing code appadiye
 
     // STEP 2: Status update
     await updateAcceptedLeadStatus(id, 'In-Progress');

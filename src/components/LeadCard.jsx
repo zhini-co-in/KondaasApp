@@ -7,7 +7,8 @@ import { getDistance, getRoadDistanceKm } from '../service/locationService';
 import API from '../api/api1';
 import { StyleSheet } from 'react-native'; // or inline styles
 import NetInfo from '@react-native-community/netinfo';
-import { enqueue } from '../service/syncQueue'; // or inline styles
+import { enqueue, processSyncQueue } from '../service/syncQueue';
+import { getDistancePoints } from '../service/dealDistancePoints';
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '—';
@@ -129,16 +130,6 @@ useEffect(() => {
     setDistanceLoading(false);
     const finalKm = km !== null ? km : straightKm;
     if (km !== null) setRoadDistanceKm(km);
-
-    if (isFirstDistanceFetchRef.current) {
-      isFirstDistanceFetchRef.current = false;
-      try {
-        const existing = await AsyncStorage.getItem(`site_distance_${item.id}`);
-        if (existing === null) {
-          await AsyncStorage.setItem(`site_distance_${item.id}`, String(finalKm));
-        }
-      } catch (e) {}
-    }
   });
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [distToLead, cardType, item.status]);
@@ -178,6 +169,27 @@ useEffect(() => {
     return '';
   }
 };
+  const sendDealDistance = async (extra = {}) => {
+    const surveyorNumber = await getSurveyorNumber();
+    const surveyorName   = await getSurveyorName();
+    const { start, site } = await getDistancePoints(item.id);
+
+    const payload = {
+      leadId:        item.id,
+      deal_id:       item.dealId,
+      deal_name:     item.name,
+      mobile:        surveyorNumber,
+      surveyor_name: surveyorName,
+      start_latitude:  start?.latitude,
+      start_longitude: start?.longitude,
+      site_latitude:   site?.latitude,
+      site_longitude:  site?.longitude,
+      ...extra,
+    };
+
+    await enqueue(`deal_distance_${item.dealId}`, 'DEAL_DISTANCE', payload);
+    processSyncQueue().catch(() => {});
+  };
 
   const openMap = () => {
     if (item.latitude || item.address || item.city) {
@@ -227,7 +239,7 @@ useEffect(() => {
       distanceKm = getDistance(currentLocation.latitude, currentLocation.longitude, coords.latitude, coords.longitude) / 1000;
     }
 
-    if (type === 'home') {
+     if (type === 'home') {
       setHomeDistanceKm(distanceKm);
       setHomeLoading(false);
     } else {
@@ -235,59 +247,12 @@ useEffect(() => {
       setOfficeLoading(false);
     }
 
-    // Backend-க்கு save பண்ணு (saveDealDistance controller — route:
-    // locationRoutes.post('/distance', saveDealDistance) => /location/distance)
-    //
-    // 👇 "to_site" — Start பண்ணும்போது SurveyerScreen.js (handleStart)
-    // AsyncStorage-ல store பண்ணி வெச்ச distance-ஐ படிக்கிறோம். அதுவே
-    // சரியான "surveyor -> site" distance, இப்போ (Complete ஆன பிறகு)
-    // இருக்கிற live location distance அல்ல. Stored value கிடைக்கலைன்னா
-    // மட்டும் live roadDistanceKm/distToLead-க்கு fallback பண்றோம்.
-    let toSiteKm = null;
-    try {
-      const raw = await AsyncStorage.getItem(`site_distance_${item.id}`);
-      toSiteKm = raw !== null ? parseFloat(raw) : null;
-    } catch (e) {
-      toSiteKm = null;
-    }
-    if (toSiteKm === null || Number.isNaN(toSiteKm)) {
-      toSiteKm = roadDistanceKm !== null
-        ? roadDistanceKm
-        : (distToLead !== null ? distToLead / 1000 : 0);
-    }
+    await sendDealDistance(
+      type === 'home'
+        ? { to_home: `${distanceKm.toFixed(1)} km` }
+        : { to_office: `${distanceKm.toFixed(1)} km` }
+    );
 
-    const surveyorNumber = await getSurveyorNumber();
-    const surveyorName   = await getSurveyorName();
-
-    const payload = {
-      deal_id:   item.dealId,
-      deal_name: item.name,
-      mobile:    surveyorNumber,
-      surveyor_name: surveyorName,
-       to_site:   `${toSiteKm.toFixed(1)} km`,   // 👈 string format
-  ...(type === 'home'
-    ? { to_home: `${distanceKm.toFixed(1)} km` }
-    : { to_office: `${distanceKm.toFixed(1)} km` }),
-    };
-
-    // 👇 புதுசா சேர்த்தது: offline-ஆ இருந்தா நேரடியா queue பண்ணிடுவோம்
-    // (60s timeout வரை காத்திருக்க வேண்டாம், UX bad ஆகும்).
-    const netState = await NetInfo.fetch();
-    const online = !!netState.isConnected && netState.isInternetReachable !== false;
-
-    if (!online) {
-      await enqueue(`deal_distance_${item.dealId}`, 'DEAL_DISTANCE', payload);
-    } else {
-      try {
-        await API.post('/location/distance', payload);
-      } catch (e) {
-        // online-ல இருந்தும் fail (server error/timeout) ஆனா queue பண்ணு
-        await enqueue(`deal_distance_${item.dealId}`, 'DEAL_DISTANCE', payload);
-      }
-    }
-
-    // ✅ Distance அனுப்பியாச்சு (அல்லது queue ஆயிடுச்சு) — இனி map திறக்காம,
-    // நேரடியா SurveyerScreen-க்கு திரும்பி போயிடுவோம்.
     onFinishAndReturn?.();
   };
 
@@ -298,46 +263,9 @@ useEffect(() => {
   // Skip பண்ணா to_site backend-ல ஏறவே ஏறாது.
   const [skipLoading, setSkipLoading] = useState(false);
 
-    const handleSkip = async () => {
+  const handleSkip = async () => {
     setSkipLoading(true);
-
-    let toSiteKm = null;
-    try {
-      const raw = await AsyncStorage.getItem(`site_distance_${item.id}`);
-      toSiteKm = raw !== null ? parseFloat(raw) : null;
-    } catch (e) {
-      toSiteKm = null;
-    }
-    if (toSiteKm === null || Number.isNaN(toSiteKm)) {
-      toSiteKm = roadDistanceKm !== null
-        ? roadDistanceKm
-        : (distToLead !== null ? distToLead / 1000 : 0);
-    }
-
-    const surveyorNumber = await getSurveyorNumber();
-    const surveyorName   = await getSurveyorName();
-
-    const payload = {
-      deal_id:   item.dealId,
-      deal_name: item.name,
-      mobile:    surveyorNumber,
-      surveyor_name: surveyorName,
-      to_site:   `${toSiteKm.toFixed(1)} km`,
-    };
-
-    const netState = await NetInfo.fetch();
-    const online = !!netState.isConnected && netState.isInternetReachable !== false;
-
-    if (!online) {
-      await enqueue(`deal_distance_${item.dealId}`, 'DEAL_DISTANCE', payload);
-    } else {
-      try {
-        await API.post('/location/distance', payload);
-      } catch (e) {
-        await enqueue(`deal_distance_${item.dealId}`, 'DEAL_DISTANCE', payload);
-      }
-    }
-
+    await sendDealDistance();
     setSkipLoading(false);
     onFinishAndReturn?.();
   };

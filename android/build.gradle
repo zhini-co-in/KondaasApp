@@ -23,6 +23,7 @@ buildscript {
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
 // Fix: react-native-gesture-handler implicit task dependency issue with Gradle 8.13
 gradle.projectsEvaluated {
     subprojects { project ->
@@ -33,6 +34,15 @@ gradle.projectsEvaluated {
                     task.dependsOn(codegenTask)
                 }
             }
+        }
+    }
+}
+
+// Skip lint on all modules (Metaspace / slow build fix)
+subprojects { sp ->
+    sp.tasks.configureEach { task ->
+        if (task.name.startsWith("lintVital")) {
+            task.enabled = false
         }
     }
 }
