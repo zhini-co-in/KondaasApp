@@ -720,8 +720,8 @@ const AdminScreen = ({ navigation, route }) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const [allRes, completedRes, rejectedRes] = await Promise.all([
-        API.get('/order/all'),
-        API.get('/order/admin-completions'),
+        //API.get('/order/all'),
+        //API.get('/order/admin-completions'),
         API.get('/order/admin-rejections'),
       ]);
       const rawAll = Array.isArray(allRes.data?.deals) ? allRes.data.deals

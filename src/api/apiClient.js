@@ -3,8 +3,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import DeviceInfo from "react-native-device-info";
 import { getSessionInfo, USER_DATA } from "../service/localStorage";
 
-//export const BASE_URL = "https://kondaas.atom8itsolutions.com";
-export const BASE_URL = "https://crucial-purifier-canopener.ngrok-free.dev";
+export const BASE_URL = "https://kondaas.atom8itsolutions.com";
+//export const BASE_URL = "https://crucial-purifier-canopener.ngrok-free.dev";
 const SYNCED_KEY = "last_synced_token";
 
 const waitForUser = () =>
