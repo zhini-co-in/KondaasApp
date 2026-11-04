@@ -6,7 +6,7 @@ import { USER_DATA, getSessionInfo } from "../service/localStorage";
 import { fetchDeyeStationList, fetchDeyeHistory, fetchDeyeSavings } from "./api2";
 import { fetchSolisStationList, fetchSolisHistory, fetchSolisSavings } from "./api3";
 import { logSecurity } from "../utils/crashLogger";
-import { apiFetch, BASE_URL, getAuthHeaders, getFreshToken } from "./apiClient";
+import { apiFetch, BASE_URL, getAuthHeaders, getFreshToken, syncTokenToServer } from "./apiClient";
 
 // ─────────────────────────────────────────────────────────────
 // Axios instance (optional — mostly apiFetch use பண்றோம்)

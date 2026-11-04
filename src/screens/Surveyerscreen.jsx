@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Switch, Image, StatusBar,
   Alert, TouchableOpacity, ScrollView, ActivityIndicator,
-  Modal, TextInput, Linking, Platform, RefreshControl,
+  Modal, TextInput, Linking, Platform, RefreshControl,AppState,
 } from 'react-native';
 import API from '../api/api1';
 import LinearGradient from 'react-native-linear-gradient';
@@ -237,6 +237,56 @@ useEffect(() => {
     };
     autoSetup();
   }, []);
+  const turnOffDuty = useCallback(async () => {
+    setIsOn(false);
+    await AsyncStorage.setItem('surveyer_is_on', 'false');
+    stopTracking();
+    stopHighFrequencyTracking();
+    if (Platform.OS === 'android') NativeModules.StartStopService?.stopService();
+  }, [stopTracking]);
+  // GPS off aanaa duty auto OFF
+useEffect(() => {
+  if (!isOn || Platform.OS !== 'android') return;
+
+  let checking = false;
+  const checkGPS = async () => {
+    if (checking) return;
+    checking = true;
+    try {
+      const gpsOn = await isGPSEnabled();
+      if (gpsOn === false && isMounted.current) {
+        await turnOffDuty();
+        Alert.alert(
+          'Location Turned Off',
+          'Your location was turned off, so duty has been switched OFF. Turn on GPS and toggle again.',
+          [
+            {
+              text: 'Open Settings',
+              onPress: () =>
+                Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS')
+                  .catch(() => Linking.openSettings()),
+            },
+            { text: 'OK', style: 'cancel' },
+          ]
+        );
+      }
+    } catch (e) {
+    } finally {
+      checking = false;
+    }
+  };
+
+  checkGPS(); // immediate check
+  const interval = setInterval(checkGPS, 5000); // every 5 sec
+  const sub = AppState.addEventListener('change', (state) => {
+    if (state === 'active') checkGPS(); // settings la irundhu thirumbi vandha udane check
+  });
+
+  return () => {
+    clearInterval(interval);
+    sub.remove();
+  };
+}, [isOn, turnOffDuty]);
 
   // useFocusEffect – setState inside setState CRASH FIX + auto refresh on screen focus
 useFocusEffect(
@@ -575,7 +625,6 @@ const confirmReject = async () => {
   }
 };
 
-
   // handleToggle-ல:
   const handleToggle = async () => {
     if (!isOn) {
@@ -586,7 +635,7 @@ const confirmReject = async () => {
       if (!uploadSuccess) return;
       if (Platform.OS === 'android') {
         const gpsOn = await isGPSEnabled();
-        if (!gpsOn) {
+if (gpsOn === false) {
           Alert.alert('Location is Off', 'Please turn on GPS to continue.', [
             {
               text: 'Open Settings',
@@ -615,11 +664,7 @@ const confirmReject = async () => {
       fetchAndMergeLeads();
       ensureTemplateCached(); // 👈 duty ON ஆனதும் கூட ஒரு தடவை template cache try பண்ணு
     } else {
-      setIsOn(false);
-      await AsyncStorage.setItem('surveyer_is_on', 'false');
-      stopTracking();
-      stopHighFrequencyTracking();
-      if (Platform.OS === 'android') NativeModules.StartStopService?.stopService();
+      await turnOffDuty();
     }
   };
 

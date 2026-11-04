@@ -215,16 +215,17 @@ export const useLocationTracking = (isMounted) => {
 
   return { currentLocation, setCurrentLocation, startTracking, stopTracking };
 };
-
+// ✅ Idha podunga
 export const isGPSEnabled = async () => {
   if (Platform.OS !== 'android') return true;
   try {
     const enabled = await NativeModules.LocationManager?.isLocationEnabled();
     console.log('🔍 GPS enabled:', enabled);
-    return enabled ?? false;
+    if (typeof enabled !== 'boolean') return null; // unknown
+    return enabled;
   } catch (e) {
     console.log('🔍 GPS check error:', e);
-    return false;
+    return null; // unknown
   }
 };
 
