@@ -52,33 +52,53 @@ const isMockLocation = (lat, lon) => {
   return false;
 };
 
+const INTERVAL_NORMAL = 30 * 60 * 1000; // duty ON
+const INTERVAL_ACTIVE = 3 * 60 * 1000;  // Start click
+const TOLERANCE_MS    = 5000;
+
+let currentIntervalMs = INTERVAL_NORMAL;
+let inFlight = false;
 const lastSentTime = { current: 0 };
+
+export const setLocationShareMode = (mode, getLocationFn) => {
+  if (mode === 'active') {
+    currentIntervalMs = INTERVAL_ACTIVE;
+    lastSentTime.current = 0; // udane oru thadava anuppa
+    const loc = getLocationFn?.();
+    if (loc?.latitude && loc?.longitude) {
+      sendLocation(loc.latitude, loc.longitude, Date.now());
+    }
+  } else {
+    currentIntervalMs = INTERVAL_NORMAL;
+  }
+};
 
 export const sendLocation = async (latitude, longitude, timestamp) => {
   if (isMockLocation(latitude, longitude)) return;
+  if (inFlight) return;
   const now = Date.now();
- if (now - lastSentTime.current < 180000) return;
-  lastSentTime.current = now;
+  if (now - lastSentTime.current < currentIntervalMs - TOLERANCE_MS) return;
+
+  inFlight = true;
   const finalEpoch = timestamp || Date.now();
-  await AsyncStorage.setItem(
-    'last_known_location',
-    JSON.stringify({ latitude, longitude })
-  );
   try {
-    const phoneNo = await getUserPhone();
-    console.log(`📞 phoneNo being sent: "${phoneNo}"`);
-    console.log(
-      `📍 [${Platform.OS}] SENDING → ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
+    await AsyncStorage.setItem(
+      'last_known_location',
+      JSON.stringify({ latitude, longitude })
     );
+    const phoneNo = await getUserPhone();
     const res = await API.post('/location/add', {
       phoneNo,
       latitude: parseFloat(latitude),
       longitude: parseFloat(longitude),
       epoch: finalEpoch,
     });
+    lastSentTime.current = now; // success aana piragu mattum
     console.log('✅ Location saved:', res.status);
   } catch (err) {
     console.log('❌ Send error:', err?.response?.data || err.message);
+  } finally {
+    inFlight = false;
   }
 };
 
@@ -148,6 +168,10 @@ export const useLocationTracking = (isMounted) => {
       return;
     }
     isTrackingRef.current = true;
+            // normal mode-la mattum udane first send. Active mode (lead In-Progress) la reset pannaadhinga.
+    if (currentIntervalMs === INTERVAL_NORMAL) {
+      lastSentTime.current = 0;
+    }
     console.log('🟢 Starting location tracking');
 
     // ── Common: get the right native module for the platform ──
@@ -197,7 +221,7 @@ export const useLocationTracking = (isMounted) => {
     }, 500);
   };
 
-  const stopTracking = () => {
+  const stopTracking = (keepNative = false) => {
     console.log('🔴 Stopping location tracking');
     isTrackingRef.current = false;
 
@@ -207,7 +231,7 @@ export const useLocationTracking = (isMounted) => {
     }
 
     const { LocationService } = NativeModules;
-    if (watchIdRef.current !== null && LocationService) {
+    if (!keepNative && watchIdRef.current !== null && LocationService) {
       LocationService.stopTracking();
       watchIdRef.current = null;
     }
@@ -233,55 +257,12 @@ export const checkAndPromptGPS = async () => {
   return true;
 };
 
-// High Frequency Tracking
-let intervalTracker = null;
-let lastSentHFCoords = { lat: null, lon: null };
-
 export const startHighFrequencyTracking = (getLocationFn) => {
-  if (intervalTracker) {
-    clearInterval(intervalTracker);
-    intervalTracker = null;
-  }
-
-  intervalTracker = setInterval(async () => {
-    const loc = getLocationFn();
-    if (!loc?.latitude || !loc?.longitude) return;
-
-    if (lastSentHFCoords.lat !== null) {
-      const moved = getDistance(
-        lastSentHFCoords.lat,
-        lastSentHFCoords.lon,
-        loc.latitude,
-        loc.longitude
-      );
-      if (moved < 5) {
-        console.log('🧍 Stationary, skipping HF send');
-        return;
-      }
-    }
-
-    lastSentHFCoords = { lat: loc.latitude, lon: loc.longitude };
-
-    try {
-      const phoneNo = await getUserPhone();
-      await API.post('/location/add', {
-        phoneNo,
-        latitude: parseFloat(loc.latitude),
-        longitude: parseFloat(loc.longitude),
-        epoch: Date.now(),
-      });
-      console.log('⚡ HF location sent:', loc.latitude, loc.longitude);
-    } catch (err) {
-      console.log('❌ HF send error:', err?.message);
-    }
-  }, 60000);
+  setLocationShareMode('active', getLocationFn);
+  console.log('⚡ Active mode: location every 3 min');
 };
 
 export const stopHighFrequencyTracking = () => {
-  if (intervalTracker) {
-    clearInterval(intervalTracker);
-    intervalTracker = null;
-    lastSentHFCoords = { lat: null, lon: null };
-    console.log('🛑 High-freq tracking stopped');
-  }
+  setLocationShareMode('normal');
+  console.log('🛑 Normal mode: location every 30 min');
 };

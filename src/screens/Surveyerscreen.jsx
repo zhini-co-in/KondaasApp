@@ -46,6 +46,22 @@ const isSurveyDue = (scheduledAt) => {
   if (Number.isNaN(scheduledTime)) return false;
   return Date.now() >= scheduledTime;
 };
+// "07-18-2026 18:00:00" (MM-DD-YYYY HH:mm:ss) or ISO string -> ISO string
+const parseSurveyDateTime = (raw) => {
+  if (!raw) return null;
+  const s = String(raw).trim();
+
+  const m = s.match(/^(\d{2})-(\d{2})-(\d{4})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (m) {
+    const [, mm, dd, yyyy, hh, min, ss = '00'] = m;
+    // Zoho time IST nu assume pannrom (+05:30)
+    const d = new Date(`${yyyy}-${mm}-${dd}T${hh}:${min}:${ss}+05:30`);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
+
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 👇 புதுசா சேர்த்தது: street + address + district + state-ஐ ஒரே
@@ -56,6 +72,60 @@ const buildFullAddress = (item) => {
     (part) => part && String(part).trim().length > 0
   );
   return parts.length > 0 ? parts.join(', ') : (item.address || '');
+};
+const PAGE_LIMIT = 10;
+
+const mapDeal = (item) => {
+  const rawStreet   = item.street || null;
+  const rawDistrict = item.district || item.District || null;
+  const rawState    = item.state || item.State || null;
+  const rawAddress  = item.address || null;
+
+  const fullAddress = buildFullAddress({
+    street: rawStreet, address: rawAddress, District: rawDistrict, state: rawState,
+  });
+
+  return {
+    id:         item._id,
+    dealId:     item.deal_id,
+    name:       item.deal_name || item.name || '—',
+    phone:      item.mobile,
+    city:       item.city,
+    comment:    item.comment,
+    street:     rawStreet,
+    District:   rawDistrict,
+    state:      rawState,
+    referredBy: item.referredBy || item.referred_by || item.Referred_By || null,
+    serviceAgentName: item.ServiceAgentName || item.serviceAgentName || null,
+    subDistrict: item.SubDistrict || item.subDistrict || null,
+    date:       item.assignedAt,
+    time:       item.time,
+    latitude:   item.latitude,
+    longitude:  item.longitude,
+    whatsappNo: item.whatsappNo,
+    email:      item.email,
+    address:    fullAddress,
+    status:     normalizeStatus(item.siteSurveyStatus),
+    scheduledAt: parseSurveyDateTime(
+  item.Site_Survey_Req_Date_Time || item.siteSurveyDateTime
+),
+    siteSurveyAssignedBy: item.CreatedBy || item.createdBy || null,
+    leadSource:           item.leadSource || item.Lead_Source || null,
+    productType:            item.productType,
+    orderType:              item.orderType,
+    projectType:            item.projectType,
+    projectModel:           item.projectModel,
+    inverterConnectionType: item.inverterConnectionType,
+    inverterCapacity:       item.inverterCapacity,
+    solarPanelModel:        item.solarPanelModel,
+    solarPanelBrand:        item.solarPanelBrand,
+    noOfPanels:             item.noOfPanels,
+    roofType:               item.roofType,
+    country: item.country || null,
+    zipCode: item.postalCode || item.zipCode || item.Zip_Postal_Code || null,
+    home_location:   item.home_location || null,
+    office_location: item.office_location || null,
+  };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -95,6 +165,12 @@ const SurveyerScreen = () => {
 
   // 👇 புதுசா சேர்த்தது — ஒரே நேரத்துல template cache 2 தடவை ஓடாம தடுக்க
   const templateCacheInFlight = useRef(false);
+  const allServerDealsRef = useRef([]);   // ellaa loaded pages accumulate aagum
+const pageRef           = useRef(1);
+const hasMoreRef        = useRef(true);
+const loadingMoreRef    = useRef(false);
+const [loadingMore, setLoadingMore] = useState(false);
+const [completedSearch, setCompletedSearch] = useState('');
 
   // AcceptedLeads set பண்ணும்போது ref-ஐயும் sync பண்ண
   const setAcceptedLeadsSafe = useCallback((updater) => {
@@ -345,100 +421,77 @@ useFocusEffect(
   };
 
   // ── Fetch + merge ─────────────────────────────────────────────────────────
-  const fetchAndMergeLeads = async () => {
+const fetchAndMergeLeads = async (targetPage = 1) => {
+  const isFirst = targetPage === 1;
+
+  if (isFirst) {
     setLeadsLoading(true);
-    try {
-      const surveyorNumber = await getSurveyorNumber();
+    hasMoreRef.current = true;
+  } else {
+    if (loadingMoreRef.current || !hasMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+  }
 
-      const res = await API.get('/order/surveyor', {
-        params: { surveyorNumber },
-      });
+  try {
+    const surveyorNumber = await getSurveyorNumber();
 
-      const rawData = Array.isArray(res.data?.deals) ? res.data.deals : [];
+    const res = await API.get('/order/surveyor', {
+      params: { surveyorNumber, page: targetPage, limit: PAGE_LIMIT },
+    });
 
-      const storedRejected = await AsyncStorage.getItem('rejected_lead_ids');
-      const rejectedIds    = storedRejected ? JSON.parse(storedRejected) : [];
+    const rawData    = Array.isArray(res.data?.deals) ? res.data.deals : [];
+    const pagination = res.data?.pagination;
 
-      const mapped = rawData.map((item) => {
-        const rawStreet   = item.street || null;
-        const rawDistrict = item.district || item.District || null;
-        const rawState    = item.state || item.State || null;
-        const rawAddress  = item.address || null;
+    hasMoreRef.current = pagination ? !!pagination.hasMore : rawData.length >= PAGE_LIMIT;
+    pageRef.current    = targetPage;
 
-        const fullAddress = buildFullAddress({
-          street:   rawStreet,
-          address:  rawAddress,
-          District: rawDistrict,
-          state:    rawState,
-        });
+    const mappedPage = rawData.map(mapDeal);
 
-        return {
-          id:         item._id,
-          dealId:     item.deal_id,
-          name:       item.deal_name || item.name || '—',
-          phone:      item.mobile,
-          city:       item.city,
-          comment:    item.comment,
-          street:     rawStreet,
-          District:   rawDistrict,
-          state:      rawState,
-
-          referredBy: item.referredBy || item.referred_by || item.Referred_By || null,
-          serviceAgentName: item.ServiceAgentName || item.serviceAgentName || null,
-          subDistrict: item.SubDistrict || item.subDistrict || null,
-          date:       item.assignedAt,
-          time:       item.time,
-          latitude:   item.latitude,
-          longitude:  item.longitude,
-          whatsappNo: item.whatsappNo,
-          email:      item.email,
-                    address:    fullAddress,
-          status:     normalizeStatus(item.siteSurveyStatus),
-
-          scheduledAt: item.siteSurveyDateTime || null,
-          siteSurveyAssignedBy: item.CreatedBy || item.createdBy || null,
-          leadSource:           item.leadSource || item.Lead_Source || null,
-          productType:            item.productType,
-          orderType:               item.orderType,
-          projectType:             item.projectType,
-          projectModel:            item.projectModel,
-          inverterConnectionType:  item.inverterConnectionType,
-          inverterCapacity:        item.inverterCapacity,
-          solarPanelModel:         item.solarPanelModel,
-          solarPanelBrand:         item.solarPanelBrand,
-          noOfPanels:              item.noOfPanels,
-          roofType:                item.roofType,
-          country: item.country || null,
-          zipCode: item.postalCode || item.zipCode || item.Zip_Postal_Code || null,
-          home_location:   item.home_location || null,
-          office_location: item.office_location || null,
-        };
-      });
-
-      if (!isMounted.current) return;
-
-      setLeads(
-        mapped.filter((l) => l.status === 'Not-Assigned' && !rejectedIds.includes(l.id))
-      );
-
-            const serverNonNew = mapped.filter((l) => l.status !== 'Not-Assigned');
-      const merged       = await mergeWithServerLeads(serverNonNew);
-
-      const normalizedMerged = merged.map((l) => ({ ...l, status: normalizeStatus(l.status) }));
-
-      const Accepted  = normalizedMerged.filter((l) => l.status === 'Accepted' || l.status === 'In-Progress' || l.status === 'hold');
-      const completed = normalizedMerged.filter((l) => l.status === 'Completed');
-
-      AcceptedLeadsRef.current = Accepted;
-      setAcceptedLeads(Accepted);
-      setCompletedLeads(completed);
-
-        } catch (err) {
-      logError("fetch_leads_failed", { message: err?.message });
-    } finally {
-      if (isMounted.current) setLeadsLoading(false);
+    if (isFirst) {
+      allServerDealsRef.current = mappedPage;
+    } else {
+      const existingIds = new Set(allServerDealsRef.current.map((l) => l.id));
+      allServerDealsRef.current = [
+        ...allServerDealsRef.current,
+        ...mappedPage.filter((l) => !existingIds.has(l.id)),
+      ];
     }
-  };
+
+    const mapped = allServerDealsRef.current;
+
+    const storedRejected = await AsyncStorage.getItem('rejected_lead_ids');
+    const rejectedIds    = storedRejected ? JSON.parse(storedRejected) : [];
+
+    if (!isMounted.current) return;
+
+    setLeads(
+      mapped.filter((l) => l.status === 'Not-Assigned' && !rejectedIds.includes(l.id))
+    );
+
+    const serverNonNew = mapped.filter((l) => l.status !== 'Not-Assigned');
+    const merged       = await mergeWithServerLeads(serverNonNew);
+
+    const normalizedMerged = merged.map((l) => ({ ...l, status: normalizeStatus(l.status) }));
+
+    const Accepted  = normalizedMerged.filter(
+      (l) => l.status === 'Accepted' || l.status === 'In-Progress' || l.status === 'hold'
+    );
+    const completed = normalizedMerged.filter((l) => l.status === 'Completed');
+
+    AcceptedLeadsRef.current = Accepted;
+    setAcceptedLeads(Accepted);
+    setCompletedLeads(completed);
+  } catch (err) {
+    logError('fetch_leads_failed', { message: err?.message, page: targetPage });
+  } finally {
+    if (isMounted.current) {
+      if (isFirst) setLeadsLoading(false);
+      else setLoadingMore(false);
+    }
+    if (!isFirst) loadingMoreRef.current = false;
+  }
+};
 
   // ── Try API ───────────────────────────────────────────────────────────────
   const tryApi = async (fn) => {
@@ -715,6 +768,10 @@ try { await auth().signOut(); } catch (e) {}
             setIsOn(false);
             setUploadedPhoto(null);
             setActiveFilter('all');
+            setCompletedSearch('');
+allServerDealsRef.current = [];
+pageRef.current = 1;
+hasMoreRef.current = true;
 
             navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
           } catch (e) {
@@ -1043,6 +1100,39 @@ const handleStart = async (id) => {
 
     startHighFrequencyTracking(() => locationRef.current);
   };
+  const handleScroll = ({ nativeEvent }) => {
+  if (leadsLoading || completedSearch.trim()) return;
+  const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+  const nearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 200;
+  if (nearBottom) fetchAndMergeLeads(pageRef.current + 1);
+};
+const filteredCompleted = completedLeads.filter((l) => {
+  const q = completedSearch.trim().toLowerCase();
+  if (!q) return true;
+  return [l.name, l.phone, l.dealId, l.city, l.address]
+    .filter(Boolean)
+    .some((v) => String(v).toLowerCase().includes(q));
+});
+
+const renderCompletedSearchBar = () => (
+  <View style={styles.searchBox}>
+    <Ionicons name="search-outline" size={18} color="#888" />
+    <TextInput
+      style={styles.searchInput}
+      placeholder="Search name, phone, deal ID..."
+      placeholderTextColor="#aaa"
+      value={completedSearch}
+      onChangeText={setCompletedSearch}
+      autoCorrect={false}
+      returnKeyType="search"
+    />
+    {completedSearch.length > 0 && (
+      <TouchableOpacity onPress={() => setCompletedSearch('')}>
+        <Ionicons name="close-circle" size={18} color="#aaa" />
+      </TouchableOpacity>
+    )}
+  </View>
+);
 
   // ── Pull to refresh ──────────────────────────────────────────────────────
   const onRefresh = useCallback(async () => {
@@ -1072,9 +1162,11 @@ const handleStart = async (id) => {
           </View>
 
           <ScrollView
-            contentContainerStyle={{ paddingTop: 60, paddingBottom: 30 }}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
+  contentContainerStyle={{ paddingTop: 60, paddingBottom: 30 }}
+  showsVerticalScrollIndicator={false}
+  onScroll={handleScroll}
+  scrollEventThrottle={400}
+  refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#fff']} tintColor="#fff" />
             }
           >
@@ -1123,6 +1215,9 @@ const handleStart = async (id) => {
                 }
               </>
             )}
+            {loadingMore && (
+  <ActivityIndicator size="small" color="#fff" style={{ marginVertical: 16 }} />
+)}
           </ScrollView>
         </LinearGradient>
       )}
@@ -1148,9 +1243,12 @@ const handleStart = async (id) => {
           )}
 
           <ScrollView
-            style={{ flex: 1, backgroundColor: '#F5F5F5' }}
-            contentContainerStyle={{ paddingTop: !isOnline ? 120 : 90, paddingBottom: 30 }}
-            refreshControl={
+  style={{ flex: 1, backgroundColor: '#F5F5F5' }}
+  contentContainerStyle={{ paddingTop: !isOnline ? 120 : 90, paddingBottom: 30 }}
+  onScroll={handleScroll}
+  scrollEventThrottle={400}
+  keyboardShouldPersistTaps="handled"
+  refreshControl={  
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#ED1C25']} tintColor="#ED1C25" />
             }
           >
@@ -1236,12 +1334,15 @@ const handleStart = async (id) => {
                             <Text style={styles.sectionTitle}>Leads - Completed</Text>
                           </View>
                         </View>
-                        {completedLeads.map((item) => (
-                          <LeadCard
-                            key={item.id} item={item}
-                            currentLocation={locationRef.current} cardType="Completed"
-                          />
-                        ))}
+                        {renderCompletedSearchBar()}
+{filteredCompleted.length > 0
+  ? filteredCompleted.map((item) => (
+      <LeadCard
+        key={item.id} item={item}
+        currentLocation={locationRef.current} cardType="Completed"
+      />
+    ))
+  : <Text style={styles.emptyText}>No matching completed leads.</Text>}
                       </>
                     )}
                     {AcceptedLeads.length === 0 && completedLeads.length === 0 && (
@@ -1251,17 +1352,27 @@ const handleStart = async (id) => {
                 )}
 
                 {activeFilter === 'Completed' && (
-                  completedLeads.length > 0
-                    ? completedLeads.map((item) => (
-                        <LeadCard
-                          key={item.id} item={item}
-                          currentLocation={locationRef.current} cardType="Completed"
-                        />
-                      ))
-                    : <Text style={styles.emptyText}>No completed leads yet.</Text>
-                )}
+  completedLeads.length > 0 ? (
+    <>
+      {renderCompletedSearchBar()}
+      {filteredCompleted.length > 0
+        ? filteredCompleted.map((item) => (
+            <LeadCard
+              key={item.id} item={item}
+              currentLocation={locationRef.current} cardType="Completed"
+            />
+          ))
+        : <Text style={styles.emptyText}>No matching completed leads.</Text>}
+    </>
+  ) : (
+    <Text style={styles.emptyText}>No completed leads yet.</Text>
+  )
+)}
               </>
             )}
+            {loadingMore && (
+      <ActivityIndicator size="small" color="#ED1C25" style={{ marginVertical: 16 }} />
+    )}
           </ScrollView>
         </>
       )}
@@ -1465,4 +1576,14 @@ const styles = StyleSheet.create({
   },
   modalSaveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
   uploadIconBtn:    { marginTop: 10, alignItems: 'center' },
+  searchBox: {
+  flexDirection: 'row', alignItems: 'center',
+  backgroundColor: '#fff', marginHorizontal: 15, marginBottom: 10,
+  paddingHorizontal: 12, borderRadius: 10, elevation: 2,
+  borderWidth: 1, borderColor: '#eee',
+},
+searchInput: {
+  flex: 1, fontSize: 13, color: '#333',
+  paddingVertical: 9, marginLeft: 8,
+},
 });

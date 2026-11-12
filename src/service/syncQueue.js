@@ -261,6 +261,10 @@ await _persistQueueItemPayload(item.id, payload);
       await API.post('/notification/trigger', payload, { timeout: DEFAULT_TIMEOUT });
       break;
 
+      case 'DELIVERY_NOTIFICATION':
+      await API.post('/logistic/triggerdelivery-notification', payload, { timeout: DEFAULT_TIMEOUT });
+      break;
+
     // ✅ JOB_COORDINATES — coordinates only
     case 'JOB_COORDINATES':
       await API.post('/location/distance', {
@@ -291,6 +295,7 @@ case 'DEAL_DISTANCE': {
     surveyor_name: String(payload.surveyor_name || payload.surveyorName || 'Surveyor'),
     start_latitude, start_longitude, site_latitude, site_longitude,
   };
+  if (payload.state) body.state = String(payload.state);
   if (payload.to_office || payload.toOffice) body.to_office = String(payload.to_office || payload.toOffice);
   if (payload.to_home || payload.toHome)     body.to_home   = String(payload.to_home || payload.toHome);
 
@@ -310,8 +315,8 @@ case 'DEAL_DISTANCE': {
 
   console.log('[SyncQueue] DEAL_DISTANCE result:', res.status, data);
 
-  if (res.status === 409 || String(data?.error || '').toLowerCase().includes('already exists')) {
-    return;
+    if (res.status === 409 || String(data?.error || '').toLowerCase().includes('already exists')) {
+    break;   // return-ku badhula break (consistency)
   }
   if (!res.ok) throw new Error(`DEAL_DISTANCE failed ${res.status}: ${JSON.stringify(data)}`);
   break;

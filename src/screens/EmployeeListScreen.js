@@ -26,6 +26,8 @@ import API from '../api/api1';
  */
 
 const initial = name => (name && name.trim() ? name.trim().charAt(0).toUpperCase() : '?');
+const STATE_OPTIONS = ['All', 'Tamil Nadu', 'Kerala'];
+const normState = s => String(s || '').toLowerCase().replace(/\s+/g, '');
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9F9FB' },
@@ -104,6 +106,15 @@ const styles = StyleSheet.create({
   tabBtnActive: { backgroundColor: '#fff' },
   tabBtnText: { fontSize: 12.5, fontWeight: '700', color: '#999' },
   tabBtnTextActive: { color: '#C8000A' },
+
+  chipRow: { flexDirection: 'row', gap: 8, marginHorizontal: 16 },
+chip: {
+  paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16,
+  borderWidth: 1, borderColor: '#EAEAEA', backgroundColor: '#fff',
+},
+chipActive: { backgroundColor: '#C8000A', borderColor: '#C8000A' },
+chipText: { fontSize: 12.5, fontWeight: '700', color: '#666' },
+chipTextActive: { color: '#fff' },
 
   fetchBtn: {
     marginHorizontal: 16, marginTop: 14, marginBottom: 4,
@@ -228,6 +239,13 @@ const isoToDateObj = iso => {
   const dt = new Date(iso);
   return isNaN(dt.getTime()) ? null : dt;
 };
+const parseDMY = str => {                      // 👈 inga podu
+  if (!str || str.length !== 10) return null;
+  const [d, m, y] = str.split('/').map(Number);
+  if (!d || !m || !y) return null;
+  const dt = new Date(y, m - 1, d);
+  return isNaN(dt.getTime()) ? null : dt;
+};
 
 const niceDate = iso => {
   const dt = isoToDateObj(iso);
@@ -258,6 +276,7 @@ const normaliseDistance = (raw, idx) => ({
   name:       raw.deal_name || '—',
   mobile:     raw.mobile || '—',
   surveyorName: raw.surveyor_name || '—',
+  state:      raw.state || '',
   toSite:     parseKm(raw.to_site),
   toOffice:   parseKm(raw.to_office),
   rawDate:    raw.createdAt || null,
@@ -269,7 +288,7 @@ const EmployeeListScreen = ({ navigation, route }) => {
   const [selectedEmpName, setSelectedEmpName] = useState(null);
   const [selectedEmp, setSelectedEmp]      = useState(null);
   const [fromDate, setFromDate]            = useState('');
-  const [toDate, setToDate]                = useState(todayStr());
+  const [toDate, setToDate]                = useState('');
   const [loading, setLoading]              = useState(false);
   const [mode, setMode]                    = useState('location'); // 'location' | 'distance'
   const [results, setResults]              = useState(null); // location: [{date, entries}]
@@ -277,6 +296,7 @@ const EmployeeListScreen = ({ navigation, route }) => {
   const [hasSearched, setHasSearched]      = useState(false);
   const [exporting, setExporting]          = useState(false);
   const [downloading, setDownloading]      = useState(false);
+  const [stateFilter, setStateFilter] = useState('All');
 
   const handleSetMobile = () => {
     const cleaned = mobileInputText.replace(/\D/g, '');
@@ -300,7 +320,16 @@ const EmployeeListScreen = ({ navigation, route }) => {
     setHasSearched(false);
   };
 
-  const canFetch = !!selectedEmp && fromDate.length === 10 && toDate.length === 10 && !loading;
+  const hasMobile = !!selectedEmp;
+const hasFrom   = fromDate.length === 10;
+const hasTo     = toDate.length === 10;
+const hasState  = stateFilter !== 'All';
+
+const canFetch = !loading && (
+  mode === 'location'
+    ? hasMobile && hasFrom && hasTo
+    : hasMobile || hasFrom || hasTo || hasState
+);
 
   const openLocationOnMap = (lat, lng, label) => {
     const enc = encodeURIComponent(label || 'Location');
@@ -315,7 +344,6 @@ const EmployeeListScreen = ({ navigation, route }) => {
     const toISO   = ddmmyyyyToISO(toDate);
     const fromD = isoToDateObj(fromISO);
     const toD   = isoToDateObj(toISO);
-
     const dates = [];
     let cur = new Date(fromD);
     while (cur <= toD) {
@@ -349,53 +377,64 @@ const EmployeeListScreen = ({ navigation, route }) => {
   };
 
   // ── Deal distance fetch (new) ──────────────────────────────────────────────
-  const fetchDealDistance = async () => {
-    const fromISO = ddmmyyyyToISO(fromDate);
-    const toISO   = ddmmyyyyToISO(toDate);
-    const fromD = isoToDateObj(fromISO);
-    const toD   = isoToDateObj(toISO);
-    const toEnd = new Date(toD); toEnd.setHours(23, 59, 59, 999);
+const fetchDealDistance = async () => {
+  const fromD = fromDate.length === 10 ? parseDMY(fromDate) : null;
+  const toD   = toDate.length === 10 ? parseDMY(toDate) : null;
+  const toEnd = toD ? new Date(toD) : null;
+  if (toEnd) toEnd.setHours(23, 59, 59, 999);
 
-    try {
-      const res = await API.get('/admin/distance');
-      const rawList = Array.isArray(res.data?.data) ? res.data.data : Array.isArray(res.data) ? res.data : [];
-      const normalised = rawList.map(normaliseDistance);
+  const cleanEmp = selectedEmp ? String(selectedEmp).replace(/\D/g, '').slice(-10) : null;
 
-      const cleanEmp = String(selectedEmp).replace(/\D/g, '').slice(-10);
-      const filtered = normalised.filter(r => {
-        const matchesEmp = String(r.mobile).replace(/\D/g, '').slice(-10) === cleanEmp;
-        if (!matchesEmp) return false;
-        if (!r.rawDate) return true;
+  try {
+    const res = await API.get('/admin/distance');
+    const rawList = Array.isArray(res.data?.data) ? res.data.data : Array.isArray(res.data) ? res.data : [];
+    const normalised = rawList.map(normaliseDistance);
+
+    const filtered = normalised.filter(r => {
+      if (cleanEmp && String(r.mobile).replace(/\D/g, '').slice(-10) !== cleanEmp) return false;
+      if (stateFilter !== 'All' && normState(r.state) !== normState(stateFilter)) return false;
+      if (fromD || toEnd) {
+        if (!r.rawDate) return false;
         const d = new Date(r.rawDate);
-        return d >= fromD && d <= toEnd;
-      });
-
-      setDistResults(filtered);
-      if (filtered.length === 0) {
-        Alert.alert('No data', 'No deal distance records found for this employee in the selected range.');
+        if (fromD && d < fromD) return false;
+        if (toEnd && d > toEnd) return false;
       }
-    } catch (e) {
-      Alert.alert('Error', 'Could not fetch deal distance: ' + (e?.message || 'Unknown error'));
-      setDistResults([]);
-    }
-  };
+      return true;
+    });
 
-  const handleFetch = async () => {
-    const fromD = ddmmyyyyToISO(fromDate) && isoToDateObj(ddmmyyyyToISO(fromDate));
-    const toD   = ddmmyyyyToISO(toDate) && isoToDateObj(ddmmyyyyToISO(toDate));
-    if (!fromD || !toD) { Alert.alert('Invalid date', 'Please enter dates as DD/MM/YYYY.'); return; }
-    if (fromD > toD) { Alert.alert('Invalid range', 'From date must be before To date.'); return; }
-
-    setLoading(true);
-    setHasSearched(true);
-    try {
-      if (mode === 'location') { setDistResults(null); await fetchLocationHistory(); }
-      else { setResults(null); await fetchDealDistance(); }
-    } catch (e) {
-      Alert.alert('Error', 'Could not fetch data: ' + (e?.message || 'Unknown error'));
+    setDistResults(filtered);
+    if (filtered.length === 0) {
+      Alert.alert('No data', 'No deal distance records found for the selected filters.');
     }
-    setLoading(false);
-  };
+  } catch (e) {
+    Alert.alert('Error', 'Could not fetch deal distance: ' + (e?.message || 'Unknown error'));
+    setDistResults([]);
+  }
+};
+
+const handleFetch = async () => {
+  const fromD = fromDate.length === 10 ? parseDMY(fromDate) : null;
+  const toD   = toDate.length === 10 ? parseDMY(toDate) : null;
+
+  if ((fromDate && !fromD) || (toDate && !toD)) {
+    Alert.alert('Invalid date', 'Please enter dates as DD/MM/YYYY.');
+    return;
+  }
+  if (fromD && toD && fromD > toD) {
+    Alert.alert('Invalid range', 'From date must be before To date.');
+    return;
+  }
+
+  setLoading(true);
+  setHasSearched(true);
+  try {
+    if (mode === 'location') { setDistResults(null); await fetchLocationHistory(); }
+    else { setResults(null); await fetchDealDistance(); }
+  } catch (e) {
+    Alert.alert('Error', 'Could not fetch data: ' + (e?.message || 'Unknown error'));
+  }
+  setLoading(false);
+};
 
   const escapeCsv = val => {
     const s = String(val ?? '');
@@ -468,9 +507,9 @@ const EmployeeListScreen = ({ navigation, route }) => {
   };
 
   const buildDistanceCsv = () => {
-  const headers = ['Deal ID', 'Deal Name', 'Surveyor Name', 'Mobile', 'To Site (km)', 'To Office (km)', 'Date'];
+  const headers = ['Deal ID', 'Deal Name', 'Surveyor Name', 'Mobile', 'State', 'To Site (km)', 'To Office (km)', 'Date'];
   const rows = distResults.map(r => [
-    r.dealId, r.name, r.surveyorName, r.mobile, r.toSite.toFixed(2), r.toOffice.toFixed(2), r.date,
+    r.dealId, r.name, r.surveyorName, r.mobile, r.state, r.toSite.toFixed(2), r.toOffice.toFixed(2), r.date,
   ]);
   return [headers, ...rows].map(row => row.map(escapeCsv).join(',')).join('\n');
 };
@@ -493,7 +532,7 @@ const EmployeeListScreen = ({ navigation, route }) => {
     setDownloading(true);
     try {
       const csv = buildDistanceCsv();
-      const fileName = `deal-distance-${selectedEmp}-${Date.now()}.csv`;
+      const fileName = `deal-distance-${selectedEmp || 'all'}-${Date.now()}.csv`;
 
       if (Platform.OS === 'android') {
         const ok = await requestAndroidStoragePermission();
@@ -524,7 +563,7 @@ const EmployeeListScreen = ({ navigation, route }) => {
     setExporting(true);
     try {
       const csv = buildDistanceCsv();
-      const fileName = `deal-distance-${selectedEmp}-${Date.now()}.csv`;
+      const fileName = `deal-distance-${selectedEmp || 'all'}-${Date.now()}.csv`;
       const path = `${RNFS.CachesDirectoryPath}/${fileName}`;
       await RNFS.writeFile(path, csv, 'utf8');
 
@@ -658,6 +697,24 @@ const EmployeeListScreen = ({ navigation, route }) => {
             <Text style={[styles.tabBtnText, mode === 'distance' && styles.tabBtnTextActive]}>Deal Distance</Text>
           </TouchableOpacity>
         </View>
+
+         {mode === 'distance' && (
+          <>
+            <Text style={styles.sectionLabel}>4. Select State</Text>
+            <View style={styles.chipRow}>
+              {STATE_OPTIONS.map(s => (
+                <TouchableOpacity
+                  key={s}
+                  onPress={() => { setStateFilter(s); setHasSearched(false); }}
+                  style={[styles.chip, stateFilter === s && styles.chipActive]}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.chipText, stateFilter === s && styles.chipTextActive]}>{s}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
 
         <TouchableOpacity
           style={[styles.fetchBtn, !canFetch && styles.fetchBtnDisabled]}
@@ -848,7 +905,9 @@ const EmployeeListScreen = ({ navigation, route }) => {
                     <View style={styles.distTopRow}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.distName} numberOfLines={1}>{item.name}</Text>
-                        <Text style={styles.distSub} numberOfLines={1}>{item.dealId} · {item.date}</Text>
+                        <Text style={styles.distSub} numberOfLines={1}>
+  {item.dealId} · {item.date}{item.state ? ` · ${item.state}` : ''}
+</Text>
                       </View>
                     </View>
 

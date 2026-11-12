@@ -79,10 +79,10 @@ const InProgressScreen = () => {
     });
     startTracking();
     return () => {
-      isMounted.current = false;
-      stopTracking();
-      stopHighFrequencyTracking();
-    };
+  isMounted.current = false;
+  stopTracking(true); // listener mattum remove, native tracking continue
+  // stopHighFrequencyTracking() remove: Hold / Complete la already handle aagudhu
+};
   }, []);
 
   // 👇 புதுசா சேர்த்தது: mount ஆகும்போது persisted formSubmittedIds-ஐ load பண்ணு

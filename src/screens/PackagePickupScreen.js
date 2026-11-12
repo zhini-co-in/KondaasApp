@@ -85,36 +85,43 @@ const getLoggedInUserName = async () => {
 // Customer mobile number comes from the package itself
 const getCustomerMobile = (card, pkg) => pkg?.mobile || '';
 
-// Sends the distance to the site to the backend, once per package
-const postDealDistanceToSite = async (card, pkg, toSiteKm) => {
+// Sends start + site coordinates; backend calculates to_site via Google Maps
+const postDealDistanceToSite = async (card, pkg, startLoc) => {
   const packageKey = `${card.deal_id}_${pkg.package_number}`;
   if (await isDistanceAlreadySynced(packageKey)) return;
 
+  const siteLat = parseFloat(pkg.latitude);
+  const siteLng = parseFloat(pkg.longitude);
+  if (!startLoc || isNaN(siteLat) || isNaN(siteLng)) return;
+
   const driverName = (await getLoggedInUserName()) || card.driverName || '';
   const payload = {
-    deal_id: card.deal_id,
-    deal_name: card.deal_id,
+    deal_id: String(card.deal_id),
+    deal_name: String(card.deal_id),
     mobile: getCustomerMobile(card, pkg),
-    to_site: Number(toSiteKm.toFixed(2)),
-    surveyor_name: driverName, // backend field name stays "surveyor_name"; value is the logistics driver's name
+    surveyor_name: driverName || 'Driver',
+    state: pkg.shipping_state || pkg.billing_state || undefined,
+    start_latitude: startLoc.latitude,
+    start_longitude: startLoc.longitude,
+    site_latitude: siteLat,
+    site_longitude: siteLng,
   };
 
-  console.log('📏 posting to_site distance:', JSON.stringify(payload));
+  console.log('📏 posting distance coords:', JSON.stringify(payload));
 
   try {
     const res = await API.post('/location/distance', payload);
-    console.log('✅ to_site saved:', res?.status, res?.data);
+    console.log('✅ distance saved:', res?.status, res?.data);
     await markDistanceSynced(packageKey);
   } catch (err) {
     const status = err?.response?.status;
-    console.log('❌ to_site FAILED:', status, err?.response?.data || err?.message);
+    console.log('❌ distance FAILED:', status, err?.response?.data || err?.message);
     if (status === 409) {
-      await markDistanceSynced(packageKey); // already exists on the backend
+      await markDistanceSynced(packageKey); // already exists on backend
       return;
     }
-    // 4xx = the request itself is wrong, retrying will not help
     if (status && status >= 400 && status < 500) return;
-    await enqueue(`deal_distance_${packageKey}`, 'DEAL_DISTANCE', payload); // network/server error, retry later
+    await enqueue(`deal_distance_${packageKey}`, 'DEAL_DISTANCE', payload); // 5xx/network → retry
   }
 };
 
@@ -299,13 +306,12 @@ const PackagePickupScreen = ({ navigation, route }) => {
 
     // Send the distance to the site automatically right after the photo is taken
     // and the pickup is confirmed (same value the Distance box shows). Once per package.
-    const siteLat = parseFloat(pkg.latitude);
-    const siteLng = parseFloat(pkg.longitude);
-    if (!isNaN(siteLat) && !isNaN(siteLng) && currentLocation) {
-      const meters = getDistanceMeters(
-        currentLocation.latitude, currentLocation.longitude, siteLat, siteLng
-      );
-      postDealDistanceToSite(card, pkg, meters / 1000);
+       // Distance to site: send coordinates, server calculates km
+    if (currentLocation) {
+      postDealDistanceToSite(card, pkg, {
+        latitude: currentLocation.latitude,
+        longitude: currentLocation.longitude,
+      });
     }
 
     // Scenario 0 — "package ready" — sent only once per package

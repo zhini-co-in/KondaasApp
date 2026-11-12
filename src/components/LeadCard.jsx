@@ -1,12 +1,13 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, Linking, Alert, Modal, ScrollView } from 'react-native';
+import {
+  View, Text, TouchableOpacity, Linking, Alert, Modal, ScrollView,
+  TextInput, ActivityIndicator, StyleSheet,
+} from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { USER_DATA } from '../service/localStorage';
 import { getDistance, getRoadDistanceKm } from '../service/locationService';
 import API from '../api/api1';
-import { StyleSheet } from 'react-native'; // or inline styles
-import NetInfo from '@react-native-community/netinfo';
 import { enqueue, processSyncQueue } from '../service/syncQueue';
 import { getDistancePoints } from '../service/dealDistancePoints';
 
@@ -28,23 +29,17 @@ const formatDate = (dateStr) => {
   }
 };
 
-// 👇 புதுசா சேர்த்தது: Google Maps URL string-ல இருந்து lat/lng extract பண்ற helper
-// Zoho backend அனுப்ற home_location / office_location — பல format-ல வரலாம்,
-// அதனால மூணு common pattern-ஐ try பண்றோம்.
-// Supported:
-//   https://www.google.com/maps/@13.05,80.25,15z
-//   https://www.google.com/maps?q=13.05,80.25
-//   https://www.google.com/maps?ll=13.05,80.25
+// Google Maps URL-la irundhu lat/lng extract
 const parseLatLngFromUrl = (url) => {
   if (!url || typeof url !== 'string') return null;
   try {
-    let m = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);        // .../@13.05,80.25,15z
+    let m = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
     if (m) return { latitude: parseFloat(m[1]), longitude: parseFloat(m[2]) };
 
-    m = url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);        // ?q=13.05,80.25
+    m = url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
     if (m) return { latitude: parseFloat(m[1]), longitude: parseFloat(m[2]) };
 
-    m = url.match(/[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/);       // ?ll=13.05,80.25
+    m = url.match(/[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/);
     if (m) return { latitude: parseFloat(m[1]), longitude: parseFloat(m[2]) };
 
     return null;
@@ -69,17 +64,13 @@ const LeadCard = ({
   onMarkCompleted,
   navigation,
   formSubmitted,
-  // 👇 புதுசா சேர்த்தது: Complete ஆனப்புறம் Home/Office distance
-  // click பண்ணதும் (அல்லது Skip பண்ணதும்) SurveyerScreen-க்கு
-  // automatic-ஆ navigate பண்ண In-ProgressScreen கொடுக்கும் callback.
   onFinishAndReturn,
+  isDue,
 }) => {
   const hasLatLong = item.latitude && item.longitude &&
     item.latitude !== '' && item.longitude !== '';
 
-  // Straight-line (Haversine) distance in METERS — proximity check (300m
-  // "Reached" auto-trigger) க்கு இதே use ஆகும். இது fast + offline-safe,
-  // அதனால தொடாம வெச்சிருக்கோம்.
+  // Straight-line distance (meters) — 300m proximity check-ku
   const distToLead = currentLocation && hasLatLong
     ? Math.round(getDistance(
         currentLocation.latitude, currentLocation.longitude,
@@ -90,66 +81,65 @@ const LeadCard = ({
   const withinRange = distToLead !== null && distToLead <= 300;
   const notifiedRef = useRef(false);
 
-  // 👇 Road distance (OSRM) — "Distance" box la DISPLAY பண்ண மட்டும் use ஆகும்.
-  const [roadDistanceKm, setRoadDistanceKm] = useState(null);
-  const [distanceLoading, setDistanceLoading] = useState(false);
+  // ── States (ellam inga top-la) ───────────────────────────────────────────
+  const [roadDistanceKm, setRoadDistanceKm]     = useState(null);
+  const [distanceLoading, setDistanceLoading]   = useState(false);
   const lastFetchRef = useRef({ time: 0, straightKm: null });
 
-  // 👇 புதுசா சேர்த்தது: Interested Product popup state
   const [productModalVisible, setProductModalVisible] = useState(false);
+  const [addressModalVisible, setAddressModalVisible] = useState(false);
 
-  // 👇 புதுசா சேர்த்தது: Home / Office distance state — click பண்ணதும் இதுல
-  // result store ஆகி button-லயே காட்டப்படும்.
+  const [noteModalVisible, setNoteModalVisible] = useState(false);
+  const [noteText, setNoteText]                 = useState('');
+  const [noteSaving, setNoteSaving]             = useState(false);
+
   const [homeDistanceKm, setHomeDistanceKm]     = useState(null);
   const [officeDistanceKm, setOfficeDistanceKm] = useState(null);
   const [homeLoading, setHomeLoading]           = useState(false);
   const [officeLoading, setOfficeLoading]       = useState(false);
+  const [skipLoading, setSkipLoading]           = useState(false);
 
-const isFirstDistanceFetchRef = useRef(true);
+  // ── Road distance (display only) ─────────────────────────────────────────
+  useEffect(() => {
+    if (cardType !== 'In-Progress') return;
+    if (!currentLocation || !hasLatLong || item.status === 'Completed') return;
+    if (distToLead === null) return;
 
-useEffect(() => {
-  if (cardType !== 'In-Progress') return;
-  if (!currentLocation || !hasLatLong || item.status === 'Completed') return;
-  if (distToLead === null) return;
+    const straightKm = distToLead / 1000;
+    const now = Date.now();
+    const movedEnough =
+      lastFetchRef.current.straightKm === null ||
+      Math.abs(straightKm - lastFetchRef.current.straightKm) > 0.5; // 500m change
 
-  const straightKm = distToLead / 1000;
-  const now = Date.now();
-  const movedEnough =
-    lastFetchRef.current.straightKm === null ||
-    Math.abs(straightKm - lastFetchRef.current.straightKm) > 0.5; // 500m change
+    if (lastFetchRef.current.straightKm !== null && !movedEnough) return;
 
-  if (lastFetchRef.current.straightKm !== null && !movedEnough) return;
+    lastFetchRef.current = { time: now, straightKm };
+    setDistanceLoading(true);
 
-  lastFetchRef.current = { time: now, straightKm };
-  setDistanceLoading(true);
+    getRoadDistanceKm(
+      currentLocation.latitude, currentLocation.longitude,
+      parseFloat(item.latitude), parseFloat(item.longitude)
+    ).then((km) => {
+      setDistanceLoading(false);
+      if (km !== null) setRoadDistanceKm(km);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [distToLead, cardType, item.status]);
 
-  getRoadDistanceKm(
-    currentLocation.latitude, currentLocation.longitude,
-    parseFloat(item.latitude), parseFloat(item.longitude)
-  ).then(async (km) => {
-    setDistanceLoading(false);
-    const finalKm = km !== null ? km : straightKm;
-    if (km !== null) setRoadDistanceKm(km);
-  });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [distToLead, cardType, item.status]);
-
-  // 300m auto-notify — only for In-Progress
+  // 300m auto-notify — In-Progress mattum
   useEffect(() => {
     if (cardType !== 'In-Progress') return;
     if (withinRange && !item.manualSiteEnabled && !notifiedRef.current) {
       notifiedRef.current = true;
       API.post('/notification/trigger', {
-  customerMobile: item.whatsappNo || item.phone,
-  scenarioType: 3,
-}).catch(() => {});
+        customerMobile: item.whatsappNo || item.phone,
+        scenarioType: 3,
+      }).catch(() => {});
       onManualEnable?.(item);
     }
   }, [withinRange]);
 
-  // 👇 புதுசா சேர்த்தது: backend saveDealDistance-க்கு "mobile" (surveyor
-  // number) mandatory field. AsyncStorage-ல login பண்ணும்போது save ஆன
-  // USER_DATA-ல இருந்து படிக்கிறோம்.
+  // ── Helpers ──────────────────────────────────────────────────────────────
   const getSurveyorNumber = async () => {
     try {
       const userData = await AsyncStorage.getItem(USER_DATA);
@@ -161,14 +151,15 @@ useEffect(() => {
   };
 
   const getSurveyorName = async () => {
-  try {
-    const userData = await AsyncStorage.getItem(USER_DATA);
-    const parsed = userData ? JSON.parse(userData) : null;
-    return parsed?.UserInfo?.name || parsed?.UserInfo?.Name || parsed?.UserInfo?.fullName || '';
-  } catch (e) {
-    return '';
-  }
-};
+    try {
+      const userData = await AsyncStorage.getItem(USER_DATA);
+      const parsed = userData ? JSON.parse(userData) : null;
+      return parsed?.UserInfo?.name || parsed?.UserInfo?.Name || parsed?.UserInfo?.fullName || '';
+    } catch (e) {
+      return '';
+    }
+  };
+
   const sendDealDistance = async (extra = {}) => {
     const surveyorNumber = await getSurveyorNumber();
     const surveyorName   = await getSurveyorName();
@@ -180,6 +171,7 @@ useEffect(() => {
       deal_name:     item.name,
       mobile:        surveyorNumber,
       surveyor_name: surveyorName,
+      state:         item.state || undefined,
       start_latitude:  start?.latitude,
       start_longitude: start?.longitude,
       site_latitude:   site?.latitude,
@@ -204,10 +196,7 @@ useEffect(() => {
     }
   };
 
-  // 👇 புதுசா சேர்த்தது: "Home" / "Office" icon click handler.
-  // Flow: distance calculate பண்ணு → backend saveDealDistance API-க்கு
-  // அனுப்பு → automatic-ஆ SurveyerScreen-க்கு navigate பண்ணு.
-  // ✅ Map எதுவும் open ஆகாது — click பண்ண உடனே distance மட்டும் send ஆகும்.
+  // Home / Office click: distance calculate -> backend -> SurveyerScreen
   const handleGoTo = async (type) => {
     const url = type === 'home' ? item.home_location : item.office_location;
 
@@ -225,7 +214,6 @@ useEffect(() => {
 
     type === 'home' ? setHomeLoading(true) : setOfficeLoading(true);
 
-    // Road distance (OSRM) முதல்ல try பண்ணு, fail ஆனா straight-line fallback
     let distanceKm;
     try {
       const road = await getRoadDistanceKm(
@@ -239,7 +227,7 @@ useEffect(() => {
       distanceKm = getDistance(currentLocation.latitude, currentLocation.longitude, coords.latitude, coords.longitude) / 1000;
     }
 
-     if (type === 'home') {
+    if (type === 'home') {
       setHomeDistanceKm(distanceKm);
       setHomeLoading(false);
     } else {
@@ -256,13 +244,6 @@ useEffect(() => {
     onFinishAndReturn?.();
   };
 
-  // 👇 புதுசா சேர்த்தது: Home/Office ரெண்டையும் click பண்ணாம "Skip"
-  // பண்ணா — to_home / to_office அனுப்பாது, ஆனா "to_site" distance-ஐ
-  // (Start பண்ணும்போது AsyncStorage-ல store பண்ண surveyor -> site
-  // distance) இன்னும் backend-க்கு அனுப்பி save பண்ணிடும். இது இல்லாம
-  // Skip பண்ணா to_site backend-ல ஏறவே ஏறாது.
-  const [skipLoading, setSkipLoading] = useState(false);
-
   const handleSkip = async () => {
     setSkipLoading(true);
     await sendDealDistance();
@@ -270,9 +251,39 @@ useEffect(() => {
     onFinishAndReturn?.();
   };
 
-  // ── Interested Product — data prep ───────────────────────────────────────
-  // 👇 புதுசா சேர்த்தது: backend-ல இருந்து வரும் product fields-ஐ ஒரு array-ஆ
-  // தயார் பண்ணி, value இருக்கிற fields மட்டும் காட்டறோம்.
+  // Note save -> addDealNote API
+  const handleSaveNote = async () => {
+    const content = noteText.trim();
+    if (!content) {
+      Alert.alert('Error', 'Please enter a note.');
+      return;
+    }
+    if (!item.dealId) {
+      Alert.alert('Error', 'Deal ID not found for this lead.');
+      return;
+    }
+
+    setNoteSaving(true);
+    try {
+      await API.post('/order/note', {      // 👈 unga actual route-ku maathunga
+        deal_id: item.dealId,
+        content,
+      }, { timeout: 30000 });
+
+      setNoteText('');
+      setNoteModalVisible(false);
+      Alert.alert('Success', 'Note added successfully.');
+    } catch (err) {
+      Alert.alert(
+        'Failed',
+        err?.response?.data?.error || 'Could not add note. Check your internet connection.'
+      );
+    } finally {
+      setNoteSaving(false);
+    }
+  };
+
+  // ── Data prep ────────────────────────────────────────────────────────────
   const productFields = [
     { label: 'Product Type',        value: item.productType },
     { label: 'Order Type',          value: item.orderType },
@@ -288,11 +299,6 @@ useEffect(() => {
 
   const hasProductInfo = productFields.length > 0;
 
-  // ── Full Address — data prep ─────────────────────────────────────────────
-  // 👇 புதுசா சேர்த்தது: Country/Region, State/Province, District, Sub
-  // District, City, Street, Postal Code — same order as the Zoho schema's
-  // "Address Information" group. Only fields that actually have a value
-  // are shown — missing ones are skipped instead of showing blank rows.
   const addressFields = [
     { label: 'Country/Region', value: item.country },
     { label: 'State/Province', value: item.state },
@@ -305,16 +311,11 @@ useEffect(() => {
 
   const hasAddressInfo = addressFields.length > 0;
 
-  // Short one-line summary shown directly on the card (replaces the old
-  // "city only" line). Falls back to item.address / item.city if none of
-  // the structured fields are present.
   const addressSummaryParts = [item.street, item.city, item.District, item.state]
     .filter((part) => part && String(part).trim().length > 0);
   const addressSummary = addressSummaryParts.length > 0
     ? addressSummaryParts.join(', ')
     : (item.address || item.city || '—');
-
-  const [addressModalVisible, setAddressModalVisible] = useState(false);
 
   // ── Action buttons — cardType-based ──────────────────────────────────────
   const renderActions = () => {
@@ -333,49 +334,47 @@ useEffect(() => {
         );
 
       case 'Accepted':
-  if (item.status === 'Completed') {
-    return <CompletedPill />;
-  }
+        if (item.status === 'Completed') {
+          return <CompletedPill />;
+        }
 
-  if (item.status === 'hold') {
-    return (
-      <TouchableOpacity
-        style={[styles.startBtn, { backgroundColor: '#6b7280' }]}
-        onPress={() => onUnhold?.(item.id)}
-      >
-        <Ionicons name="play-forward-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
-        <Text style={styles.startBtnText}>Unhold</Text>
-      </TouchableOpacity>
-    );
-  }
+        if (item.status === 'hold') {
+          return (
+            <TouchableOpacity
+              style={[styles.startBtn, { backgroundColor: '#6b7280' }]}
+              onPress={() => onUnhold?.(item.id)}
+            >
+              <Ionicons name="play-forward-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
+              <Text style={styles.startBtnText}>Unhold</Text>
+            </TouchableOpacity>
+          );
+        }
 
-  return (
-    <View style={{ alignItems: 'center', gap: 6 }}>
-      <TouchableOpacity
-        style={[styles.startBtn, item.status === 'In-Progress' && { backgroundColor: '#f97316' }]}
-        onPress={() => onStart?.(item.id)}
-      >
-        <Ionicons name="play-circle-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
-        <Text style={styles.startBtnText}>
-          {item.status === 'In-Progress' ? 'Resume' : 'Start'}
-        </Text>
-      </TouchableOpacity>
+        return (
+          <View style={{ alignItems: 'center', gap: 6 }}>
+            <TouchableOpacity
+              style={[styles.startBtn, item.status === 'In-Progress' && { backgroundColor: '#f97316' }]}
+              onPress={() => onStart?.(item.id)}
+            >
+              <Ionicons name="play-circle-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
+              <Text style={styles.startBtnText}>
+                {item.status === 'In-Progress' ? 'Resume' : 'Start'}
+              </Text>
+            </TouchableOpacity>
 
-      {item.status === 'In-Progress' && (
-        <TouchableOpacity
-          style={styles.holdBtn}
-          onPress={() => onHold?.(item.id)}
-        >
-          <Ionicons name="pause-circle-outline" size={13} color="#fff" style={{ marginRight: 3 }} />
-          <Text style={styles.holdBtnText}>Hold</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-  );
+            {item.status === 'In-Progress' && (
+              <TouchableOpacity
+                style={styles.holdBtn}
+                onPress={() => onHold?.(item.id)}
+              >
+                <Ionicons name="pause-circle-outline" size={13} color="#fff" style={{ marginRight: 3 }} />
+                <Text style={styles.holdBtnText}>Hold</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        );
 
       case 'In-Progress':
-        // 👇 Complete button click பண்ணி status "Completed" ஆனப்புறம் தான்
-        // Home / Office icon buttons தெரியும் — முன்னாடி வேண்டாம்.
         if (item.status === 'Completed') {
           return (
             <View style={{ alignItems: 'center', gap: 6 }}>
@@ -395,35 +394,34 @@ useEffect(() => {
         }
 
         if (item.manualSiteEnabled || (hasLatLong && withinRange)) {
-  return (
-    <View style={{ alignItems: 'center', gap: 5 }}>
-      {/* 👇 formSubmitted ஆனா Site Observation button hide */}
-      {!formSubmitted && (
-        <TouchableOpacity style={styles.smallSiteBtn} onPress={() => onSiteObservation?.(item)}>
-          <Text style={styles.smallSiteBtnText}>Site{'\n'}Observation</Text>
-        </TouchableOpacity>
-      )}
-      {formSubmitted && (
-        <TouchableOpacity
-          style={[styles.commonBtn, { backgroundColor: '#3b82f6' }]}
-          onPress={() => onEdit?.(item)}
-        >
-          <Ionicons name="create-outline" size={13} color="#fff" style={{ marginRight: 3 }} />
-          <Text style={styles.commonBtnText}>Edit</Text>
-        </TouchableOpacity>
-      )}
-      {formSubmitted && (
-        <TouchableOpacity
-          style={[styles.commonBtn, { backgroundColor: '#22c55e' }]}
-          onPress={() => onMarkCompleted?.(item)}
-        >
-          <Ionicons name="checkmark-done-outline" size={13} color="#fff" style={{ marginRight: 3 }} />
-          <Text style={styles.commonBtnText}>Completed</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-  );
-}
+          return (
+            <View style={{ alignItems: 'center', gap: 5 }}>
+              {!formSubmitted && (
+                <TouchableOpacity style={styles.smallSiteBtn} onPress={() => onSiteObservation?.(item)}>
+                  <Text style={styles.smallSiteBtnText}>Site{'\n'}Observation</Text>
+                </TouchableOpacity>
+              )}
+              {formSubmitted && (
+                <TouchableOpacity
+                  style={[styles.commonBtn, { backgroundColor: '#3b82f6' }]}
+                  onPress={() => onEdit?.(item)}
+                >
+                  <Ionicons name="create-outline" size={13} color="#fff" style={{ marginRight: 3 }} />
+                  <Text style={styles.commonBtnText}>Edit</Text>
+                </TouchableOpacity>
+              )}
+              {formSubmitted && (
+                <TouchableOpacity
+                  style={[styles.commonBtn, { backgroundColor: '#22c55e' }]}
+                  onPress={() => onMarkCompleted?.(item)}
+                >
+                  <Ionicons name="checkmark-done-outline" size={13} color="#fff" style={{ marginRight: 3 }} />
+                  <Text style={styles.commonBtnText}>Completed</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        }
 
         return (
           <View style={styles.reachBtnWrapper}>
@@ -447,12 +445,12 @@ useEffect(() => {
                   Distance {distanceLoading ? '⏳' : ''}
                 </Text>
                 <Text style={styles.reachDistance}>
-  {roadDistanceKm !== null
-    ? roadDistanceKm.toFixed(1) + ' km'
-    : (distToLead >= 1000
-        ? '~' + (distToLead / 1000).toFixed(1) + ' km'
-        : '~' + distToLead + ' m')}
-</Text>
+                  {roadDistanceKm !== null
+                    ? roadDistanceKm.toFixed(1) + ' km'
+                    : (distToLead >= 1000
+                        ? '~' + (distToLead / 1000).toFixed(1) + ' km'
+                        : '~' + distToLead + ' m')}
+                </Text>
               </View>
             )}
           </View>
@@ -466,12 +464,13 @@ useEffect(() => {
     }
   };
 
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <View style={[
       styles.card,
-  cardType === 'unAccepted' && { borderLeftWidth: 4, borderLeftColor: '#ED1C25' },
-  cardType === 'Completed'  && { borderLeftWidth: 4, borderLeftColor: '#22c55e' },
-  cardType === 'Accepted' && item.status === 'hold' && { opacity: 0.5, borderLeftWidth: 4, borderLeftColor: '#6b7280' },
+      cardType === 'unAccepted' && { borderLeftWidth: 4, borderLeftColor: '#ED1C25' },
+      cardType === 'Completed'  && { borderLeftWidth: 4, borderLeftColor: '#22c55e' },
+      cardType === 'Accepted' && item.status === 'hold' && { opacity: 0.5, borderLeftWidth: 4, borderLeftColor: '#6b7280' },
     ]}>
       {/* Top row */}
       <View style={styles.rowBetween}>
@@ -480,19 +479,37 @@ useEffect(() => {
             Referred by — <Text style={{ fontWeight: 'bold' }}>{item.referredBy || 'N/A'}</Text>
           </Text>
         </View>
-        {/* formatDate() helper-ஐ use பண்ணி readable-ஆ காட்டு. */}
         <Text style={styles.date}>{formatDate(item.date)}</Text>
       </View>
 
-      {/* ✅ CHANGED — "Site Survey Assigned By" moved out of here (now shown
-          below the user row, centered). Only "Lead Source" stays in this
-          top pill row. */}
+      {/* Lead Source */}
       {item.leadSource ? (
         <View style={styles.badgeRow}>
           <View style={styles.leadSourceBadge}>
             <Ionicons name="git-branch-outline" size={11} color="#7C3AED" style={{ marginRight: 4 }} />
             <Text style={styles.leadSourceText} numberOfLines={1} ellipsizeMode="tail">
               Lead Source — <Text style={{ fontWeight: 'bold' }}>{item.leadSource}</Text>
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
+      {/* Site Requested Date & Time */}
+      {item.scheduledAt ? (
+        <View style={styles.scheduleRow}>
+          <View style={[styles.scheduleBadge, isDue && styles.scheduleBadgeDue]}>
+            <Ionicons
+              name="calendar-outline"
+              size={12}
+              color={isDue ? '#B91C1C' : '#B45309'}
+              style={{ marginRight: 4 }}
+            />
+            <Text
+              style={[styles.scheduleText, isDue && { color: '#B91C1C' }]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              Site Requested — <Text style={{ fontWeight: 'bold' }}>{formatDate(item.scheduledAt)}</Text>
             </Text>
           </View>
         </View>
@@ -516,10 +533,6 @@ useEffect(() => {
             <Text style={styles.subText}>{item.phone}</Text>
           </TouchableOpacity>
 
-          {/* ✅ CHANGED — was just item.city; now a full address summary
-              (Street, City, District, State) that opens the Full Address
-              modal on tap so every field (Country/Region, State/Province,
-              District, Sub District, City, Street, Postal Code) is visible. */}
           <TouchableOpacity
             style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2, paddingVertical: 3, flexShrink: 1 }}
             onPress={() => hasAddressInfo && setAddressModalVisible(true)}
@@ -541,7 +554,6 @@ useEffect(() => {
             <Ionicons name="mail-outline" size={16} color={item.email ? '#555' : '#ccc'} />
           </View>
 
-          {/* 👇 புதுசா சேர்த்தது: Interested Product chip — tap பண்ணா popup open */}
           {hasProductInfo && (
             <TouchableOpacity
               style={styles.productChip}
@@ -557,8 +569,7 @@ useEffect(() => {
         {renderActions()}
       </View>
 
-      {/* ✅ ADDED — "Site Survey Assigned By" now lives here, below the
-          user row, as its own centered badge/line. */}
+      {/* Site Survey Assigned By */}
       {item.siteSurveyAssignedBy ? (
         <View style={styles.assignedByRow}>
           <View style={styles.assignedByBadge}>
@@ -570,22 +581,19 @@ useEffect(() => {
         </View>
       ) : null}
 
-      {/* Comment */}
-      <View style={[styles.commentRow, {
-        borderTopWidth: 0.5, borderTopColor: '#eee', marginTop: 8, paddingTop: 8,
-      }]}>
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 12, fontWeight: '600', color: '#555', marginBottom: 2 }}>Comment</Text>
-          <Text numberOfLines={2} style={styles.comment}>{item.comment}</Text>
-        </View>
-        <TouchableOpacity disabled={!item.comment || item.comment.length <= 200}>
-          <Text style={[styles.seeMore, {
-            color: item.comment && item.comment.length > 200 ? '#1E88E5' : '#ccc',
-          }]}>See more</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Add Notes button */}
+<View style={styles.notesBtnRow}>
+  <TouchableOpacity
+    activeOpacity={0.7}
+    onPress={() => setNoteModalVisible(true)}
+    style={styles.addNotesBtn}
+  >
+    <Ionicons name="create-outline" size={14} color="#1E88E5" style={{ marginRight: 4 }} />
+    <Text style={styles.addNotesBtnText}>Add Notes</Text>
+  </TouchableOpacity>
+</View>
 
-      {/* 👇 புதுசா சேர்த்தது: Interested Product Modal */}
+      {/* Interested Product Modal */}
       <Modal
         visible={productModalVisible}
         transparent
@@ -624,8 +632,7 @@ useEffect(() => {
         </View>
       </Modal>
 
-      {/* 👇 புதுசா சேர்த்தது: Full Address Modal — Country/Region,
-          State/Province, District, Sub District, City, Street, Postal Code */}
+      {/* Full Address Modal */}
       <Modal
         visible={addressModalVisible}
         transparent
@@ -663,6 +670,53 @@ useEffect(() => {
           </View>
         </View>
       </Modal>
+
+      {/* Add Note Modal */}
+      <Modal
+        visible={noteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !noteSaving && setNoteModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <View style={styles.productModalHeader}>
+              <Ionicons name="create" size={20} color="#185FA5" style={{ marginRight: 8 }} />
+              <Text style={styles.modalTitle}>Add Note</Text>
+            </View>
+
+            <TextInput
+              style={styles.noteInput}
+              placeholder="Type your note here..."
+              placeholderTextColor="#aaa"
+              multiline
+              numberOfLines={4}
+              value={noteText}
+              onChangeText={setNoteText}
+              editable={!noteSaving}
+            />
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                style={[styles.modalSaveBtn, { flex: 1, backgroundColor: '#aaa' }]}
+                onPress={() => { setNoteModalVisible(false); setNoteText(''); }}
+                disabled={noteSaving}
+              >
+                <Text style={styles.modalSaveBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSaveBtn, { flex: 1 }]}
+                onPress={handleSaveNote}
+                disabled={noteSaving}
+              >
+                {noteSaving
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.modalSaveBtnText}>Save</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -674,10 +728,7 @@ const CompletedPill = () => (
   </View>
 );
 
-// 👇 புதுசா சேர்த்தது: Complete ஆன பிறகு தெரியற Home / Office / Skip
-// round icon buttons. Home/Office tap பண்ணா distance calculate ஆகி backend-க்கு
-// அனுப்பப்பட்டு auto SurveyerScreen-க்கு navigate ஆகும். Skip tap பண்ணா
-// distance எதுவும் அனுப்பாம நேரடியா SurveyerScreen-க்கு navigate ஆகும்.
+// Complete aana piragu Home / Office / Skip round buttons
 const GoToIcons = ({
   homeLoading, officeLoading, skipLoading, homeDistanceKm, officeDistanceKm, onHome, onOffice, onSkip,
 }) => (
@@ -712,8 +763,6 @@ const GoToIcons = ({
       )}
     </View>
 
-    {/* 👇 புதுசா சேர்த்தது: Skip button — Home/Office click பண்ணாம நேரடியா
-        SurveyerScreen-க்கு போக */}
     <View style={{ alignItems: 'center' }}>
       <TouchableOpacity
         style={[styles.goToRoundBtn, { backgroundColor: '#9ca3af' }]}
@@ -744,14 +793,10 @@ const styles = StyleSheet.create({
   referredText: { fontSize: 11, color: '#A32D2D' },
   date: { fontSize: 11, color: '#888' },
 
-  // Top row — now only holds Lead Source (Site Survey Assigned By moved
-  // below the user row, see assignedByRow).
   badgeRow: {
     flexDirection: 'row', flexWrap: 'wrap',
     gap: 6, marginTop: 8,
   },
-  // ✅ ADDED — centered row below the user row that holds the
-  // "Site Survey Assigned By" badge on its own.
   assignedByRow: {
     flexDirection: 'row', justifyContent: 'center',
     marginTop: 10,
@@ -763,7 +808,6 @@ const styles = StyleSheet.create({
     maxWidth: '100%', flexShrink: 1,
   },
   assignedByText: { fontSize: 11, color: '#0F766E', flexShrink: 1 },
-  // "Lead Source" pill, violet-coded.
   leadSourceBadge: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#F1EBFE', paddingHorizontal: 8,
@@ -817,7 +861,6 @@ const styles = StyleSheet.create({
   },
   smallSiteBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold', textAlign: 'center' },
 
-  // 👇 புதுசா சேர்த்தது: Interested Product chip + modal styles
   productChip: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#E6F1FB', alignSelf: 'flex-start',
@@ -849,17 +892,49 @@ const styles = StyleSheet.create({
   },
   modalSaveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
 
-  // 👇 புதுசா சேர்த்தது: Complete ஆன பிறகு தெரியற Home / Office / Skip round
-  // icon-only button styles.
   goToRoundBtn: {
     width: 34, height: 34, borderRadius: 17,
     alignItems: 'center', justifyContent: 'center', elevation: 2,
   },
   goToRoundLabel: { fontSize: 10, color: '#555', fontWeight: '600', marginTop: 3 },
   holdBtn: {
-  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-  backgroundColor: '#eab308', paddingHorizontal: 10, paddingVertical: 6,
-  borderRadius: 8,
-},
-holdBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#eab308', paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 8,
+  },
+  holdBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+
+  scheduleRow: { flexDirection: 'row', marginTop: 8 },
+  scheduleBadge: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#FEF3C7', paddingHorizontal: 8,
+    paddingVertical: 3, borderRadius: 20,
+    maxWidth: '100%', flexShrink: 1,
+  },
+  scheduleBadgeDue: { backgroundColor: '#FEE2E2' },
+  scheduleText: { fontSize: 11, color: '#B45309', flexShrink: 1 },
+
+  // Note modal styles
+  existingCommentBox: {
+    backgroundColor: '#F5F5F5', borderRadius: 8,
+    padding: 10, marginTop: 12,
+  },
+  existingCommentLabel: { fontSize: 11, color: '#888', fontWeight: '600', marginBottom: 2 },
+  existingCommentText: { fontSize: 12, color: '#444' },
+  noteInput: {
+    borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
+    padding: 10, fontSize: 13, color: '#333',
+    textAlignVertical: 'top', minHeight: 90, marginTop: 12, marginBottom: 16,
+  },
+  notesBtnRow: {
+    borderTopWidth: 0.5, borderTopColor: '#eee',
+    marginTop: 8, paddingTop: 8,
+    flexDirection: 'row', justifyContent: 'flex-end',
+  },
+  addNotesBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#E3F2FD', paddingHorizontal: 12,
+    paddingVertical: 6, borderRadius: 20,
+  },
+  addNotesBtnText: { fontSize: 12, color: '#1E88E5', fontWeight: '600' },
 });
